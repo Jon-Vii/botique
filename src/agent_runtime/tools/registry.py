@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Callable, Mapping
 
+from seller_core.models import JSONValue
+
 
 class ToolSurface(StrEnum):
     CORE = "core"
@@ -22,6 +24,7 @@ class ToolManifestEntry:
     body_encoding: str = "none"
     scopes: tuple[str, ...] = ()
     notes: tuple[str, ...] = ()
+    parameters_schema: dict[str, JSONValue] | None = None
 
 
 @dataclass(frozen=True, slots=True)

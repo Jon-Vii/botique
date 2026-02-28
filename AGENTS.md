@@ -120,6 +120,17 @@ Implications:
 - each module should have a useful standalone mode for development and testing
 - swapping one implementation should not require redesigning the others
 
+## Version Control Expectations
+
+Codex should follow normal version-control hygiene while working in this repo.
+
+- start new implementation work from `main` on a short-lived `codex/...` branch
+- make focused commits when a coherent unit of work is complete
+- use clear, descriptive commit messages in imperative mood
+- avoid mixing unrelated changes into the same commit
+- merge completed work back into `main` once it is reviewed or accepted
+- keep the working tree understandable; do not leave avoidable incidental changes behind
+
 ## Tool Surface Rules
 
 There are two agent-facing tool surfaces and one non-agent-facing runtime surface.

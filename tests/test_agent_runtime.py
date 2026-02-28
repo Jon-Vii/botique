@@ -4,19 +4,30 @@ import unittest
 
 import _bootstrap
 from agent_runtime import (
+    AgentTurnContext,
     AgentTurnDecision,
     BalanceSummary,
     DailyLoopConfig,
     DayEndReason,
     InMemoryAgentMemory,
     InMemoryEventLog,
+    MistralProviderConfig,
+    MistralToolCallingProvider,
     MorningBriefingBuilder,
     ObjectiveProgress,
     OrderSummary,
+    ProviderMessage,
+    ProviderMessageRole,
+    ProviderPolicyConfig,
+    ProviderResponse,
+    ProviderToolCall,
+    ProviderToolDefinition,
     SingleShopDailyLoop,
+    ToolCallingAgentPolicy,
     ToolCall,
     build_owner_agent_tool_registry,
 )
+from agent_runtime.providers.policy import END_DAY_TOOL_NAME
 from agent_runtime.tools import DEFAULT_OWNER_AGENT_CORE_TOOLS
 
 
@@ -25,8 +36,9 @@ class FakeSellerCoreClient:
         self.calls: list[tuple[str, dict[str, object]]] = []
 
     def manifest(self) -> list[dict[str, object]]:
-        return [
-            {
+        manifest = []
+        for name in DEFAULT_OWNER_AGENT_CORE_TOOLS:
+            entry = {
                 "tool_name": name,
                 "operation_id": name,
                 "description": f"Stub manifest entry for {name}.",
@@ -37,8 +49,12 @@ class FakeSellerCoreClient:
                 "scopes": [],
                 "notes": [],
             }
-            for name in DEFAULT_OWNER_AGENT_CORE_TOOLS
-        ]
+            if name == "search_marketplace":
+                entry["query_params"] = ["keywords", "limit", "offset"]
+            elif name == "get_shop_info":
+                entry["path_params"] = ["shop_id"]
+            manifest.append(entry)
+        return manifest
 
     def call(self, tool_name: str, arguments: dict[str, object]) -> dict[str, object]:
         copied = dict(arguments)
@@ -54,6 +70,38 @@ class ScriptedPolicy:
     def next_turn(self, context):
         self.contexts.append(context)
         return self._decisions.pop(0)
+
+
+class RecordingProvider:
+    def __init__(self, responses: list[ProviderResponse]) -> None:
+        self.responses = list(responses)
+        self.calls: list[dict[str, object]] = []
+
+    def complete(self, *, messages, tools, tool_choice="auto", allow_parallel_tool_calls=False):
+        self.calls.append(
+            {
+                "messages": messages,
+                "tools": tools,
+                "tool_choice": tool_choice,
+                "allow_parallel_tool_calls": allow_parallel_tool_calls,
+            }
+        )
+        return self.responses.pop(0)
+
+
+class FakeMistralClient:
+    def __init__(self, response_payload: dict[str, object]) -> None:
+        self.response_payload = response_payload
+        self.calls: list[dict[str, object]] = []
+        self.chat = self.Chat(self)
+
+    class Chat:
+        def __init__(self, outer: "FakeMistralClient") -> None:
+            self.outer = outer
+
+        def complete(self, **kwargs):
+            self.outer.calls.append(kwargs)
+            return self.outer.response_payload
 
 
 class MorningBriefingTests(unittest.TestCase):
@@ -131,6 +179,23 @@ class ToolRegistryTests(unittest.TestCase):
         self.assertEqual(note_result.output["note"]["title"], "Today's angle")
         self.assertEqual(reminder_result.output["reminder"]["due_day"], 4)
         self.assertEqual(notes_result.output["count"], 1)
+
+    def test_registry_manifest_includes_parameter_schemas_for_provider_use(self) -> None:
+        registry = build_owner_agent_tool_registry(FakeSellerCoreClient(), memory=InMemoryAgentMemory())
+
+        manifests = {entry.name: entry for entry in registry.manifest()}
+        self.assertEqual(
+            manifests["search_marketplace"].parameters_schema["type"],
+            "object",
+        )
+        self.assertIn(
+            "keywords",
+            manifests["search_marketplace"].parameters_schema["properties"],
+        )
+        self.assertEqual(
+            manifests["write_note"].parameters_schema["required"],
+            ["shop_id", "title", "body"],
+        )
 
 
 class DailyLoopTests(unittest.TestCase):
@@ -232,6 +297,143 @@ class DailyLoopTests(unittest.TestCase):
 
         self.assertEqual(result.end_reason, DayEndReason.MAX_TURNS_REACHED)
         self.assertEqual(len(result.turns), 1)
+
+
+class ProviderPolicyTests(unittest.TestCase):
+    def _make_context(self):
+        registry = build_owner_agent_tool_registry(
+            FakeSellerCoreClient(),
+            memory=InMemoryAgentMemory(),
+        )
+        briefing = MorningBriefingBuilder(InMemoryAgentMemory()).build(
+            run_id="run_provider",
+            shop_id=7,
+            shop_name="Studio North",
+            day=5,
+            balance_summary=BalanceSummary(available=175.0),
+            yesterday_orders=OrderSummary(order_count=1, revenue=12.0),
+            objective_progress=ObjectiveProgress(
+                primary_objective="Grow ending balance",
+                metric_name="ending_balance",
+                current_value=175.0,
+                target_value=220.0,
+                status_summary="One sale yesterday, but traffic is soft.",
+            ),
+        )
+        return registry, briefing
+
+    def _turn_context(self, registry, briefing) -> AgentTurnContext:
+        return AgentTurnContext(
+            run_id=briefing.run_id,
+            briefing=briefing,
+            turn_index=1,
+            max_turns=3,
+            remaining_turns=3,
+            available_tools=tuple(registry.manifest()),
+            prior_turns=(),
+        )
+
+    def test_tool_calling_policy_maps_provider_tool_calls_to_turn_decisions(self) -> None:
+        registry, briefing = self._make_context()
+        provider = RecordingProvider(
+            [
+                ProviderResponse(
+                    content="Search the market before editing listings.",
+                    tool_calls=(
+                        ProviderToolCall(
+                            name="search_marketplace",
+                            arguments={"keywords": "planner"},
+                        ),
+                    ),
+                )
+            ]
+        )
+        policy = ToolCallingAgentPolicy(provider)
+        decision = policy.next_turn(context=self._turn_context(registry, briefing))
+
+        self.assertEqual(decision.tool_call.name, "search_marketplace")
+        self.assertEqual(decision.tool_call.arguments["keywords"], "planner")
+        self.assertEqual(provider.calls[0]["tool_choice"], "any")
+        self.assertFalse(provider.calls[0]["allow_parallel_tool_calls"])
+        tool_names = [tool.name for tool in provider.calls[0]["tools"]]
+        self.assertIn("search_marketplace", tool_names)
+        self.assertIn(END_DAY_TOOL_NAME, tool_names)
+        self.assertEqual(provider.calls[0]["messages"][0].role, ProviderMessageRole.SYSTEM)
+
+    def test_tool_calling_policy_maps_end_day_tool(self) -> None:
+        registry, briefing = self._make_context()
+        provider = RecordingProvider(
+            [
+                ProviderResponse(
+                    content="",
+                    tool_calls=(
+                        ProviderToolCall(
+                            name=END_DAY_TOOL_NAME,
+                            arguments={"summary": "Priority work is complete for today."},
+                        ),
+                    ),
+                )
+            ]
+        )
+        policy = ToolCallingAgentPolicy(provider, config=ProviderPolicyConfig())
+        decision = policy.next_turn(context=self._turn_context(registry, briefing))
+
+        self.assertTrue(decision.end_day)
+        self.assertEqual(decision.summary, "Priority work is complete for today.")
+
+
+class MistralProviderTests(unittest.TestCase):
+    def test_mistral_provider_formats_sdk_request_and_parses_tool_calls(self) -> None:
+        fake_client = FakeMistralClient(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": "Inspect the market first.",
+                            "tool_calls": [
+                                {
+                                    "id": "call_123",
+                                    "function": {
+                                        "name": "search_marketplace",
+                                        "arguments": '{"keywords":"planner","limit":5}',
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+        )
+        provider = MistralToolCallingProvider(
+            MistralProviderConfig(api_key="test-key"),
+            client=fake_client,
+        )
+
+        response = provider.complete(
+            messages=(
+                ProviderMessage(role=ProviderMessageRole.SYSTEM, content="rule"),
+                ProviderMessage(role=ProviderMessageRole.USER, content="payload"),
+            ),
+            tools=(
+                ProviderToolDefinition(
+                    name="search_marketplace",
+                    description="Search listings.",
+                    parameters_schema={"type": "object", "properties": {}},
+                ),
+            ),
+            tool_choice="any",
+            allow_parallel_tool_calls=False,
+        )
+
+        self.assertEqual(response.content, "Inspect the market first.")
+        self.assertEqual(response.tool_calls[0].name, "search_marketplace")
+        self.assertEqual(response.tool_calls[0].arguments["limit"], 5)
+        sdk_call = fake_client.calls[0]
+        self.assertEqual(sdk_call["model"], "mistral-medium-latest")
+        self.assertEqual(sdk_call["tool_choice"], "any")
+        self.assertFalse(sdk_call["parallel_tool_calls"])
+        self.assertEqual(sdk_call["messages"][0]["role"], "system")
+        self.assertEqual(sdk_call["tools"][0]["function"]["name"], "search_marketplace")
 
 
 class TurnDecisionValidationTests(unittest.TestCase):

@@ -9,6 +9,9 @@ description = "Portable seller-facing core CLI for Botique agent tools"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+mistral = ["mistralai"]
+
 [project.scripts]
 botique-agent-tools-core = "seller_core.cli:main"
 

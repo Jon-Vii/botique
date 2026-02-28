@@ -7,6 +7,15 @@ from agent_runtime.memory import AgentMemoryStore
 from .registry import AgentToolRegistry, ToolManifestEntry, ToolSurface
 
 
+SHOP_ID_SCHEMA = {
+    "oneOf": [
+        {"type": "integer"},
+        {"type": "string"},
+    ],
+    "description": "Botique shop identifier.",
+}
+
+
 def _require_str(arguments: Mapping[str, Any], key: str) -> str:
     value = arguments.get(key)
     if not isinstance(value, str) or not value.strip():
@@ -35,6 +44,31 @@ def register_memory_tools(
             notes=(
                 "This is a simple Botique extension memory tool, not a hidden retrieval system.",
             ),
+            parameters_schema={
+                "type": "object",
+                "properties": {
+                    "shop_id": SHOP_ID_SCHEMA,
+                    "title": {
+                        "type": "string",
+                        "description": "Short note title.",
+                    },
+                    "body": {
+                        "type": "string",
+                        "description": "Inspectable strategy note content.",
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional note tags.",
+                    },
+                    "day": {
+                        "type": "integer",
+                        "description": "Current simulation day.",
+                    },
+                },
+                "required": ["shop_id", "title", "body"],
+                "additionalProperties": False,
+            },
         ),
         lambda arguments, *, store=memory: {
             "note": store.write_note(
@@ -54,6 +88,22 @@ def register_memory_tools(
             surface=ToolSurface.EXTENSION,
             required_body_fields=("shop_id",),
             body_encoding="json",
+            parameters_schema={
+                "type": "object",
+                "properties": {
+                    "shop_id": SHOP_ID_SCHEMA,
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of notes to return.",
+                    },
+                    "tag": {
+                        "type": "string",
+                        "description": "Optional tag filter.",
+                    },
+                },
+                "required": ["shop_id"],
+                "additionalProperties": False,
+            },
         ),
         lambda arguments, *, store=memory: {
             "count": len(
@@ -74,6 +124,30 @@ def register_memory_tools(
             surface=ToolSurface.EXTENSION,
             required_body_fields=("shop_id", "content", "due_day"),
             body_encoding="json",
+            parameters_schema={
+                "type": "object",
+                "properties": {
+                    "shop_id": SHOP_ID_SCHEMA,
+                    "content": {
+                        "type": "string",
+                        "description": "Reminder text visible in future briefings.",
+                    },
+                    "due_day": {
+                        "type": "integer",
+                        "description": "Simulation day when the reminder becomes due.",
+                    },
+                    "note_id": {
+                        "type": "string",
+                        "description": "Optional related note id.",
+                    },
+                    "day": {
+                        "type": "integer",
+                        "description": "Current simulation day.",
+                    },
+                },
+                "required": ["shop_id", "content", "due_day"],
+                "additionalProperties": False,
+            },
         ),
         lambda arguments, *, store=memory: {
             "reminder": store.set_reminder(
