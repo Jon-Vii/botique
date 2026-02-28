@@ -30,6 +30,31 @@ Suggested MVP set:
 
 - `create_draft_listing`
 - `update_listing`
+- `delete_listing`
+- `get_listing`
+- `get_shop_listings`
+- `search_marketplace`
+- `get_listing_inventory`
+- `update_listing_inventory`
+- `get_shop_info`
+- `update_shop`
+- `get_orders`
+- `get_order_details`
+- `get_payments`
+- `get_reviews`
+- `get_taxonomy_nodes`
+
+Status: `Recommended default`
+
+## Recommended Core Matrix
+
+Use the portable core surface for the seller actions that are both believable for a shop owner and likely to exist across providers.
+
+`Must have` for the first believable seller loop:
+
+- `create_draft_listing`
+- `update_listing`
+- `delete_listing`
 - `get_listing`
 - `get_shop_listings`
 - `search_marketplace`
@@ -40,7 +65,26 @@ Suggested MVP set:
 - `get_reviews`
 - `get_taxonomy_nodes`
 
-Status: `Recommended default`
+`Core soon` if Botique wants stronger Etsy-shaped listing realism:
+
+- `get_listing_inventory`
+- `update_listing_inventory`
+- `get_payments`
+
+`Likely Botique extensions`, not portable core:
+
+- `write_note`
+- `read_notes`
+- `set_reminder`
+- `get_balance`
+- `get_marketplace_trends`
+- simulated customer scenario tools
+
+`Defer unless product scope expands`:
+
+- shipping management and fulfillment writes for physical goods
+- media upload flows that require binary asset handling
+- broad payments or ledger-reporting surfaces beyond basic shop visibility
 
 ### Extension Agent Tools
 
@@ -123,16 +167,60 @@ Botique-only:
 
 ```text
 src/
-  agent_tools/
-    core.py
-    extensions.py
-    schemas.py
-  compat/
-    etsy_v3.py
+  seller_core/
+    client.py
+    cli.py
+    models.py
+    transport.py
+    compat/
+      etsy_v3.py
+  botique_extensions/
+    ...
+  agent_runtime/
+    tools/
+      core.py
+      extensions.py
   control_api.py
 ```
 
 Status: `Recommended default`
+
+## Core CLI Contract
+
+The reusable core deliverable should be a client and CLI package, not the future Botique runtime tool registry.
+
+It should:
+
+- expose stable seller-facing tool names
+- compile those tool calls into HTTP requests through an internal Etsy v3 compatibility map
+- keep transport configurable so the same tool surface can target Etsy or Botique System 1
+
+It should not:
+
+- embed marketplace state
+- simulate backend behavior
+- own persistence or business logic
+
+Recommended CLI shape:
+
+- `botique-agent-tools-core manifest`
+- `botique-agent-tools-core prepare <tool_name> --args '{...}'`
+- `botique-agent-tools-core call <tool_name> --args '{...}'`
+
+Recommended runtime config:
+
+- `BOTIQUE_CORE_BASE_URL`
+- `BOTIQUE_CORE_API_KEY`
+- `BOTIQUE_CORE_BEARER_TOKEN`
+
+Default compatibility target can be Etsy Open API v3, but the public tool names stay product-first.
+
+Implementation note:
+
+- `seller_core` is the reusable implementation package
+- `agent_runtime/tools/` is a separate concern and should expose whichever subset of core and extension tools a given agent role is allowed to use
+
+Status: `Current decision` for keeping the core CLI transport-only, `Recommended default` for the exact command names and package split
 
 ## Outstanding Questions
 

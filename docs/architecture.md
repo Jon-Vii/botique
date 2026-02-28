@@ -106,14 +106,21 @@ Status: `Current decision`
 
 Use clear product-first naming:
 
-- `agent_tools/core.py`
-- `agent_tools/extensions.py`
+- `seller_core/`
+- `botique_extensions/`
+- `agent_runtime/tools/`
 - `control_api.py`
 
 Keep Etsy mapping explicit but internal:
 
-- `compat/etsy_v3.py`
+- `seller_core/compat/etsy_v3.py`
 - `docs/agent-tools.md`
+
+Implementation guidance:
+
+- `seller_core` is the reusable portable seller surface client/CLI package
+- `agent_runtime/tools/` is where Botique-specific tool registration and role exposure can live later
+- do not use `agent_tools` as a catch-all package for transport, schemas, and runtime concerns
 
 Status: `Recommended default`
 
