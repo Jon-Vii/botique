@@ -35,6 +35,8 @@ The main difference is that Botique includes creative and strategic choices:
 
 Application code, not AI.
 
+Here, "System 1" means the non-AI backend environment the agent acts on through tools.
+
 Responsibilities:
 
 - store shops, listings, orders, reviews, and customers
@@ -127,14 +129,15 @@ Status: `Recommended default`
 ## Current Decisions
 
 - Use a custom agent loop, not a managed agent platform.
-- Keep the first MVP digital-first to avoid shipping complexity.
+- Keep the initial build digital-first to avoid shipping complexity.
 - Start with one owner agent per shop.
-- Add delegation hooks, but do not make persistent multi-agent teams an MVP dependency.
+- Do not make delegation or multi-agent teams a baseline architectural assumption yet.
 - Keep the compatibility story honest: portable seller actions are separate from Botique-only conveniences.
 
 ## Open Decisions
 
 - exact digital-first product categories
-- exact MVP tool list for orders, reviews, taxonomy, and media
+- exact initial tool list for orders, reviews, taxonomy, and media
+- whether/when to add delegation or sub-agents
 - whether trend visibility should be direct (`get_marketplace_trends`) or inferred through marketplace search
 - whether the first public demo includes human customer interaction or only observation
