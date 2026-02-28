@@ -140,6 +140,11 @@ Used by:
 
 Status: `Current decision` on separation, `Recommended default` on exact endpoints
 
+Current implementation note:
+
+- the TypeScript server exposes a minimal non-seller `/control` surface for orchestrator/operator use
+- current endpoints cover reading `current_day`, `market_snapshot`, `trend_state`, a debug `world_state`, and `advance_day`
+
 ## Naming Guidance
 
 Public tool names should stay stable and readable:

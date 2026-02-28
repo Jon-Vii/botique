@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { ZodError, type ZodTypeAny, z } from "zod";
 
-import { AppError, BadRequestError } from "../errors";
+import { BadRequestError } from "../errors";
 import {
   inventorySchema,
   listingSchema,
@@ -31,6 +31,7 @@ import {
   updateShopBodySchema
 } from "../schemas/requests";
 import type { MarketplaceService } from "../services/marketplace-service";
+import { registerRouteErrorHandler } from "./error-handler";
 
 function parseValue<TSchema extends ZodTypeAny>(
   schema: TSchema,
@@ -164,36 +165,5 @@ export async function registerCoreRoutes(app: FastifyInstance, service: Marketpl
     return sendValidated(reply, taxonomyPageSchema, taxonomyNodes);
   });
 
-  app.setErrorHandler((error, request, reply) => {
-    if (error instanceof AppError) {
-      return reply.code(error.statusCode).send({
-        ok: false,
-        error: {
-          type: error.name,
-          message: error.message,
-          details: error.details ?? null
-        }
-      });
-    }
-
-    if (error instanceof ZodError) {
-      return reply.code(500).send({
-        ok: false,
-        error: {
-          type: "ResponseValidationError",
-          message: "Server produced an invalid response.",
-          details: error.flatten()
-        }
-      });
-    }
-
-    request.log.error(error);
-    return reply.code(500).send({
-      ok: false,
-      error: {
-        type: "InternalServerError",
-        message: "Unexpected server error."
-      }
-    });
-  });
+  registerRouteErrorHandler(app);
 }

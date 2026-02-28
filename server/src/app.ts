@@ -5,8 +5,10 @@ import { loadConfig, type BotiqueServerConfig } from "./config";
 import { createInMemoryMarketplaceRepository } from "./repositories/in-memory-marketplace-repository";
 import { PostgresMarketplaceRepository } from "./repositories/postgres-marketplace-repository";
 import type { MarketplaceRepository } from "./repositories/types";
+import { registerControlRoutes } from "./routes/control-routes";
 import { registerCoreRoutes } from "./routes/core-routes";
 import { MarketplaceService } from "./services/marketplace-service";
+import { RuntimeControlService } from "./services/runtime-control-service";
 import { createWorldSimulation } from "./simulation/world-simulation";
 
 export type BuildAppOptions = {
@@ -33,6 +35,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const repository = options.repository ?? (await buildRepository(config));
   const simulation = createWorldSimulation(repository);
   const service = new MarketplaceService(repository, simulation);
+  const controlService = new RuntimeControlService(simulation);
 
   const app = Fastify({
     logger: options.logger ?? false
@@ -42,6 +45,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(async (instance) => {
     await registerCoreRoutes(instance, service);
   }, { prefix: "/v3/application" });
+  await app.register(async (instance) => {
+    await registerControlRoutes(instance, controlService);
+  }, { prefix: "/control" });
 
   app.get("/health", async () => ({
     ok: true,

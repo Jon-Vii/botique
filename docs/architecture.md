@@ -87,6 +87,7 @@ For the current TypeScript server, keep the boundary explicit:
 Current implementation note:
 
 - `server/src/routes/` and the seller-facing parts of `MarketplaceService` are System 1 concerns.
+- `server/src/routes/control-routes.ts` exposes a separate `/control` surface for runtime/operator access to simulation state and day advancement.
 - `server/src/simulation/` is the System 2 module boundary inside the current codebase.
 - the HTTP contract stays unchanged while System 2 evolves behind that boundary.
 
