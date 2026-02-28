@@ -60,6 +60,8 @@ export const listingDemandFactorsSchema = z.object({
   quality: z.number().nonnegative(),
   reputation: z.number().nonnegative(),
   price: z.number().nonnegative(),
+  reference_price: z.number().nonnegative().optional(),
+  conversion_price: z.number().optional(),
   freshness: z.number().nonnegative(),
   trend: z.number().nonnegative(),
   variation: z.number().nonnegative()

@@ -39,6 +39,21 @@ function average(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function median(values: number[]): number {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+
+  if (sorted.length % 2 === 1) {
+    return sorted[middle] ?? 0;
+  }
+
+  return ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
+}
+
 function differenceInUtcDays(left: string, right: string): number {
   const leftTime = Date.parse(left);
   const rightTime = Date.parse(right);
@@ -102,7 +117,7 @@ function buildShopReviewAverage(state: StoredMarketplaceState): Map<number, numb
   );
 }
 
-function buildTaxonomyAveragePrices(state: StoredMarketplaceState): Map<number, number> {
+function buildTaxonomyReferencePrices(state: StoredMarketplaceState): Map<number, number> {
   const grouped = new Map<number, number[]>();
 
   for (const listing of state.listings.filter(isMarketplaceActiveListing)) {
@@ -112,8 +127,22 @@ function buildTaxonomyAveragePrices(state: StoredMarketplaceState): Map<number, 
   }
 
   return new Map(
-    [...grouped.entries()].map(([taxonomyId, prices]) => [taxonomyId, average(prices)])
+    [...grouped.entries()].map(([taxonomyId, prices]) => [taxonomyId, median(prices)])
   );
+}
+
+function priceClickFit(listingPrice: number, referencePrice: number): number {
+  const priceDelta = referencePrice > 0 ? (listingPrice - referencePrice) / referencePrice : 0;
+  return roundTo(clamp(1.05 - priceDelta * 0.35, 0.75, 1.25));
+}
+
+function conversionPrice(input: {
+  listingPrice: number;
+  referencePrice: number;
+}): number {
+  const { listingPrice, referencePrice } = input;
+  const clickFit = priceClickFit(listingPrice, referencePrice);
+  return roundTo((clickFit - 1) * 0.02, 4);
 }
 
 function listingDemandFactors(input: {
@@ -121,14 +150,13 @@ function listingDemandFactors(input: {
   currentDay: SimulationDay;
   trendState: TrendState;
   shopReviewAverage: number;
-  taxonomyAveragePrice: number;
+  taxonomyReferencePrice: number;
 }): ListingDemandFactors {
-  const { listing, currentDay, trendState, shopReviewAverage, taxonomyAveragePrice } = input;
+  const { listing, currentDay, trendState, shopReviewAverage, taxonomyReferencePrice } = input;
   const quality = clamp(0.8 + computeListingQuality(listing) / 10, 0.85, 1.7);
   const reputation = clamp(0.9 + (shopReviewAverage > 0 ? shopReviewAverage : 4.2) / 10, 0.95, 1.45);
-  const priceDelta =
-    taxonomyAveragePrice > 0 ? (listing.price - taxonomyAveragePrice) / taxonomyAveragePrice : 0;
-  const price = clamp(1.05 - priceDelta * 0.35, 0.75, 1.25);
+  const referencePrice = taxonomyReferencePrice > 0 ? taxonomyReferencePrice : listing.price;
+  const price = priceClickFit(listing.price, referencePrice);
   const freshness = clamp(1.15 - differenceInUtcDays(currentDay.date, listing.created_at) * 0.03, 0.78, 1.15);
   const trend = clamp(trendMultiplierForListing(listing, trendState), 1, 1.35);
   const variation = clamp(
@@ -141,13 +169,18 @@ function listingDemandFactors(input: {
     quality: roundTo(quality),
     reputation: roundTo(reputation),
     price: roundTo(price),
+    reference_price: roundTo(referencePrice),
+    conversion_price: conversionPrice({
+      listingPrice: listing.price,
+      referencePrice
+    }),
     freshness: roundTo(freshness),
     trend: roundTo(trend),
     variation: roundTo(variation)
   };
 }
 
-function demandScore(factors: ListingDemandFactors): number {
+function discoverabilityScore(factors: ListingDemandFactors): number {
   return roundTo(
     factors.quality *
       factors.reputation *
@@ -175,12 +208,36 @@ function conversionRate(factors: ListingDemandFactors): number {
       0.01 +
         (factors.quality - 1) * 0.02 +
         (factors.reputation - 1) * 0.015 +
-        (factors.price - 1) * 0.02 +
+        (factors.conversion_price ?? (factors.price - 1) * 0.02) +
         (factors.trend - 1) * 0.015,
       0.004,
       0.08
     ),
     4
+  );
+}
+
+function taxonomyDailyTraffic(input: {
+  taxonomyId: number;
+  listingCount: number;
+  currentDay: SimulationDay;
+  trendState: TrendState;
+}): number {
+  const { taxonomyId, listingCount, currentDay, trendState } = input;
+  const taxonomyMultiplier = Math.max(
+    trendState.baseline_multiplier,
+    ...trendState.active_trends
+      .filter((trend) => trend.taxonomy_id === taxonomyId)
+      .map((trend) => trend.demand_multiplier)
+  );
+
+  return Math.max(
+    listingCount,
+    Math.round(
+      (8 + listingCount * 4) *
+        taxonomyMultiplier *
+        (0.9 + hashToUnitInterval(`traffic:${currentDay.day}:${taxonomyId}`) * 0.2)
+    )
   );
 }
 
@@ -291,7 +348,7 @@ function resolveActiveListings(input: {
   const activeListings = nextMarketplace.listings.filter(isMarketplaceActiveListing);
   const activeByTaxonomy = new Map<number, Listing[]>();
   const shopReviewAverage = buildShopReviewAverage(nextMarketplace);
-  const taxonomyAveragePrices = buildTaxonomyAveragePrices(nextMarketplace);
+  const taxonomyReferencePrices = buildTaxonomyReferencePrices(nextMarketplace);
   const scheduledEvents: PendingEvent[] = [];
   const listingMetrics: ListingDayResolution[] = [];
 
@@ -305,20 +362,12 @@ function resolveActiveListings(input: {
   }
 
   for (const [taxonomyId, listings] of activeByTaxonomy.entries()) {
-    const taxonomyMultiplier = Math.max(
-      trendState.baseline_multiplier,
-      ...trendState.active_trends
-        .filter((trend) => trend.taxonomy_id === taxonomyId)
-        .map((trend) => trend.demand_multiplier)
-    );
-    const taxonomyTraffic = Math.max(
-      listings.length,
-      Math.round(
-        (8 + listings.length * 4) *
-          taxonomyMultiplier *
-          (0.9 + hashToUnitInterval(`traffic:${currentDay.day}:${taxonomyId}`) * 0.2)
-      )
-    );
+    const taxonomyTraffic = taxonomyDailyTraffic({
+      taxonomyId,
+      listingCount: listings.length,
+      currentDay,
+      trendState
+    });
 
     const scoredListings = listings.map((listing) => {
       const factors = listingDemandFactors({
@@ -326,13 +375,14 @@ function resolveActiveListings(input: {
         currentDay,
         trendState,
         shopReviewAverage: shopReviewAverage.get(listing.shop_id) ?? 0,
-        taxonomyAveragePrice: taxonomyAveragePrices.get(listing.taxonomy_id) ?? listing.price
+        taxonomyReferencePrice:
+          taxonomyReferencePrices.get(listing.taxonomy_id) ?? listing.price
       });
 
       return {
         listing,
         factors,
-        score: demandScore(factors)
+        score: discoverabilityScore(factors)
       };
     });
 

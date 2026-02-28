@@ -69,6 +69,8 @@ export type ListingDemandFactors = {
   quality: number;
   reputation: number;
   price: number;
+  reference_price?: number;
+  conversion_price?: number;
   freshness: number;
   trend: number;
   variation: number;
