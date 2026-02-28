@@ -71,6 +71,7 @@ export const reviewsTable = pgTable("reviews", {
   listingId: integer("listing_id")
     .references(() => listingsTable.listingId, { onDelete: "cascade" })
     .notNull(),
+  receiptId: integer("receipt_id").references(() => ordersTable.receiptId, { onDelete: "set null" }),
   rating: integer("rating").notNull(),
   review: text("review").notNull(),
   buyerName: text("buyer_name").notNull(),

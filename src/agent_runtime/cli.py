@@ -74,7 +74,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_day.add_argument("--mistral-model")
     run_day.add_argument("--mistral-temperature", type=float)
     run_day.add_argument("--mistral-top-p", type=float)
-    run_day.add_argument("--max-turns", type=int, default=6)
+    run_day.add_argument("--max-turns", type=int, default=3)
     run_day.add_argument(
         "--output-dir",
         help=(
@@ -100,7 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_days.add_argument("--mistral-model")
     run_days.add_argument("--mistral-temperature", type=float)
     run_days.add_argument("--mistral-top-p", type=float)
-    run_days.add_argument("--max-turns", type=int, default=6)
+    run_days.add_argument("--max-turns", type=int, default=3)
     run_days.add_argument(
         "--output-dir",
         help=(

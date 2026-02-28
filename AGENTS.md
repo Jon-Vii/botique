@@ -33,8 +33,11 @@ Before making architectural changes, read:
 3. `docs/agent-tools.md`
 4. `docs/simulation-model.md`
 5. `docs/agent-loop.md`
+6. `docs/status.md`
 
 The original concept document is `botique-initial-concept-draft.md`.
+
+When orienting to the repo or starting a new work session, check `docs/status.md` first for the current build state, active focus, and open questions.
 
 ## Decision Status
 
@@ -269,6 +272,7 @@ Use:
 - `docs/simulation-model.md` for market logic
 - `docs/agent-loop.md` for prompt/turn/briefing changes
 - `docs/mvp-scope.md` for initial-scope changes
+- `docs/status.md` for what currently works, what is in motion, what is next, and what remains open
 
 ## Parallel Work Guidance
 

@@ -27,7 +27,7 @@ Per simulated day:
 3. agent receives the briefing plus available tools
 4. agent takes up to `N` turns
 5. each turn allows at most one tool call
-6. agent may end the day early
+6. runtime settles the day automatically
 7. logs and notes persist into the next day
 
 Status: `Recommended default`
@@ -82,7 +82,7 @@ The runtime now also includes a live Botique briefing path:
 - one tool call per turn
 - bounded number of turns per day
 - stable tool descriptions
-- explicit day-ending action
+- runtime-owned day ending
 - no hidden control-plane powers
 
 Status: `Recommended default`
@@ -90,8 +90,9 @@ Status: `Recommended default`
 Current implementation in `src/agent_runtime/loop.py` uses a `SingleShopDailyLoop` with:
 
 - one `AgentTurnDecision` per turn
-- either exactly one tool call or an explicit end-day action
-- a configurable max-turn cap
+- bounded inspect turns before an act-or-`no_action` decision is required
+- automatic day settlement after the first primary business action
+- a configurable max-turn cap with a default `3`-turn loop
 - structured day/turn/tool events for debugging and demo playback
 - no delegation or sub-agent assumptions
 
@@ -117,7 +118,7 @@ botique-agent-runtime run-days \
   --shop-id 1001 \
   --days 5 \
   --run-id reference_baseline_01 \
-  --max-turns 6 \
+  --max-turns 3 \
   --output-dir artifacts/agent-runtime/reference-baseline-01 \
   --pretty
 ```
@@ -136,6 +137,153 @@ The prompt should encourage these modes without over-hardcoding them:
 - strategize
 - act
 - reflect
+
+## Agent Loop V1 Patch Plan
+
+This section is the concrete near-term runtime plan for getting from a technically working loop to a believable shop-operator loop.
+
+Status: `Current decision` for implementation direction
+
+### Why change the loop
+
+The first live smoke run showed a predictable failure mode:
+
+- repeated low-risk `search_marketplace` calls
+- no listing or shop changes
+- no note/reminder writes
+- no voluntary end-of-day decision
+
+This suggests the current loop over-rewards inspection and makes day ending feel like an artificial seller choice.
+
+### V1 design goal
+
+Make the agent behave more like a seller and less like a search bot.
+
+The loop should encourage:
+
+- a small amount of evidence gathering
+- one concrete business-changing move when warranted
+- a short explicit reflection artifact
+- automatic day settlement by the runtime
+
+### V1 daily structure
+
+Per simulated day:
+
+1. System 2 resolves overnight outcomes
+2. System 3 builds the morning briefing
+3. agent gets a bounded inspect budget
+4. agent gets one primary action window
+5. optional note/reminder write if useful
+6. runtime ends the day automatically
+7. System 2 advances and produces next-day consequences
+
+Recommended initial bounds:
+
+- max `3` turns per day
+- at most `2` inspect turns
+- at most `1` primary business action
+
+### Tool classes for V1
+
+Treat tools as two behavioral classes even if they stay on the same exposed seller surface.
+
+`inspect`
+
+- `search_marketplace`
+- `get_shop_info`
+- `get_shop_listings`
+- `get_listing`
+- `get_orders`
+- `get_order_details`
+- `get_reviews`
+- `get_taxonomy_nodes`
+
+`act`
+
+- `create_draft_listing`
+- `update_listing`
+- `delete_listing`
+- `update_shop`
+
+`memory support`
+
+- `write_note`
+- `read_notes`
+- `set_reminder`
+- `complete_reminder`
+
+Memory tools should remain auxiliary. They should not become the main productive action for the day.
+
+### V1 runtime policy
+
+Recommended runtime contract:
+
+- remove `end_day` as a normal strategic action for the first hackathon-quality loop
+- allow repeated inspect calls only inside a small inspect budget
+- after inspect budget is exhausted, require either:
+  - one `act` tool call, or
+  - an explicit structured `no_action` response explaining why no business change is justified today
+- once the act-or-no-action window is consumed, settle the day automatically
+
+This keeps day boundaries inspectable without making day ending itself the interesting decision.
+
+### V1 prompt changes
+
+The prompt should stop suggesting open-ended evidence gathering.
+
+Add explicit guidance that:
+
+- inspection is for deciding what to change
+- repeated search without a decision is low value
+- the goal is to make or justify one concrete business move per day
+- notes/reminders support decisions but do not replace them
+
+### V1 briefing changes
+
+The morning briefing should become more action-oriented.
+
+Add compact sections or fields for:
+
+- strongest opportunity today
+- clearest risk today
+- strongest listing signal
+- weakest listing signal
+- whether yesterday suggests:
+  - keep strategy
+  - adjust strategy
+  - explore a new niche
+
+### V1 context trimming
+
+Do not keep feeding full raw tool payloads back into subsequent turns when a summary is enough.
+
+Near-term rule:
+
+- keep full tool results in artifacts
+- pass summarized prior tool results into the next model prompt
+- especially summarize marketplace search results instead of replaying entire listing payloads
+
+This should improve both cost and agent behavior.
+
+### V1 implementation order
+
+1. add tool classification inside the runtime
+2. replace explicit `end_day` with inspect-budget plus act window logic
+3. add structured `no_action` as the only non-tool alternative
+4. tighten briefing wording and priorities prompt
+5. summarize prior tool results before sending them back to the model
+6. rerun the same short reference scenario on at least one stronger model
+
+### Success criteria
+
+The loop change is successful when a short live run usually shows:
+
+- fewer redundant marketplace searches
+- at least one concrete seller action on days where a change is justified
+- inspectable reasoning through action summaries and notes
+- automatic day settlement without loop confusion
+- artifact bundles that remain easy to compare across runs
 
 ## Notes and Reminders
 

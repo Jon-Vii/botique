@@ -27,7 +27,8 @@ These pieces already exist in the repo and are safe to build on.
 - transparent marketplace ranking based on relevance, listing quality, reviews, price fit, recency, and trend bonus
 - Python `seller_core` client/CLI for the portable seller-facing tool surface
 - Python single-shop agent runtime with live morning briefing generation
-- one-tool-per-turn agent loop with explicit `end_day`
+- one-tool-per-turn agent loop with bounded inspection, a forced act-or-`no_action` decision, and automatic day settlement
+- phase-aware prompt/tool exposure that summarizes prior tool results in-model while keeping full raw payloads in artifacts
 - simple Botique memory tools for notes and reminders
 - Mistral provider wiring for tool-calling runs
 - multi-day runtime path that can build briefings from live Botique state, advance the simulation between days, and persist artifact-rich reference-run bundles for inspection
@@ -37,7 +38,7 @@ These pieces already exist in the repo and are safe to build on.
 These are the current product and architecture priorities.
 
 - get to a first believable reference run as quickly as possible
-- keep the initial agent loop simple, inspectable, and stable
+- redesign the agent loop so it behaves like a seller workflow instead of an open-ended search loop
 - tune the new System 2 consequence pipeline so the world feels believable across multiple days
 - preserve the clean boundary between seller-facing tools and control/runtime surfaces
 - keep the Etsy-compatible `seller_core` story honest without letting portability concerns slow the core demo
@@ -47,10 +48,12 @@ These are the current product and architecture priorities.
 
 Near-term work that should most improve the first end-to-end run.
 
+- tune `agent-loop v1` against live traces so the inspect/act contract feels natural across scenarios
+- improve the morning briefing so it highlights opportunities, risks, and strongest/weakest listing signals
+- decide whether and how simple note/reminder reflection should fit back into the v1 runtime without becoming the main action
 - tune the first consequence-producing day pipeline against multi-day traces
 - decide whether the next demand step should be explicit cohort sessions or a richer aggregate demand model
 - add delayed customer-message delivery on top of the existing pending-event queue if it materially improves the demo
-- improve the morning briefing so it highlights opportunities, risks, and weak/strong listing signals
 - review and tune against the first persisted reference-run bundle instead of ad hoc terminal output
 
 ## Later

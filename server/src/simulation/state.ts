@@ -111,11 +111,14 @@ function pickTrendTags(listings: Listing[]): string[] {
 
 function hasReviewForOrder(
   state: StoredMarketplaceState,
+  receiptId: number,
   buyerName: string,
   listingId: number
 ): boolean {
   return state.reviews.some(
-    (review) => review.buyer_name === buyerName && review.listing_id === listingId
+    (review) =>
+      review.receipt_id === receiptId ||
+      (review.receipt_id == null && review.buyer_name === buyerName && review.listing_id === listingId)
   );
 }
 
@@ -157,7 +160,7 @@ function collectPendingEventsFromMarketplace(
     }
 
     const primaryListingId = order.line_items[0].listing_id;
-    if (hasReviewForOrder(marketplaceState, order.buyer_name, primaryListingId)) {
+    if (hasReviewForOrder(marketplaceState, order.receipt_id, order.buyer_name, primaryListingId)) {
       continue;
     }
 

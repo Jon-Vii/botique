@@ -54,6 +54,7 @@ class _NormalizedDayArtifact:
     events: tuple[RuntimeEvent, ...]
     state_before: ShopStateSnapshot | None = None
     state_after: ShopStateSnapshot | None = None
+    state_next_day: ShopStateSnapshot | None = None
     market_state_before: Any = None
     advancement: Any = None
 
@@ -147,6 +148,7 @@ def _normalize_result(result: ArtifactResult) -> _NormalizedRunArtifact:
                 events=live_day.events or live_day.day_result.events,
                 state_before=live_day.state_before,
                 state_after=live_day.state_after,
+                state_next_day=live_day.state_next_day,
                 market_state_before=live_day.market_state_before,
                 advancement=live_day.advancement,
             )
@@ -173,6 +175,7 @@ def _normalize_result(result: ArtifactResult) -> _NormalizedRunArtifact:
             events=result.events or result.day_result.events,
             state_before=result.state_before,
             state_after=result.state_after,
+            state_next_day=result.state_next_day,
             market_state_before=result.market_state_before,
             advancement=result.advancement,
         )
@@ -301,6 +304,7 @@ def _build_run_summary(
                 "objective_status": day.briefing.objective_progress.status_summary,
                 "state_before": _shop_state_summary(day.state_before),
                 "state_after": _shop_state_summary(day.state_after),
+                "state_next_day": _shop_state_summary(day.state_next_day),
                 "advanced_to_day": (
                     None
                     if day.advancement is None
@@ -311,7 +315,9 @@ def _build_run_summary(
 
     event_kinds = Counter(event.kind.value for event in normalized.events)
     starting_state = _shop_state_summary(normalized.days[0].state_before)
-    ending_state = _shop_state_summary(normalized.days[-1].state_after)
+    ending_state = _shop_state_summary(
+        normalized.days[-1].state_next_day or normalized.days[-1].state_after
+    )
 
     return {
         "generated_at": created_at.isoformat(),
@@ -365,6 +371,8 @@ def _write_day_artifacts(days_dir: Path, day: _NormalizedDayArtifact) -> None:
         _write_json(day_dir / "state_before.json", day.state_before.to_payload())
     if day.state_after is not None:
         _write_json(day_dir / "state_after.json", day.state_after.to_payload())
+    if day.state_next_day is not None:
+        _write_json(day_dir / "state_next_day.json", day.state_next_day.to_payload())
     if day.advancement is not None:
         _write_json(day_dir / "advancement.json", jsonify(day.advancement))
 
@@ -382,10 +390,11 @@ def _render_readme(normalized: _NormalizedRunArtifact) -> str:
             "- `memory/reminders.json`: final reminder snapshot after the run.",
             "- `days/day-####/briefing.md`: rendered morning briefing for a specific day.",
             "- `days/day-####/briefing.json`: structured briefing payload.",
-            "- `days/day-####/summary.md`: day-level narrative with turn decisions and tool outputs.",
-            "- `days/day-####/turns.json`: comparison-friendly turn records.",
+            "- `days/day-####/summary.md`: day-level narrative with turn decisions, assistant output, and tool outputs.",
+            "- `days/day-####/turns.json`: comparison-friendly turn records including assistant text and provider tool calls.",
             "- `days/day-####/record.json`: full structured record for that day.",
             "- `days/day-####/state_before.json` and `state_after.json`: live shop snapshots when available.",
+            "- `days/day-####/state_next_day.json`: next-morning shop snapshot after day settlement when available.",
             "- `days/day-####/advancement.json`: control-plane day advancement record when the simulation advanced after that day.",
         ]
     ) + "\n"
@@ -468,6 +477,7 @@ def _render_day_summary(day: _NormalizedDayArtifact) -> str:
         "",
         f"- Before: {_render_shop_state_line(_shop_state_summary(day.state_before))}",
         f"- After: {_render_shop_state_line(_shop_state_summary(day.state_after))}",
+        f"- Next day: {_render_shop_state_line(_shop_state_summary(day.state_next_day))}",
         "",
         "## Turns",
         "",
@@ -576,6 +586,26 @@ def _render_turn(turn: TurnRecord) -> list[str]:
         f"- Started: `{turn.started_at.isoformat()}`",
         f"- Completed: `{turn.completed_at.isoformat()}`",
     ]
+    if turn.assistant_text:
+        lines.extend(
+            [
+                "",
+                "Assistant output:",
+                "```text",
+                turn.assistant_text,
+                "```",
+            ]
+        )
+    if turn.provider_tool_calls:
+        lines.extend(
+            [
+                "",
+                "Provider tool calls:",
+                "```json",
+                _dump_json(jsonify(turn.provider_tool_calls)),
+                "```",
+            ]
+        )
     if turn.tool_call is None:
         lines.extend(["- Tool: none", ""])
         return lines
@@ -612,6 +642,8 @@ def _turn_payload(turn: TurnRecord) -> dict[str, JSONValue]:
         "decision_summary": turn.decision_summary,
         "started_at": turn.started_at.isoformat(),
         "completed_at": turn.completed_at.isoformat(),
+        "assistant_text": turn.assistant_text,
+        "provider_tool_calls": jsonify(turn.provider_tool_calls),
         "tool_call": (
             None
             if turn.tool_call is None

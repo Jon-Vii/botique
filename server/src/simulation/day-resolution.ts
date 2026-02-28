@@ -575,8 +575,11 @@ function applyPendingEvents(input: {
       }
 
       const buyerName = String(event.payload.buyer_name ?? "Botique Customer");
+      const receiptId = event.receipt_id;
       const alreadyExists = nextMarketplace.reviews.some(
-        (review) => review.listing_id === listingId && review.buyer_name === buyerName
+        (review) =>
+          (receiptId !== null && review.receipt_id === receiptId) ||
+          (review.receipt_id == null && review.listing_id === listingId && review.buyer_name === buyerName)
       );
       if (alreadyExists) {
         continue;
@@ -587,6 +590,7 @@ function applyPendingEvents(input: {
         review_id: nextReviewId,
         shop_id: event.shop_id,
         listing_id: listingId,
+        receipt_id: receiptId,
         rating: Number(event.payload.rating ?? 4),
         review: String(event.payload.review ?? "Solid purchase experience."),
         buyer_name: buyerName,

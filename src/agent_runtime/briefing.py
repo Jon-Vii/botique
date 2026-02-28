@@ -23,8 +23,9 @@ def _utcnow() -> datetime:
 
 
 DEFAULT_PRIORITIES_PROMPT = (
-    "Choose the highest-leverage priorities for today, then use the available "
-    "tools to inspect evidence, adjust the shop, and end the day once the plan is done."
+    "Choose the highest-leverage priorities for today. Use a small amount of "
+    "inspection to gather evidence, then make one concrete business change if warranted. "
+    "Repeated searching without deciding what to change is low value."
 )
 
 

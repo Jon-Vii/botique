@@ -94,6 +94,64 @@ describe("System 2 simulation module", () => {
     assert.equal(world.simulation.pending_events[0]?.event_id, "review-5006");
   });
 
+  test("scheduled reviews dedupe by receipt instead of buyer-name collisions", async () => {
+    const repository = createInMemoryMarketplaceRepository(createSampleState());
+    const simulation = createWorldSimulation(repository);
+    const world = await simulation.getWorldState();
+
+    await repository.setWorldState({
+      marketplace: world.marketplace,
+      simulation: {
+        ...world.simulation,
+        pending_events: [
+          {
+            event_id: "review-91001",
+            type: "create_review",
+            shop_id: 1002,
+            listing_id: 2004,
+            receipt_id: 91001,
+            scheduled_for_day: 4,
+            scheduled_for_date: "2026-03-01T10:30:00.000Z",
+            created_at: "2026-02-28T00:00:00.000Z",
+            payload: {
+              buyer_name: "Test Buyer",
+              rating: 5,
+              review: "Excellent files."
+            }
+          },
+          {
+            event_id: "review-91002",
+            type: "create_review",
+            shop_id: 1002,
+            listing_id: 2004,
+            receipt_id: 91002,
+            scheduled_for_day: 4,
+            scheduled_for_date: "2026-03-01T10:35:00.000Z",
+            created_at: "2026-02-28T00:00:00.000Z",
+            payload: {
+              buyer_name: "Test Buyer",
+              rating: 4,
+              review: "Solid purchase."
+            }
+          }
+        ]
+      }
+    });
+
+    await simulation.advanceDay();
+
+    const updatedWorld = await simulation.getWorldState();
+    const reviews = updatedWorld.marketplace.reviews
+      .filter((review) => review.buyer_name === "Test Buyer" && review.listing_id === 2004)
+      .sort((left, right) => (left.receipt_id ?? 0) - (right.receipt_id ?? 0));
+
+    assert.equal(reviews.length, 2);
+    assert.deepEqual(
+      reviews.map((review) => review.receipt_id),
+      [91001, 91002]
+    );
+  });
+
   test("marketplace search scores respond to simulation day changes without route changes", async () => {
     const repository = createInMemoryMarketplaceRepository(createSampleState());
     const simulation = createWorldSimulation(repository);

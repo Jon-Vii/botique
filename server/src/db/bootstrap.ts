@@ -168,6 +168,7 @@ export async function seedMarketplaceStateIfEmpty(
           review_id,
           shop_id,
           listing_id,
+          receipt_id,
           rating,
           review,
           buyer_name,
@@ -177,6 +178,7 @@ export async function seedMarketplaceStateIfEmpty(
           ${review.review_id},
           ${review.shop_id},
           ${review.listing_id},
+          ${review.receipt_id ?? null},
           ${review.rating},
           ${review.review},
           ${review.buyer_name},
@@ -286,11 +288,17 @@ export async function bootstrapDatabase(
       review_id integer primary key,
       shop_id integer not null references shops(shop_id) on delete cascade,
       listing_id integer not null references listings(listing_id) on delete cascade,
+      receipt_id integer references orders(receipt_id) on delete set null,
       rating integer not null,
       review text not null,
       buyer_name text not null,
       created_at timestamptz not null
     )
+  `;
+
+  await client`
+    alter table reviews
+    add column if not exists receipt_id integer references orders(receipt_id) on delete set null
   `;
 
   await client`
