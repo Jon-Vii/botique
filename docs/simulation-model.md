@@ -57,7 +57,9 @@ Recommended starting context:
 
 Current implementation note:
 
-- System 1 should bootstrap an empty development store with a small seeded digital-first market, including taxonomy nodes, shops, listings, orders, reviews, and payments.
+- the current server seeds a small digital-first market with taxonomy nodes, two shops, listings, orders, reviews, and payments
+- the in-memory repository starts with that default seed, and the Postgres bootstrap uses the same seed when the database is empty or partially seeded
+- the current simulation day is inferred from the latest seeded marketplace timestamp unless a world state provides an explicit day
 
 This gives the agent a business to run and a world to react to without making the orchestrator responsible for world setup.
 
@@ -129,6 +131,11 @@ Initial ranking can be a weighted score:
 
 This does not need to mimic Etsy perfectly. It needs to be stable, legible, and tunable.
 
+Current implementation note:
+
+- `server/src/simulation/ranking.ts` currently scores marketplace search with keyword relevance, deterministic listing quality, shop review average, price fit, recency bonus, taxonomy/tag trend bonus, and a small freshness bonus
+- this is still intentionally transparent and formula-driven rather than LLM-judged
+
 ## Listing Quality
 
 Prefer a deterministic first pass:
@@ -156,7 +163,7 @@ System 2 should own this process. System 3 consumes the resulting world state; i
 
 ## First Advance-Day Pipeline
 
-The first implementation can stay simple as long as the steps are explicit and inspectable.
+The first implementation should stay simple as long as the steps are explicit and inspectable.
 
 Suggested initial pipeline:
 
@@ -165,6 +172,10 @@ Suggested initial pipeline:
 3. rebuild the market snapshot from current listings and trends
 
 This is enough to establish the contract surface for `advanceDay` before adding richer order, review, or customer-resolution behavior.
+
+Current implementation note:
+
+- `advanceDay` is already implemented with exactly these three inspectable steps and returns them in the control response payload
 
 Recommended default for the first build:
 

@@ -18,7 +18,7 @@ Status: `Recommended default`
 
 ### Must Have
 
-- FastAPI app or equivalent service for marketplace state
+- seller-facing HTTP service for marketplace state and compatibility endpoints
 - one owner agent running against an allowed tool set
 - day-based simulation loop
 - listings, search, shop info, orders, and reviews
@@ -37,6 +37,11 @@ Status: `Recommended default`
 - complex inventory or shipping flows
 - real-time sockets if polling is enough for the first demo
 - full Etsy endpoint breadth
+
+Current implementation note:
+
+- the current repo already has a Fastify/Bun seller-facing service, seeded marketplace state, deterministic trend rotation, a Python `seller_core` CLI, and a Python single-shop runtime
+- the frontend/dashboard remains deferred
 
 ## Product Scope Recommendation
 

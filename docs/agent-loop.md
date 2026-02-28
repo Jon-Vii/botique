@@ -55,7 +55,7 @@ Suggested sections:
 
 Status: `Recommended default`
 
-Current scaffold in `src/agent_runtime/briefing.py` models the briefing with explicit sections for:
+Current implementation in `src/agent_runtime/briefing.py` models the briefing with explicit sections for:
 
 - balance summary
 - yesterday order summary
@@ -87,7 +87,7 @@ The runtime now also includes a live Botique briefing path:
 
 Status: `Recommended default`
 
-Current scaffold in `src/agent_runtime/loop.py` uses a `SingleShopDailyLoop` with:
+Current implementation in `src/agent_runtime/loop.py` uses a `SingleShopDailyLoop` with:
 
 - one `AgentTurnDecision` per turn
 - either exactly one tool call or an explicit end-day action
@@ -106,6 +106,7 @@ Current runtime entrypoint:
 - `botique-agent-runtime run-days --shop-id <shop_id> --days <n>`
 - the CLI can still load a structured briefing directly, but it can also build one from live Botique state and execute a simple multi-day run that advances the simulation between days
 - the default provider wiring is Mistral through `MISTRAL_API_KEY` and optional `BOTIQUE_MISTRAL_*` settings, but the loop itself remains provider-agnostic
+- the current runtime expects the briefing payload to be supplied externally; fully automated briefing assembly and day advancement orchestration are follow-on integration work
 
 ## Core Cognitive Stages
 
@@ -132,7 +133,7 @@ This keeps the strategy legible and avoids complex retrieval systems during the 
 
 The goal is not sophisticated recall. The goal is to let the agent persist explicit plans, follow-ups, and lessons in a way judges and developers can inspect.
 
-Current scaffold in `src/agent_runtime/memory.py` is an in-memory placeholder implementation. It is intentionally simple and suitable for a single-shop run before adding persistence or retrieval layers.
+Current implementation in `src/agent_runtime/memory.py` is an in-memory placeholder store. It is intentionally simple and suitable for a single-shop run before adding persistence or retrieval layers.
 
 ## Delegation
 
@@ -160,7 +161,7 @@ Every day and every turn should log:
 
 Logs are part of the product. They make strategy visible to judges and to you while debugging.
 
-Current scaffold in `src/agent_runtime/events.py` and `src/agent_runtime/loop.py` emits structured events for:
+Current implementation in `src/agent_runtime/events.py` and `src/agent_runtime/loop.py` emits structured events for:
 
 - day start and end
 - briefing generation
