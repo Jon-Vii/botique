@@ -108,6 +108,13 @@ Possible later additions:
 
 Status: `Recommended default`
 
+Current scaffold in `src/agent_runtime/tools/` does two things:
+
+- wraps the initial owner-agent `seller_core` subset through a runtime registry
+- adds simple Botique extension tools for `write_note`, `read_notes`, and `set_reminder`
+
+The current runtime intentionally does not expose delegation helpers, balance/trend shortcuts, or control-plane operations to the shop owner agent.
+
 ## Control API
 
 This is not part of the normal agent tool surface.
@@ -186,6 +193,21 @@ src/
 ```
 
 Status: `Recommended default`
+
+Current scaffold now exists at:
+
+```text
+src/
+  agent_runtime/
+    briefing.py
+    events.py
+    loop.py
+    memory.py
+    tools/
+      core.py
+      extensions.py
+      registry.py
+```
 
 ## Core CLI Contract
 

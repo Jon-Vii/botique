@@ -50,6 +50,21 @@ Suggested sections:
 
 Status: `Recommended default`
 
+Current scaffold in `src/agent_runtime/briefing.py` models the briefing with explicit sections for:
+
+- balance summary
+- yesterday order summary
+- listing performance deltas
+- new reviews
+- new customer messages
+- reminders due today
+- market movements
+- primary objective progress
+- operator/runtime notes
+- a stable priorities prompt
+
+The initial implementation also includes a small `MorningBriefingBuilder` that pulls due reminders from the simple reminder store so the loop can stay inspectable.
+
 ## Turn Rules
 
 - one tool call per turn
@@ -59,6 +74,14 @@ Status: `Recommended default`
 - no hidden control-plane powers
 
 Status: `Recommended default`
+
+Current scaffold in `src/agent_runtime/loop.py` uses a `SingleShopDailyLoop` with:
+
+- one `AgentTurnDecision` per turn
+- either exactly one tool call or an explicit end-day action
+- a configurable max-turn cap
+- structured day/turn/tool events for debugging and demo playback
+- no delegation or sub-agent assumptions
 
 ## Core Cognitive Stages
 
@@ -83,6 +106,8 @@ Recommended tools:
 This keeps the strategy legible and avoids complex retrieval systems during the hackathon.
 
 The goal is not sophisticated recall. The goal is to let the agent persist explicit plans, follow-ups, and lessons in a way judges and developers can inspect.
+
+Current scaffold in `src/agent_runtime/memory.py` is an in-memory placeholder implementation. It is intentionally simple and suitable for a single-shop run before adding persistence or retrieval layers.
 
 ## Delegation
 
@@ -109,6 +134,16 @@ Every day and every turn should log:
 - any note or reminder writes
 
 Logs are part of the product. They make strategy visible to judges and to you while debugging.
+
+Current scaffold in `src/agent_runtime/events.py` and `src/agent_runtime/loop.py` emits structured events for:
+
+- day start and end
+- briefing generation
+- turn start
+- model response
+- tool call, result, and failure
+- note writes
+- reminder creation
 
 ## Failure Modes To Guard Against
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import unittest
 
+import _bootstrap
 from seller_core import SellerCoreClient
 from seller_core.cli import main
 from seller_core.models import ClientConfig, RequestPlan, ResponseEnvelope
