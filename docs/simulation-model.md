@@ -51,6 +51,10 @@ Recommended starting context:
 - some prior business history such as orders or reviews
 - current simulation day and any active market conditions
 
+Current implementation note:
+
+- System 1 should bootstrap an empty development store with a small seeded digital-first market, including taxonomy nodes, shops, listings, orders, reviews, and payments.
+
 This gives the agent a business to run and a world to react to without making the orchestrator responsible for world setup.
 
 Status: `Recommended default`

@@ -15,6 +15,7 @@ import type {
   UpdateListingData,
   UpdateShopData
 } from "./types";
+import { createDefaultMarketplaceState } from "../default-marketplace-state";
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -32,16 +33,7 @@ export class InMemoryMarketplaceRepository implements MarketplaceRepository {
   private readonly state: StoredMarketplaceState;
 
   constructor(seedState?: StoredMarketplaceState) {
-    this.state = clone(
-      seedState ?? {
-        shops: [],
-        listings: [],
-        orders: [],
-        reviews: [],
-        payments: [],
-        taxonomyNodes: []
-      }
-    );
+    this.state = clone(seedState ?? createDefaultMarketplaceState());
   }
 
   async getShop(shopId: number): Promise<Shop | null> {
