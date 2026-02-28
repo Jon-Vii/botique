@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 import unittest
+from io import StringIO
+from unittest.mock import patch
 
 import _bootstrap
 from agent_runtime import (
@@ -25,8 +28,11 @@ from agent_runtime import (
     SingleShopDailyLoop,
     ToolCallingAgentPolicy,
     ToolCall,
+    build_default_owner_agent_runner,
     build_owner_agent_tool_registry,
+    morning_briefing_from_payload,
 )
+from agent_runtime.cli import main as runtime_cli_main
 from agent_runtime.providers.policy import END_DAY_TOOL_NAME
 from agent_runtime.tools import DEFAULT_OWNER_AGENT_CORE_TOOLS
 
@@ -104,6 +110,16 @@ class FakeMistralClient:
             return self.outer.response_payload
 
 
+class FakeRunner:
+    def __init__(self, result: object) -> None:
+        self.result = result
+        self.received_briefings = []
+
+    def run_day(self, briefing):
+        self.received_briefings.append(briefing)
+        return self.result
+
+
 class MorningBriefingTests(unittest.TestCase):
     def test_builder_includes_due_reminders_in_briefing_payload(self) -> None:
         memory = InMemoryAgentMemory()
@@ -139,6 +155,56 @@ class MorningBriefingTests(unittest.TestCase):
             payload["due_reminders"][0]["content"],
             "Check whether the floral planner needs repricing.",
         )
+
+    def test_briefing_round_trips_from_json_payload(self) -> None:
+        briefing = morning_briefing_from_payload(
+            {
+                "run_id": "run_roundtrip",
+                "shop_id": 7,
+                "shop_name": "Studio North",
+                "day": 3,
+                "generated_at": "2026-02-28T10:00:00+00:00",
+                "balance_summary": {
+                    "available": 142.5,
+                    "pending": 20.0,
+                    "currency_code": "USD",
+                },
+                "yesterday_orders": {
+                    "order_count": 2,
+                    "revenue": 24.0,
+                    "average_order_value": 12.0,
+                },
+                "listing_changes": [
+                    {
+                        "listing_id": 1001,
+                        "title": "Mushroom Planner",
+                        "state": "active",
+                        "views_delta": 12,
+                    }
+                ],
+                "objective_progress": {
+                    "primary_objective": "Grow ending balance",
+                    "metric_name": "ending_balance",
+                    "current_value": 142.5,
+                    "target_value": 200.0,
+                    "status_summary": "Trending upward.",
+                },
+                "due_reminders": [
+                    {
+                        "reminder_id": "rem_1",
+                        "shop_id": 7,
+                        "content": "Check floral planner pricing.",
+                        "due_day": 3,
+                        "status": "pending",
+                        "created_at": "2026-02-27T09:00:00+00:00",
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(briefing.shop_id, 7)
+        self.assertEqual(briefing.listing_changes[0].listing_id, 1001)
+        self.assertEqual(briefing.due_reminders[0].reminder_id, "rem_1")
 
 
 class ToolRegistryTests(unittest.TestCase):
@@ -434,6 +500,105 @@ class MistralProviderTests(unittest.TestCase):
         self.assertFalse(sdk_call["parallel_tool_calls"])
         self.assertEqual(sdk_call["messages"][0]["role"], "system")
         self.assertEqual(sdk_call["tools"][0]["function"]["name"], "search_marketplace")
+
+
+class OwnerAgentRunnerTests(unittest.TestCase):
+    def test_default_runner_wires_provider_policy_and_loop(self) -> None:
+        seller_client = FakeSellerCoreClient()
+        provider = RecordingProvider(
+            [
+                ProviderResponse(
+                    content="Inspect the marketplace first.",
+                    tool_calls=(
+                        ProviderToolCall(
+                            name="search_marketplace",
+                            arguments={"keywords": "planner"},
+                        ),
+                    ),
+                ),
+                ProviderResponse(
+                    content="",
+                    tool_calls=(
+                        ProviderToolCall(
+                            name=END_DAY_TOOL_NAME,
+                            arguments={"summary": "That is enough for today."},
+                        ),
+                    ),
+                ),
+            ]
+        )
+        briefing = morning_briefing_from_payload(
+            {
+                "run_id": "run_owner",
+                "shop_id": 7,
+                "shop_name": "Studio North",
+                "day": 5,
+                "balance_summary": {"available": 150.0},
+                "yesterday_orders": {"order_count": 1, "revenue": 12.0},
+                "objective_progress": {
+                    "primary_objective": "Grow ending balance",
+                    "metric_name": "ending_balance",
+                    "current_value": 150.0,
+                    "status_summary": "Steady but slow growth.",
+                },
+            }
+        )
+        runner = build_default_owner_agent_runner(
+            max_turns=4,
+            memory=InMemoryAgentMemory(),
+            event_log=InMemoryEventLog(),
+            policy_config=ProviderPolicyConfig(),
+            mistral_api_key="unused",
+        )
+        runner = type(runner)(
+            provider=provider,
+            seller_client=seller_client,
+            memory=InMemoryAgentMemory(),
+            event_log=InMemoryEventLog(),
+        )
+
+        result = runner.run_day(briefing)
+
+        self.assertEqual(result.end_reason, DayEndReason.AGENT_ENDED_DAY)
+        self.assertEqual(len(result.turns), 1)
+        self.assertEqual(seller_client.calls, [("search_marketplace", {"keywords": "planner"})])
+
+
+class RuntimeCliTests(unittest.TestCase):
+    def test_run_day_command_loads_briefing_and_emits_json(self) -> None:
+        fake_runner = FakeRunner(
+            {
+                "run_id": "run_cli",
+                "end_reason": "agent_ended_day",
+            }
+        )
+        stdout = StringIO()
+        briefing_payload = {
+            "run_id": "run_cli",
+            "shop_id": 7,
+            "shop_name": "Studio North",
+            "day": 3,
+            "balance_summary": {"available": 100.0},
+            "yesterday_orders": {"order_count": 1, "revenue": 12.0},
+            "objective_progress": {
+                "primary_objective": "Grow ending balance",
+                "metric_name": "ending_balance",
+                "current_value": 100.0,
+                "status_summary": "Early stage.",
+            },
+        }
+
+        with patch("agent_runtime.cli.build_default_owner_agent_runner", return_value=fake_runner):
+            with patch("sys.stdout", stdout):
+                exit_code = runtime_cli_main(
+                    ["run-day", "--briefing", json.dumps(briefing_payload)]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["run_id"], "run_cli")
+        self.assertEqual(fake_runner.received_briefings[0].shop_name, "Studio North")
 
 
 class TurnDecisionValidationTests(unittest.TestCase):

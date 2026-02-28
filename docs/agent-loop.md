@@ -88,6 +88,12 @@ Current scaffold in `src/agent_runtime/loop.py` uses a `SingleShopDailyLoop` wit
 - structured day/turn/tool events for debugging and demo playback
 - no delegation or sub-agent assumptions
 
+Current runtime entrypoint:
+
+- `botique-agent-runtime run-day --briefing-file <path>`
+- the CLI loads a structured morning briefing, builds the owner-agent tool registry, and runs one day through the configured provider
+- the default provider wiring is Mistral through `MISTRAL_API_KEY` and optional `BOTIQUE_MISTRAL_*` settings, but the loop itself remains provider-agnostic
+
 ## Core Cognitive Stages
 
 The prompt should encourage these modes without over-hardcoding them:
