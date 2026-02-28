@@ -1,0 +1,103 @@
+import { buildMarketSnapshot, buildTrendState, nextSimulationDay } from "./state";
+import type {
+  AdvanceDayResult,
+  MarketSnapshot,
+  MarketplaceSearchContext,
+  SimulationDay,
+  SimulationState,
+  StoredMarketplaceState,
+  StoredWorldState,
+  TrendState
+} from "./state-types";
+
+export interface SimulationStateStore {
+  getMarketplaceState(): Promise<StoredMarketplaceState>;
+  getSimulationState(): Promise<SimulationState>;
+  setSimulationState(state: SimulationState): Promise<SimulationState>;
+}
+
+export interface SimulationModule {
+  getWorldState(): Promise<StoredWorldState>;
+  getCurrentDay(): Promise<SimulationDay>;
+  getMarketSnapshot(): Promise<MarketSnapshot>;
+  getTrendState(): Promise<TrendState>;
+  getSearchContext(): Promise<MarketplaceSearchContext>;
+  advanceDay(): Promise<AdvanceDayResult>;
+}
+
+export class WorldSimulation implements SimulationModule {
+  constructor(private readonly store: SimulationStateStore) {}
+
+  async getWorldState(): Promise<StoredWorldState> {
+    const [marketplace, simulation] = await Promise.all([
+      this.store.getMarketplaceState(),
+      this.store.getSimulationState()
+    ]);
+
+    return {
+      marketplace,
+      simulation
+    };
+  }
+
+  async getCurrentDay(): Promise<SimulationDay> {
+    return (await this.store.getSimulationState()).current_day;
+  }
+
+  async getMarketSnapshot(): Promise<MarketSnapshot> {
+    return (await this.store.getSimulationState()).market_snapshot;
+  }
+
+  async getTrendState(): Promise<TrendState> {
+    return (await this.store.getSimulationState()).trend_state;
+  }
+
+  async getSearchContext(): Promise<MarketplaceSearchContext> {
+    const simulation = await this.store.getSimulationState();
+    return {
+      current_day: simulation.current_day,
+      market_snapshot: simulation.market_snapshot,
+      trend_state: simulation.trend_state
+    };
+  }
+
+  async advanceDay(): Promise<AdvanceDayResult> {
+    const world = await this.getWorldState();
+    const advancedAt = new Date().toISOString();
+    const nextDay = nextSimulationDay(world.simulation.current_day, advancedAt);
+    const nextTrendState = buildTrendState(world.marketplace, nextDay, advancedAt);
+    const nextMarketSnapshot = buildMarketSnapshot(world.marketplace, nextTrendState, advancedAt);
+    const nextSimulation = await this.store.setSimulationState({
+      current_day: nextDay,
+      trend_state: nextTrendState,
+      market_snapshot: nextMarketSnapshot
+    });
+
+    return {
+      world: {
+        marketplace: world.marketplace,
+        simulation: nextSimulation
+      },
+      previous_day: world.simulation.current_day,
+      current_day: nextSimulation.current_day,
+      steps: [
+        {
+          name: "advance_clock",
+          description: "Increment the simulation day and roll the world clock forward by one UTC day."
+        },
+        {
+          name: "refresh_trends",
+          description: "Rotate the active taxonomy-led trends using a deterministic day-based schedule."
+        },
+        {
+          name: "refresh_market_snapshot",
+          description: "Recompute inspectable market totals and per-taxonomy demand multipliers from the updated trend state."
+        }
+      ]
+    };
+  }
+}
+
+export function createWorldSimulation(store: SimulationStateStore): SimulationModule {
+  return new WorldSimulation(store);
+}

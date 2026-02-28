@@ -7,6 +7,7 @@ import { PostgresMarketplaceRepository } from "./repositories/postgres-marketpla
 import type { MarketplaceRepository } from "./repositories/types";
 import { registerCoreRoutes } from "./routes/core-routes";
 import { MarketplaceService } from "./services/marketplace-service";
+import { createWorldSimulation } from "./simulation/world-simulation";
 
 export type BuildAppOptions = {
   config?: Partial<BotiqueServerConfig>;
@@ -30,7 +31,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   };
 
   const repository = options.repository ?? (await buildRepository(config));
-  const service = new MarketplaceService(repository);
+  const simulation = createWorldSimulation(repository);
+  const service = new MarketplaceService(repository, simulation);
 
   const app = Fastify({
     logger: options.logger ?? false

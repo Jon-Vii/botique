@@ -32,6 +32,11 @@ Per simulated day:
 
 Status: `Recommended default`
 
+Boundary note:
+
+- System 3 should consume `current_day`, `market_snapshot`, `trend_state`, and `advanceDay` outputs from System 2.
+- System 1 remains the seller-facing API surface; it should not become the owner of day advancement logic.
+
 ## Morning Briefing
 
 The briefing should be compact, structured, and unambiguous.

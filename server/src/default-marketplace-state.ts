@@ -7,7 +7,7 @@ import type {
   StoredShop,
   TaxonomyNode
 } from "./schemas/domain";
-import type { StoredMarketplaceState } from "./repositories/types";
+import type { StoredMarketplaceState } from "./simulation/state-types";
 
 function buildInventory(listingId: number, sku: string, price: number, quantity: number): ListingInventory {
   return {

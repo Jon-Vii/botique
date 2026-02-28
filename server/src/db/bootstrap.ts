@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 
 import { createDefaultMarketplaceState } from "../default-marketplace-state";
-import type { StoredMarketplaceState } from "../repositories/types";
+import type { StoredMarketplaceState } from "../simulation/state-types";
 import type { BotiqueDatabase, DatabaseClient } from "./client";
 
 async function shopsTableHasRows(client: DatabaseClient["client"]): Promise<boolean> {
@@ -290,6 +290,18 @@ export async function bootstrapDatabase(
       name text not null,
       full_path text not null,
       level integer not null
+    )
+  `;
+
+  await client`
+    create table if not exists simulation_state (
+      state_key varchar(64) primary key,
+      current_day integer not null,
+      current_day_date timestamptz not null,
+      advanced_at timestamptz,
+      market_snapshot jsonb not null,
+      trend_state jsonb not null,
+      updated_at timestamptz not null
     )
   `;
 

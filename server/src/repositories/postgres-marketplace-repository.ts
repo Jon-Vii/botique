@@ -8,6 +8,7 @@ import {
   paymentsTable,
   reviewsTable,
   shopsTable,
+  simulationStateTable,
   taxonomyNodesTable
 } from "../db/schema";
 import type {
@@ -26,6 +27,10 @@ import type {
   UpdateListingData,
   UpdateShopData
 } from "./types";
+import { createSimulationState } from "../simulation/state";
+import type { SimulationState, StoredMarketplaceState } from "../simulation/state-types";
+
+const SIMULATION_STATE_KEY = "default";
 
 function toIsoString(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
@@ -60,6 +65,81 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
     const repository = new PostgresMarketplaceRepository(connectionString);
     await repository.bootstrap();
     return repository;
+  }
+
+  async getMarketplaceState(): Promise<StoredMarketplaceState> {
+    const [shopRows, listingRows, orderRows, reviewRows, paymentRows, taxonomyRows] = await Promise.all([
+      this.db.select().from(shopsTable),
+      this.db
+        .select({
+          listing: listingsTable,
+          shopName: shopsTable.shopName
+        })
+        .from(listingsTable)
+        .innerJoin(shopsTable, eq(listingsTable.shopId, shopsTable.shopId)),
+      this.db.select().from(ordersTable),
+      this.db.select().from(reviewsTable),
+      this.db.select().from(paymentsTable),
+      this.db.select().from(taxonomyNodesTable)
+    ]);
+
+    return {
+      shops: shopRows.map((row) => this.mapStoredShop(row)),
+      listings: listingRows.map((row) => this.mapListing(row.listing, row.shopName)),
+      orders: orderRows.map((row) => this.mapOrder(row)),
+      reviews: reviewRows.map((row) => this.mapReview(row)),
+      payments: paymentRows.map((row) => this.mapPayment(row)),
+      taxonomyNodes: taxonomyRows.map((row) => ({
+        taxonomy_id: row.taxonomyId,
+        parent_taxonomy_id: row.parentTaxonomyId,
+        name: row.name,
+        full_path: row.fullPath,
+        level: row.level
+      }))
+    };
+  }
+
+  async getSimulationState(): Promise<SimulationState> {
+    const rows = await this.db
+      .select()
+      .from(simulationStateTable)
+      .where(eq(simulationStateTable.stateKey, SIMULATION_STATE_KEY))
+      .limit(1);
+
+    if (rows.length > 0) {
+      return this.mapSimulationState(rows[0]);
+    }
+
+    const marketplaceState = await this.getMarketplaceState();
+    return this.setSimulationState(createSimulationState(marketplaceState));
+  }
+
+  async setSimulationState(state: SimulationState): Promise<SimulationState> {
+    const rows = await this.db
+      .insert(simulationStateTable)
+      .values({
+        stateKey: SIMULATION_STATE_KEY,
+        currentDay: state.current_day.day,
+        currentDayDate: new Date(state.current_day.date),
+        advancedAt: state.current_day.advanced_at ? new Date(state.current_day.advanced_at) : null,
+        marketSnapshot: state.market_snapshot,
+        trendState: state.trend_state,
+        updatedAt: new Date()
+      })
+      .onConflictDoUpdate({
+        target: simulationStateTable.stateKey,
+        set: {
+          currentDay: state.current_day.day,
+          currentDayDate: new Date(state.current_day.date),
+          advancedAt: state.current_day.advanced_at ? new Date(state.current_day.advanced_at) : null,
+          marketSnapshot: state.market_snapshot,
+          trendState: state.trend_state,
+          updatedAt: new Date()
+        }
+      })
+      .returning();
+
+    return this.mapSimulationState(rows[0]);
   }
 
   async getShop(shopId: number): Promise<Shop | null> {
@@ -277,6 +357,10 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
     }));
   }
 
+  async snapshot(): Promise<StoredMarketplaceState> {
+    return this.getMarketplaceState();
+  }
+
   private async bootstrap() {
     await bootstrapDatabase(this.dbClient);
   }
@@ -291,7 +375,7 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
     return {
       ...shop,
       listing_active_count: listings.filter((listing) => listing.state === "active").length,
-      total_sales_count: orders.reduce(
+      total_sales_count: orders.filter((order) => order.was_paid).reduce(
         (sum, order) => sum + order.line_items.reduce((lineSum, lineItem) => lineSum + lineItem.quantity, 0),
         0
       ),
@@ -379,6 +463,18 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
       currency_code: row.currencyCode,
       status: row.status as Payment["status"],
       posted_at: toIsoString(row.postedAt)
+    };
+  }
+
+  private mapSimulationState(row: typeof simulationStateTable.$inferSelect): SimulationState {
+    return {
+      current_day: {
+        day: row.currentDay,
+        date: toIsoString(row.currentDayDate),
+        advanced_at: row.advancedAt ? toIsoString(row.advancedAt) : null
+      },
+      market_snapshot: row.marketSnapshot,
+      trend_state: row.trendState
     };
   }
 
