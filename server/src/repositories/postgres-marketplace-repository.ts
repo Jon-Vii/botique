@@ -30,7 +30,7 @@ import type {
 } from "./types";
 import { isMarketplaceActiveListing } from "../listing-availability";
 import { createSimulationState } from "../simulation/state";
-import type { SimulationState, StoredMarketplaceState } from "../simulation/state-types";
+import type { SimulationState, StoredMarketplaceState, StoredWorldState } from "../simulation/state-types";
 
 const SIMULATION_STATE_KEY = "default";
 
@@ -126,6 +126,8 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
         advancedAt: state.current_day.advanced_at ? new Date(state.current_day.advanced_at) : null,
         marketSnapshot: state.market_snapshot,
         trendState: state.trend_state,
+        pendingEvents: state.pending_events,
+        lastDayResolution: state.last_day_resolution,
         updatedAt: new Date()
       })
       .onConflictDoUpdate({
@@ -136,12 +138,244 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
           advancedAt: state.current_day.advanced_at ? new Date(state.current_day.advanced_at) : null,
           marketSnapshot: state.market_snapshot,
           trendState: state.trend_state,
+          pendingEvents: state.pending_events,
+          lastDayResolution: state.last_day_resolution,
           updatedAt: new Date()
         }
       })
       .returning();
 
     return this.mapSimulationState(rows[0]);
+  }
+
+  async setWorldState(state: StoredWorldState): Promise<StoredWorldState> {
+    const sql = await this.dbClient.client.reserve();
+
+    try {
+      await sql`begin`;
+
+      await sql`delete from payments`;
+      await sql`delete from reviews`;
+      await sql`delete from orders`;
+      await sql`delete from listings`;
+      await sql`delete from shops`;
+      await sql`delete from taxonomy_nodes`;
+
+      for (const taxonomyNode of state.marketplace.taxonomyNodes) {
+        await sql`
+          insert into taxonomy_nodes (taxonomy_id, parent_taxonomy_id, name, full_path, level)
+          values (
+            ${taxonomyNode.taxonomy_id},
+            ${taxonomyNode.parent_taxonomy_id},
+            ${taxonomyNode.name},
+            ${taxonomyNode.full_path},
+            ${taxonomyNode.level}
+          )
+        `;
+      }
+
+      for (const shop of state.marketplace.shops) {
+        await sql`
+          insert into shops (
+            shop_id,
+            shop_name,
+            title,
+            announcement,
+            sale_message,
+            currency_code,
+            digital_product_policy,
+            created_at,
+            updated_at
+          )
+          values (
+            ${shop.shop_id},
+            ${shop.shop_name},
+            ${shop.title},
+            ${shop.announcement},
+            ${shop.sale_message},
+            ${shop.currency_code},
+            ${shop.digital_product_policy},
+            ${shop.created_at},
+            ${shop.updated_at}
+          )
+        `;
+      }
+
+      for (const listing of state.marketplace.listings) {
+        await sql`
+          insert into listings (
+            listing_id,
+            shop_id,
+            title,
+            description,
+            state,
+            type,
+            quantity,
+            price,
+            currency_code,
+            who_made,
+            when_made,
+            taxonomy_id,
+            tags,
+            materials,
+            image_ids,
+            views,
+            favorites,
+            url,
+            inventory,
+            created_at,
+            updated_at
+          )
+          values (
+            ${listing.listing_id},
+            ${listing.shop_id},
+            ${listing.title},
+            ${listing.description},
+            ${listing.state},
+            ${listing.type},
+            ${listing.quantity},
+            ${listing.price},
+            ${listing.currency_code},
+            ${listing.who_made},
+            ${listing.when_made},
+            ${listing.taxonomy_id},
+            ${JSON.stringify(listing.tags)}::jsonb,
+            ${JSON.stringify(listing.materials)}::jsonb,
+            ${JSON.stringify(listing.image_ids)}::jsonb,
+            ${listing.views},
+            ${listing.favorites},
+            ${listing.url},
+            ${JSON.stringify(listing.inventory)}::jsonb,
+            ${listing.created_at},
+            ${listing.updated_at}
+          )
+        `;
+      }
+
+      for (const order of state.marketplace.orders) {
+        await sql`
+          insert into orders (
+            receipt_id,
+            shop_id,
+            buyer_name,
+            status,
+            was_paid,
+            was_shipped,
+            was_delivered,
+            total_price,
+            currency_code,
+            line_items,
+            created_at,
+            updated_at
+          )
+          values (
+            ${order.receipt_id},
+            ${order.shop_id},
+            ${order.buyer_name},
+            ${order.status},
+            ${order.was_paid ? 1 : 0},
+            ${order.was_shipped ? 1 : 0},
+            ${order.was_delivered ? 1 : 0},
+            ${order.total_price},
+            ${order.currency_code},
+            ${JSON.stringify(order.line_items)}::jsonb,
+            ${order.created_at},
+            ${order.updated_at}
+          )
+        `;
+      }
+
+      for (const review of state.marketplace.reviews) {
+        await sql`
+          insert into reviews (
+            review_id,
+            shop_id,
+            listing_id,
+            rating,
+            review,
+            buyer_name,
+            created_at
+          )
+          values (
+            ${review.review_id},
+            ${review.shop_id},
+            ${review.listing_id},
+            ${review.rating},
+            ${review.review},
+            ${review.buyer_name},
+            ${review.created_at}
+          )
+        `;
+      }
+
+      for (const payment of state.marketplace.payments) {
+        await sql`
+          insert into payments (
+            payment_id,
+            shop_id,
+            receipt_id,
+            amount,
+            currency_code,
+            status,
+            posted_at
+          )
+          values (
+            ${payment.payment_id},
+            ${payment.shop_id},
+            ${payment.receipt_id},
+            ${payment.amount},
+            ${payment.currency_code},
+            ${payment.status},
+            ${payment.posted_at}
+          )
+        `;
+      }
+
+      await sql`
+        insert into simulation_state (
+          state_key,
+          current_day,
+          current_day_date,
+          advanced_at,
+          market_snapshot,
+          trend_state,
+          pending_events,
+          last_day_resolution,
+          updated_at
+        )
+        values (
+          ${SIMULATION_STATE_KEY},
+          ${state.simulation.current_day.day},
+          ${state.simulation.current_day.date},
+          ${state.simulation.current_day.advanced_at},
+          ${JSON.stringify(state.simulation.market_snapshot)}::jsonb,
+          ${JSON.stringify(state.simulation.trend_state)}::jsonb,
+          ${JSON.stringify(state.simulation.pending_events)}::jsonb,
+          ${state.simulation.last_day_resolution
+            ? JSON.stringify(state.simulation.last_day_resolution)
+            : null}::jsonb,
+          ${new Date().toISOString()}
+        )
+        on conflict (state_key) do update
+        set
+          current_day = excluded.current_day,
+          current_day_date = excluded.current_day_date,
+          advanced_at = excluded.advanced_at,
+          market_snapshot = excluded.market_snapshot,
+          trend_state = excluded.trend_state,
+          pending_events = excluded.pending_events,
+          last_day_resolution = excluded.last_day_resolution,
+          updated_at = excluded.updated_at
+      `;
+
+      await sql`commit`;
+      return state;
+    } catch (error) {
+      await sql`rollback`;
+      throw error;
+    } finally {
+      sql.release();
+    }
   }
 
   async getShop(shopId: number): Promise<Shop | null> {
@@ -530,7 +764,9 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
         advanced_at: row.advancedAt ? toIsoString(row.advancedAt) : null
       },
       market_snapshot: row.marketSnapshot,
-      trend_state: row.trendState
+      trend_state: row.trendState,
+      pending_events: row.pendingEvents ?? [],
+      last_day_resolution: row.lastDayResolution ?? null
     };
   }
 

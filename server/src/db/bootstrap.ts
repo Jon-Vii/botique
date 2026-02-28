@@ -323,8 +323,26 @@ export async function bootstrapDatabase(
       advanced_at timestamptz,
       market_snapshot jsonb not null,
       trend_state jsonb not null,
+      pending_events jsonb not null default '[]'::jsonb,
+      last_day_resolution jsonb,
       updated_at timestamptz not null
     )
+  `;
+
+  await client`
+    alter table simulation_state
+    add column if not exists pending_events jsonb not null default '[]'::jsonb
+  `;
+
+  await client`
+    alter table simulation_state
+    add column if not exists last_day_resolution jsonb
+  `;
+
+  await client`
+    update simulation_state
+    set pending_events = '[]'::jsonb
+    where pending_events is null
   `;
 
   await db.execute(sql`create index if not exists listings_shop_id_idx on listings (shop_id)`);

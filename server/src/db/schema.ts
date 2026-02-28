@@ -1,7 +1,12 @@
 import { integer, jsonb, numeric, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
 
 import type { ListingInventory, Order, Payment, Review, TaxonomyNode } from "../schemas/domain";
-import type { MarketSnapshot, TrendState } from "../simulation/state-types";
+import type {
+  DayResolutionSummary,
+  MarketSnapshot,
+  PendingEvent,
+  TrendState
+} from "../simulation/state-types";
 
 export const shopsTable = pgTable("shops", {
   shopId: integer("shop_id").primaryKey(),
@@ -101,5 +106,7 @@ export const simulationStateTable = pgTable("simulation_state", {
   advancedAt: timestamp("advanced_at", { withTimezone: true }),
   marketSnapshot: jsonb("market_snapshot").$type<MarketSnapshot>().notNull(),
   trendState: jsonb("trend_state").$type<TrendState>().notNull(),
+  pendingEvents: jsonb("pending_events").$type<PendingEvent[]>().notNull(),
+  lastDayResolution: jsonb("last_day_resolution").$type<DayResolutionSummary | null>(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull()
 });

@@ -51,10 +51,65 @@ export type MarketSnapshot = {
   taxonomy: TaxonomyMarketSnapshot[];
 };
 
+export type PendingEventType = "post_payment" | "create_review" | "buyer_message";
+
+export type PendingEvent = {
+  event_id: string;
+  type: PendingEventType;
+  shop_id: number;
+  listing_id: number | null;
+  receipt_id: number | null;
+  scheduled_for_day: number;
+  scheduled_for_date: string;
+  created_at: string;
+  payload: Record<string, string | number | boolean | null>;
+};
+
+export type ListingDemandFactors = {
+  quality: number;
+  reputation: number;
+  price: number;
+  freshness: number;
+  trend: number;
+  variation: number;
+};
+
+export type ListingDayResolution = {
+  listing_id: number;
+  shop_id: number;
+  views_gained: number;
+  favorites_gained: number;
+  orders_created: number;
+  revenue: number;
+  demand_score: number;
+  conversion_rate: number;
+  demand_factors: ListingDemandFactors;
+};
+
+export type PendingEventCounts = Record<PendingEventType, number>;
+
+export type DayResolutionSummary = {
+  resolved_for_day: SimulationDay;
+  resolved_at: string;
+  totals: {
+    active_listings: number;
+    views_gained: number;
+    favorites_gained: number;
+    orders_created: number;
+    revenue: number;
+  };
+  listing_metrics: ListingDayResolution[];
+  scheduled_events: PendingEventCounts;
+  processed_events: PendingEventCounts;
+  pending_event_count: number;
+};
+
 export type SimulationState = {
   current_day: SimulationDay;
   market_snapshot: MarketSnapshot;
   trend_state: TrendState;
+  pending_events: PendingEvent[];
+  last_day_resolution: DayResolutionSummary | null;
 };
 
 export type StoredWorldState = {
@@ -68,7 +123,12 @@ export type MarketplaceSearchContext = {
   trend_state: TrendState;
 };
 
-export type AdvanceDayStepName = "advance_clock" | "refresh_trends" | "refresh_market_snapshot";
+export type AdvanceDayStepName =
+  | "resolve_listing_activity"
+  | "settle_pending_events"
+  | "advance_clock"
+  | "refresh_trends"
+  | "refresh_market_snapshot";
 
 export type AdvanceDayStep = {
   name: AdvanceDayStepName;

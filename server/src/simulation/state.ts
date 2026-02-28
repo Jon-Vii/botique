@@ -1,8 +1,11 @@
 import type { Listing } from "../schemas/domain";
 import { isMarketplaceActiveListing } from "../listing-availability";
 import type {
+  DayResolutionSummary,
   MarketSnapshot,
   MarketTrend,
+  PendingEvent,
+  PendingEventCounts,
   SimulationDay,
   SimulationState,
   StoredMarketplaceState,
@@ -22,15 +25,30 @@ function average(values: number[]): number {
   return Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2));
 }
 
-function startOfUtcDay(value: string): string {
+export function startOfUtcDay(value: string): string {
   const date = new Date(value);
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())).toISOString();
 }
 
-function addUtcDays(value: string, days: number): string {
+export function addUtcDays(value: string, days: number): string {
   const date = new Date(value);
   date.setUTCDate(date.getUTCDate() + days);
   return startOfUtcDay(date.toISOString());
+}
+
+export function withUtcTime(value: string, hour: number, minute = 0): string {
+  const date = new Date(value);
+  return new Date(
+    Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate(),
+      hour,
+      minute,
+      0,
+      0
+    )
+  ).toISOString();
 }
 
 function collectTimestamps(state: StoredMarketplaceState): string[] {
@@ -89,6 +107,86 @@ function pickTrendTags(listings: Listing[]): string[] {
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
     .slice(0, 3)
     .map(([tag]) => tag);
+}
+
+function hasReviewForOrder(
+  state: StoredMarketplaceState,
+  buyerName: string,
+  listingId: number
+): boolean {
+  return state.reviews.some(
+    (review) => review.buyer_name === buyerName && review.listing_id === listingId
+  );
+}
+
+function collectPendingEventsFromMarketplace(
+  marketplaceState: StoredMarketplaceState,
+  currentDay: SimulationDay
+): PendingEvent[] {
+  const ordersByReceipt = new Map(
+    marketplaceState.orders.map((order) => [order.receipt_id, order])
+  );
+  const pendingEvents: PendingEvent[] = [];
+
+  for (const payment of marketplaceState.payments) {
+    if (payment.status !== "pending") {
+      continue;
+    }
+
+    const order = ordersByReceipt.get(payment.receipt_id);
+    pendingEvents.push({
+      event_id: `payment-${payment.payment_id}`,
+      type: "post_payment",
+      shop_id: payment.shop_id,
+      listing_id: order?.line_items[0]?.listing_id ?? null,
+      receipt_id: payment.receipt_id,
+      scheduled_for_day: currentDay.day + 1,
+      scheduled_for_date: withUtcTime(addUtcDays(currentDay.date, 1), 8, 0),
+      created_at: payment.posted_at,
+      payload: {
+        payment_id: payment.payment_id,
+        amount: payment.amount,
+        currency_code: payment.currency_code
+      }
+    });
+  }
+
+  for (const order of marketplaceState.orders) {
+    if (!order.was_paid || order.line_items.length === 0) {
+      continue;
+    }
+
+    const primaryListingId = order.line_items[0].listing_id;
+    if (hasReviewForOrder(marketplaceState, order.buyer_name, primaryListingId)) {
+      continue;
+    }
+
+    pendingEvents.push({
+      event_id: `review-${order.receipt_id}`,
+      type: "create_review",
+      shop_id: order.shop_id,
+      listing_id: primaryListingId,
+      receipt_id: order.receipt_id,
+      scheduled_for_day: currentDay.day + 2,
+      scheduled_for_date: withUtcTime(addUtcDays(currentDay.date, 2), 10, 30),
+      created_at: order.created_at,
+      payload: {
+        buyer_name: order.buyer_name,
+        rating: 4,
+        review: "Smooth digital delivery and a strong overall result."
+      }
+    });
+  }
+
+  return pendingEvents;
+}
+
+export function createPendingEventCounts(): PendingEventCounts {
+  return {
+    post_payment: 0,
+    create_review: 0,
+    buyer_message: 0
+  };
 }
 
 function isWorldState(input: StoredMarketplaceState | StoredWorldState): input is StoredWorldState {
@@ -189,6 +287,8 @@ export function createSimulationState(
   marketplaceState: StoredMarketplaceState,
   options: {
     currentDay?: SimulationDay;
+    pendingEvents?: PendingEvent[];
+    lastDayResolution?: DayResolutionSummary | null;
   } = {}
 ): SimulationState {
   const currentDay = options.currentDay ?? createSimulationDay(1, inferCurrentDayDate(marketplaceState));
@@ -198,7 +298,11 @@ export function createSimulationState(
   return {
     current_day: currentDay,
     market_snapshot: marketSnapshot,
-    trend_state: trendState
+    trend_state: trendState,
+    pending_events: clone(
+      options.pendingEvents ?? collectPendingEventsFromMarketplace(marketplaceState, currentDay)
+    ),
+    last_day_resolution: options.lastDayResolution ?? null
   };
 }
 
@@ -223,7 +327,16 @@ export function normalizeWorldState(
     return {
       marketplace,
       simulation: input.simulation
-        ? clone(input.simulation)
+        ? {
+            ...clone(input.simulation),
+            pending_events:
+              input.simulation.pending_events !== undefined
+                ? clone(input.simulation.pending_events)
+                : collectPendingEventsFromMarketplace(marketplace, input.simulation.current_day),
+            last_day_resolution: input.simulation.last_day_resolution
+              ? clone(input.simulation.last_day_resolution)
+              : null
+          }
         : createSimulationState(marketplace)
     };
   }

@@ -8,7 +8,7 @@ import type {
   StoredShop,
   TaxonomyNode
 } from "../schemas/domain";
-import type { SimulationState, StoredMarketplaceState } from "../simulation/state-types";
+import type { SimulationState, StoredMarketplaceState, StoredWorldState } from "../simulation/state-types";
 
 export type CreateListingData = Omit<Listing, "listing_id" | "created_at" | "updated_at" | "ranking_score">;
 
@@ -28,6 +28,7 @@ export interface MarketplaceRepository {
   getMarketplaceState(): Promise<StoredMarketplaceState>;
   getSimulationState(): Promise<SimulationState>;
   setSimulationState(state: SimulationState): Promise<SimulationState>;
+  setWorldState(state: StoredWorldState): Promise<StoredWorldState>;
   getShop(shopId: number): Promise<Shop | null>;
   listShops(): Promise<Shop[]>;
   updateShop(shopId: number, patch: UpdateShopData, metadata?: MutationMetadata): Promise<Shop | null>;

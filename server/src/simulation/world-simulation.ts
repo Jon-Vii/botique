@@ -1,3 +1,4 @@
+import { resolveMarketplaceDay } from "./day-resolution";
 import { buildMarketSnapshot, buildTrendState, nextSimulationDay } from "./state";
 import type {
   AdvanceDayResult,
@@ -14,6 +15,7 @@ export interface SimulationStateStore {
   getMarketplaceState(): Promise<StoredMarketplaceState>;
   getSimulationState(): Promise<SimulationState>;
   setSimulationState(state: SimulationState): Promise<SimulationState>;
+  setWorldState(state: StoredWorldState): Promise<StoredWorldState>;
 }
 
 export interface SimulationModule {
@@ -65,25 +67,46 @@ export class WorldSimulation implements SimulationModule {
     const world = await this.getWorldState();
     const advancedAt = new Date().toISOString();
     const nextDay = nextSimulationDay(world.simulation.current_day, advancedAt);
-    const nextTrendState = buildTrendState(world.marketplace, nextDay, advancedAt);
-    const nextMarketSnapshot = buildMarketSnapshot(world.marketplace, nextTrendState, advancedAt);
-    const nextSimulation = await this.store.setSimulationState({
-      current_day: nextDay,
-      trend_state: nextTrendState,
-      market_snapshot: nextMarketSnapshot
+    const resolution = resolveMarketplaceDay({
+      marketplace: world.marketplace,
+      currentDay: world.simulation.current_day,
+      nextDay,
+      trendState: world.simulation.trend_state,
+      pendingEvents: world.simulation.pending_events,
+      advancedAt
+    });
+    const nextTrendState = buildTrendState(resolution.marketplace, nextDay, advancedAt);
+    const nextMarketSnapshot = buildMarketSnapshot(resolution.marketplace, nextTrendState, advancedAt);
+    const nextWorld = await this.store.setWorldState({
+      marketplace: resolution.marketplace,
+      simulation: {
+        current_day: nextDay,
+        trend_state: nextTrendState,
+        market_snapshot: nextMarketSnapshot,
+        pending_events: resolution.pendingEvents,
+        last_day_resolution: resolution.summary
+      }
     });
 
     return {
-      world: {
-        marketplace: world.marketplace,
-        simulation: nextSimulation
-      },
+      world: nextWorld,
       previous_day: world.simulation.current_day,
-      current_day: nextSimulation.current_day,
+      current_day: nextWorld.simulation.current_day,
       steps: [
         {
+          name: "resolve_listing_activity",
+          description:
+            "Resolve formula-driven listing traffic for the day that just ended, updating views, favorites, orders, and inventory."
+        },
+        {
+          name: "settle_pending_events",
+          description:
+            "Apply any delayed world-owned events now due on the new day, including payment posting and queued review creation."
+        },
+        {
           name: "advance_clock",
-          description: "Increment the simulation day and roll the world clock forward by one UTC day."
+          description:
+            "Increment the simulation day and roll the world clock forward by one UTC day after resolving the prior day."
         },
         {
           name: "refresh_trends",
