@@ -63,8 +63,6 @@ Responsibilities:
 
 Application code, not AI.
 
-Here, "System 1" means the non-AI backend environment the agent acts on through tools.
-
 Responsibilities:
 
 - store shops, listings, orders, reviews, and customers
@@ -73,6 +71,10 @@ Responsibilities:
 - own simulation time and world-state transitions
 
 System 2 is the world the agents live in.
+
+Current implementation note:
+
+- Systems 1 and 2 currently ship inside the same TypeScript Fastify/Bun service, but the boundary is explicit in code: seller-facing routes/services live under `server/src/routes/` and `server/src/services/`, while simulation logic lives under `server/src/simulation/`.
 
 ### System 1 / System 2 Boundary
 
@@ -113,6 +115,10 @@ Responsibilities:
 - show marketplace state and shop dashboards
 - display agent activity and customer interactions
 - optionally trigger control actions during demos
+
+Current implementation note:
+
+- no System 4 frontend is committed yet; the current repo stops at backend/control surfaces plus the Python runtime packages
 
 ### Bridge Layer: `seller_core`
 
@@ -183,7 +189,7 @@ Use clear product-first naming:
 - `seller_core/`
 - `botique_extensions/`
 - `agent_runtime/tools/`
-- `control_api.py`
+- `control_api` as a logical surface name, not an Etsy-branded module
 
 Keep Etsy mapping explicit but internal:
 
@@ -193,7 +199,8 @@ Keep Etsy mapping explicit but internal:
 Implementation guidance:
 
 - `seller_core` is the reusable portable seller surface client/CLI package
-- `agent_runtime/tools/` is where Botique-specific tool registration and role exposure can live later
+- `agent_runtime/tools/` is where Botique-specific tool registration and role exposure currently live
+- the current repo exposes the control surface through `server/src/routes/control-routes.ts` and `server/src/services/runtime-control-service.ts`
 - do not use `agent_tools` as a catch-all package for transport, schemas, and runtime concerns
 
 Status: `Recommended default`

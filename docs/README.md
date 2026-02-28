@@ -11,6 +11,16 @@ Use these files as follows:
 - `agent-loop.md`: shop-owner agent loop, briefing format, and delegation rules
 - `prompts/agent-tools-thread.md`: reusable prompt for a parallel thread focused on agent tools
 
+## Current Repo Snapshot
+
+The repo currently has three implemented code areas:
+
+- `server/`: TypeScript Fastify/Bun service for the seller-facing API, control routes, seeded marketplace state, and simulation module
+- `src/seller_core/`: Python portability-aware client/CLI for the seller-facing tool surface
+- `src/agent_runtime/`: Python single-shop owner-agent runtime, tool registry, in-memory notes/reminders, and provider wiring
+
+System 4 is still conceptual in this repo. There is no committed frontend/dashboard implementation yet.
+
 ## Status Conventions
 
 Not everything in these docs is a locked decision.

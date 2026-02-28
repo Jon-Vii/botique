@@ -44,6 +44,12 @@ Current core surface in `seller_core`:
 - `get_reviews`
 - `get_taxonomy_nodes`
 
+Current implementation note:
+
+- the Python `seller_core` package already models and validates this full core surface
+- the current TypeScript server implements the matching seller-facing HTTP contract under `/v3/application`
+- the owner-agent runtime intentionally exposes only the narrower subset in `src/agent_runtime/tools/core.py`
+
 The exact build priority within this surface is still a planning decision.
 
 Status: `Recommended default`
@@ -109,7 +115,7 @@ Possible later additions:
 
 Status: `Recommended default`
 
-Current scaffold in `src/agent_runtime/tools/` does two things:
+Current implementation in `src/agent_runtime/tools/` does two things:
 
 - wraps the initial owner-agent `seller_core` subset through a runtime registry
 - adds simple Botique extension tools for `write_note`, `read_notes`, `set_reminder`, and `complete_reminder`
@@ -143,7 +149,7 @@ Status: `Current decision` on separation, `Recommended default` on exact endpoin
 Current implementation note:
 
 - the TypeScript server exposes a minimal non-seller `/control` surface for orchestrator/operator use
-- current endpoints cover reading `current_day`, `market_snapshot`, `trend_state`, a debug `world_state`, and `advance_day`
+- current endpoints are `GET /control/simulation/day`, `GET /control/simulation/market-snapshot`, `GET /control/simulation/trend-state`, `POST /control/simulation/advance-day`, and `GET /control/world-state`
 
 ## Naming Guidance
 
@@ -180,6 +186,8 @@ Botique-only:
 
 ## Recommended Folder Layout
 
+Future extracted layout, if the repo splits along cleaner package boundaries:
+
 ```text
 src/
   seller_core/
@@ -200,10 +208,11 @@ src/
 
 Status: `Recommended default`
 
-Current scaffold now exists at:
+Current repo layout now exists at:
 
 ```text
 src/
+  seller_core/
   agent_runtime/
     briefing.py
     events.py
@@ -213,6 +222,18 @@ src/
       core.py
       extensions.py
       registry.py
+server/
+  src/
+    routes/
+      core-routes.ts
+      control-routes.ts
+    services/
+      marketplace-service.ts
+      runtime-control-service.ts
+    simulation/
+      ranking.ts
+      state.ts
+      world-simulation.ts
 ```
 
 ## Core CLI Contract
