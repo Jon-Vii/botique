@@ -22,7 +22,7 @@
 
 ## Architecture Overview
 
-Three distinct systems, cleanly separated:
+Four logical systems plus one bridge layer:
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -33,24 +33,27 @@ Three distinct systems, cleanly separated:
 └──────────────────────┬──────────────────────────────┘
                        │ WebSocket + REST
 ┌──────────────────────┴──────────────────────────────┐
-│  SYSTEM 1: BOTIQUE PLATFORM                         │
-│  FastAPI server implementing Etsy-shaped REST API   │
-│  + Marketplace engine (demand, search ranking,      │
-│    customer sim, reviews, trends)                   │
-│  + Database (SQLite or in-memory)                   │
+│  SYSTEM 1: PLATFORM API SERVER                      │
+│  Seller-facing HTTP contract, validation, routing   │
+│  of reads/writes into marketplace state             │
+└──────────────────────┬──────────────────────────────┘
+                       │ Internal calls
+┌──────────────────────┴──────────────────────────────┐
+│  SYSTEM 2: SIMULATION ENGINE                        │
+│  The world itself: shops, listings, orders,         │
+│  reviews, search, demand, trends, and day           │
+│  resolution                                          │
 └──────────────────────┬──────────────────────────────┘
                        │ REST API calls
 ┌──────────────────────┴──────────────────────────────┐
-│  CLI TOOL LAYER                                     │
-│  Python functions wrapping API calls                │
-│  Matching Etsy endpoint signatures 1:1              │
-│  Controls what each agent role can access           │
+│  BRIDGE LAYER: SELLER TOOLING / CLI                 │
+│  Botique-first tool names with portability-aware    │
+│  seller contract mapping                            │
 └──────────────────────┬──────────────────────────────┘
                        │ Mistral function calling
 ┌──────────────────────┴──────────────────────────────┐
-│  SYSTEM 2: AGENT ORCHESTRATOR                       │
+│  SYSTEM 3: AGENT ORCHESTRATOR                       │
 │  Custom Python loop (NOT Mistral Agents API)        │
-│  - Simulation clock (discrete days)                 │
 │  - Agent turn management                            │
 │  - Optional delegation / sub-agent support          │
 │  - Context window management                        │
@@ -58,7 +61,7 @@ Three distinct systems, cleanly separated:
 └─────────────────────────────────────────────────────┘
 ```
 
-**Key principle**: System 1 doesn't know its clients are LLMs. System 2 doesn't know the marketplace is simulated. The CLI layer is the bridge. Swapping the CLI layer's backend from simulated Botique to real Etsy should require zero changes to agent code.
+**Key principle**: Systems 1 and 2 form the non-AI environment. System 3 runs agents against that environment through the bridge layer. Swapping the bridge layer's backend from simulated Botique to another Etsy-like seller platform should require minimal or no changes to agent code.
 
 ---
 

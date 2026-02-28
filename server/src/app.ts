@@ -1,0 +1,50 @@
+import formbody from "@fastify/formbody";
+import Fastify, { type FastifyInstance } from "fastify";
+
+import { loadConfig, type BotiqueServerConfig } from "./config";
+import { createInMemoryMarketplaceRepository } from "./repositories/in-memory-marketplace-repository";
+import { PostgresMarketplaceRepository } from "./repositories/postgres-marketplace-repository";
+import type { MarketplaceRepository } from "./repositories/types";
+import { registerCoreRoutes } from "./routes/core-routes";
+import { MarketplaceService } from "./services/marketplace-service";
+
+export type BuildAppOptions = {
+  config?: Partial<BotiqueServerConfig>;
+  repository?: MarketplaceRepository;
+  logger?: boolean;
+};
+
+async function buildRepository(config: BotiqueServerConfig): Promise<MarketplaceRepository> {
+  if (config.databaseUrl) {
+    return PostgresMarketplaceRepository.create(config.databaseUrl);
+  }
+
+  return createInMemoryMarketplaceRepository();
+}
+
+export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
+  const baseConfig = loadConfig();
+  const config: BotiqueServerConfig = {
+    ...baseConfig,
+    ...options.config
+  };
+
+  const repository = options.repository ?? (await buildRepository(config));
+  const service = new MarketplaceService(repository);
+
+  const app = Fastify({
+    logger: options.logger ?? false
+  });
+
+  await app.register(formbody);
+  await app.register(async (instance) => {
+    await registerCoreRoutes(instance, service);
+  }, { prefix: "/v3/application" });
+
+  app.get("/health", async () => ({
+    ok: true,
+    storage: config.databaseUrl ? "postgres" : "memory"
+  }));
+
+  return app;
+}

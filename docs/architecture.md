@@ -31,7 +31,20 @@ The main difference is that Botique includes creative and strategic choices:
 
 ## System Split
 
-### System 1: Platform + Simulation
+Botique has four logical systems plus one bridge layer.
+
+### System 1: Platform API Server
+
+Application code, not AI.
+
+Responsibilities:
+
+- expose the seller-facing HTTP contract
+- validate and normalize requests and responses
+- route reads and writes into the underlying marketplace state
+- expose control-facing endpoints where appropriate
+
+### System 2: Simulation Engine
 
 Application code, not AI.
 
@@ -40,11 +53,15 @@ Responsibilities:
 - store shops, listings, orders, reviews, and customers
 - resolve search, purchases, reviews, and trend shifts
 - advance the simulation clock
-- expose seller-facing and control-facing APIs
+- own simulation time and world-state transitions
 
-### System 2: Agent Orchestrator
+System 2 is the world the agents live in.
+
+### System 3: Agent Orchestrator
 
 Application code that manages LLM-driven agents.
+
+System 3 is the agent runtime layer, not the simulated world itself. The marketplace environment and its state belong to Systems 1 and 2.
 
 Responsibilities:
 
@@ -53,7 +70,7 @@ Responsibilities:
 - expose the allowed tool surface to each agent role
 - log decisions, tool calls, and outcomes
 
-### Frontend
+### System 4: Frontend / Operator Layer
 
 Human observation and intervention layer.
 
@@ -62,6 +79,29 @@ Responsibilities:
 - show marketplace state and shop dashboards
 - display agent activity and customer interactions
 - optionally trigger control actions during demos
+
+### Bridge Layer: `seller_core`
+
+This is not one of the four major systems. It is the portability-aware client/CLI contract layer between the agent runtime and seller-facing APIs.
+
+## Modularity Principle
+
+Each major Botique subsystem should be independently runnable, testable, and replaceable.
+
+That means:
+
+- `seller_core` is a standalone client/CLI contract layer
+- System 1 is a standalone seller-facing API server
+- System 2 is a standalone simulation/world engine with its own state and time model
+- System 3 is a standalone orchestrator that depends only on published tool/API contracts
+- System 4 depends on published backend/control interfaces, not internal implementation details
+
+Implications:
+
+- modules communicate through explicit contracts, not hidden shared state
+- implementation language may differ across modules
+- each module should have a useful standalone mode for development and testing
+- swapping one implementation should not require redesigning the others
 
 ## Interface Layers
 

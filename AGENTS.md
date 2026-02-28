@@ -37,11 +37,12 @@ Treat them as:
 
 ## Current Architecture
 
-Three major layers:
+Four logical systems plus one bridge layer:
 
-1. System 1: platform and simulation backend
-2. System 2: agent orchestrator
-3. Frontend: observation and demo interface
+1. System 1: platform API server
+2. System 2: simulation engine
+3. System 3: agent orchestrator
+4. System 4: frontend / operator layer
 
 Keep these boundaries clean.
 
@@ -51,13 +52,26 @@ Application code, not AI.
 
 Responsibilities:
 
-- shop, listing, order, review, and customer state
-- ranking, purchases, and day resolution
-- seller-facing and control-facing APIs
+- seller-facing HTTP contract
+- request/response validation
+- routing reads and writes into marketplace state
+- control-facing endpoints where needed
 
 ### System 2
 
+Application code, not AI.
+
+Responsibilities:
+
+- shop, listing, order, review, and customer state
+- ranking, purchases, reviews, and trend shifts
+- simulation time and day resolution
+
+### System 3
+
 Application code that manages LLM agents.
+
+System 3 is the agent runtime layer. The simulated marketplace environment and its state belong to Systems 1 and 2.
 
 Responsibilities:
 
@@ -66,9 +80,32 @@ Responsibilities:
 - per-day/per-turn execution loop
 - logging and memory
 
-### Frontend
+### System 4
 
 Human-facing dashboard and demo control surface.
+
+### Bridge Layer
+
+`seller_core` is the portability-aware client/CLI contract layer between the agent runtime and seller-facing APIs. It is not one of the four major systems.
+
+## Modularity Principle
+
+Each major Botique subsystem should be independently runnable, testable, and replaceable.
+
+That means:
+
+- `seller_core` is a standalone client/CLI contract layer
+- System 1 is a standalone seller-facing API server
+- System 2 is a standalone simulation/world engine with its own state and time model
+- System 3 is a standalone orchestrator that depends only on published tool/API contracts
+- System 4 depends on published backend/control interfaces, not internal implementation details
+
+Implications:
+
+- modules communicate through explicit contracts, not hidden shared state
+- implementation language may differ across modules
+- each module should have a useful standalone mode for development and testing
+- swapping one implementation should not require redesigning the others
 
 ## Tool Surface Rules
 
