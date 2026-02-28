@@ -23,7 +23,7 @@ Before making architectural changes, read:
 4. `docs/simulation-model.md`
 5. `docs/agent-loop.md`
 
-The original concept document is `botique-hackathon-plan.md`.
+The original concept document is `botique-initial-concept-draft.md`.
 
 ## Decision Status
 
