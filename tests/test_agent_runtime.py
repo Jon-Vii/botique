@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import unittest
 from io import StringIO
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import _bootstrap
@@ -34,6 +36,7 @@ from agent_runtime import (
     build_default_owner_agent_runner,
     build_owner_agent_tool_registry,
     morning_briefing_from_payload,
+    persist_run_artifacts,
 )
 from agent_runtime.cli import main as runtime_cli_main
 from agent_runtime.providers.policy import END_DAY_TOOL_NAME
@@ -257,6 +260,100 @@ def build_market_state(day: int, date: str, *, label: str, taxonomy_id: int) -> 
             ),
         ),
     )
+
+
+def build_reference_multiday_result():
+    seller_client = FakeLiveSellerCoreClient(
+        shop={
+            "shop_id": 1001,
+            "shop_name": "northwind-printables",
+            "currency_code": "USD",
+            "listing_active_count": 1,
+            "total_sales_count": 5,
+            "review_average": 4.8,
+            "review_count": 3,
+        },
+        listings=[
+            {
+                "listing_id": 2001,
+                "title": "Mushroom Cottage Printable Wall Art",
+                "state": "active",
+                "price": 14.0,
+                "quantity": 999,
+                "views": 140,
+                "favorites": 36,
+                "updated_at": "2026-02-28T08:00:00Z",
+            }
+        ],
+        orders=[],
+        reviews=[],
+        payments=[],
+    )
+    control_client = FakeControlApiClient(
+        [
+            build_market_state(3, "2026-02-28T00:00:00Z", label="Wall Art", taxonomy_id=9101),
+            build_market_state(4, "2026-03-01T00:00:00Z", label="Planner", taxonomy_id=9102),
+        ]
+    )
+    provider = RecordingProvider(
+        [
+            ProviderResponse(
+                content="Check the shop info first.",
+                tool_calls=(
+                    ProviderToolCall(
+                        name="get_shop_info",
+                        arguments={},
+                    ),
+                ),
+            ),
+            ProviderResponse(
+                content="",
+                tool_calls=(
+                    ProviderToolCall(
+                        name=END_DAY_TOOL_NAME,
+                        arguments={"summary": "Day three is complete."},
+                    ),
+                ),
+            ),
+            ProviderResponse(
+                content="Capture the trend note for tomorrow.",
+                tool_calls=(
+                    ProviderToolCall(
+                        name="write_note",
+                        arguments={
+                            "title": "Trend watch",
+                            "body": "Planner demand is rotating up.",
+                            "day": 4,
+                        },
+                    ),
+                ),
+            ),
+            ProviderResponse(
+                content="",
+                tool_calls=(
+                    ProviderToolCall(
+                        name=END_DAY_TOOL_NAME,
+                        arguments={"summary": "Day four is complete."},
+                    ),
+                ),
+            ),
+        ]
+    )
+    runner = build_default_owner_agent_runner(
+        max_turns=4,
+        memory=InMemoryAgentMemory(),
+        event_log=InMemoryEventLog(),
+        policy_config=ProviderPolicyConfig(),
+        mistral_api_key="unused",
+    )
+    runner = type(runner)(
+        provider=provider,
+        seller_client=seller_client,
+        control_client=control_client,
+        memory=InMemoryAgentMemory(),
+        event_log=InMemoryEventLog(),
+    )
+    return runner.run_live_days(shop_id=1001, days=2, run_id="run_multi_day")
 
 
 class MorningBriefingTests(unittest.TestCase):
@@ -1077,6 +1174,76 @@ class RuntimeCliTests(unittest.TestCase):
         self.assertEqual(payload["result"]["run_id"], "run_live_cli")
         self.assertEqual(fake_runner.live_days_calls[0]["shop_id"], 1001)
         self.assertEqual(fake_runner.live_days_calls[0]["days"], 2)
+
+    def test_run_days_command_persists_artifacts_for_runtime_results(self) -> None:
+        fake_runner = FakeRunner(build_reference_multiday_result())
+        stdout = StringIO()
+
+        with TemporaryDirectory() as tmpdir:
+            with patch(
+                "agent_runtime.cli.build_default_owner_agent_runner",
+                return_value=fake_runner,
+            ):
+                with patch("sys.stdout", stdout):
+                    exit_code = runtime_cli_main(
+                        [
+                            "run-days",
+                            "--shop-id",
+                            "1001",
+                            "--days",
+                            "2",
+                            "--run-id",
+                            "run_multi_day",
+                            "--output-dir",
+                            tmpdir,
+                        ]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["ok"])
+            self.assertEqual(
+                payload["artifacts"]["output_dir"],
+                str(Path(tmpdir).resolve()),
+            )
+            self.assertTrue((Path(tmpdir) / "summary.md").exists())
+            self.assertTrue((Path(tmpdir) / "days" / "day-0003" / "summary.md").exists())
+
+
+class RunArtifactTests(unittest.TestCase):
+    def test_persist_run_artifacts_writes_reference_run_layout(self) -> None:
+        result = build_reference_multiday_result()
+
+        with TemporaryDirectory() as tmpdir:
+            bundle = persist_run_artifacts(
+                result,
+                output_dir=tmpdir,
+                invocation={"command": "run-days", "shop_id": 1001, "days": 2},
+            )
+
+            root = Path(bundle.output_dir)
+            summary_payload = json.loads((root / "summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary_payload["run_id"], "run_multi_day")
+            self.assertEqual(summary_payload["totals"]["tool_calls_by_name"]["get_shop_info"], 1)
+            self.assertEqual(summary_payload["totals"]["tool_calls_by_name"]["write_note"], 1)
+
+            self.assertIn(
+                "human-readable run summary",
+                (root / "README.md").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "Day 3 Summary",
+                (root / "days" / "day-0003" / "summary.md").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "get_shop_info",
+                (root / "days" / "day-0003" / "summary.md").read_text(encoding="utf-8"),
+            )
+            self.assertTrue((root / "events.jsonl").exists())
+            self.assertTrue((root / "memory" / "notes.json").exists())
+            self.assertTrue((root / "days" / "day-0003" / "briefing.md").exists())
+            self.assertTrue((root / "days" / "day-0003" / "advancement.json").exists())
+            self.assertTrue((root / "days" / "day-0004" / "state_after.json").exists())
 
 
 class TurnDecisionValidationTests(unittest.TestCase):

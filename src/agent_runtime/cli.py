@@ -5,6 +5,7 @@ import json
 import sys
 from typing import Any
 
+from .artifacts import persist_run_artifacts, supports_run_artifacts
 from .briefing import morning_briefing_from_payload
 from .runner import build_default_owner_agent_runner
 from .serialization import jsonify
@@ -74,6 +75,13 @@ def build_parser() -> argparse.ArgumentParser:
     run_day.add_argument("--mistral-temperature", type=float)
     run_day.add_argument("--mistral-top-p", type=float)
     run_day.add_argument("--max-turns", type=int, default=6)
+    run_day.add_argument(
+        "--output-dir",
+        help=(
+            "Optional directory for persisted run artifacts. "
+            "Live runs default to artifacts/agent-runtime/<timestamp>__shop-...__run-..."
+        ),
+    )
     run_day.add_argument("--pretty", action="store_true")
 
     run_days = subparsers.add_parser(
@@ -93,6 +101,13 @@ def build_parser() -> argparse.ArgumentParser:
     run_days.add_argument("--mistral-temperature", type=float)
     run_days.add_argument("--mistral-top-p", type=float)
     run_days.add_argument("--max-turns", type=int, default=6)
+    run_days.add_argument(
+        "--output-dir",
+        help=(
+            "Optional directory for persisted run artifacts. "
+            "Defaults to artifacts/agent-runtime/<timestamp>__shop-...__run-..."
+        ),
+    )
     run_days.add_argument("--pretty", action="store_true")
     return parser
 
@@ -141,7 +156,21 @@ def main(argv: list[str] | None = None) -> int:
                 run_id=namespace.run_id,
             )
 
-        _print_json({"ok": True, "result": jsonify(result)}, pretty=namespace.pretty)
+        response: dict[str, Any] = {"ok": True, "result": jsonify(result)}
+        if supports_run_artifacts(result):
+            should_persist = (
+                namespace.command == "run-days"
+                or namespace.output_dir is not None
+                or (namespace.command == "run-day" and namespace.shop_id)
+            )
+            if should_persist:
+                response["artifacts"] = persist_run_artifacts(
+                    result,
+                    output_dir=namespace.output_dir,
+                    invocation=_artifact_invocation(namespace),
+                ).to_payload()
+
+        _print_json(response, pretty=namespace.pretty)
         return 0
     except Exception as exc:
         _print_json(
@@ -155,6 +184,29 @@ def main(argv: list[str] | None = None) -> int:
             pretty=getattr(namespace, "pretty", False),
         )
         return 1
+
+
+def _artifact_invocation(namespace: argparse.Namespace) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "command": namespace.command,
+        "max_turns": namespace.max_turns,
+    }
+    for field_name in (
+        "shop_id",
+        "days",
+        "run_id",
+        "base_url",
+        "control_base_url",
+        "timeout",
+        "mistral_model",
+        "mistral_temperature",
+        "mistral_top_p",
+        "output_dir",
+    ):
+        value = getattr(namespace, field_name, None)
+        if value is not None:
+            payload[field_name] = value
+    return payload
 
 
 if __name__ == "__main__":

@@ -104,9 +104,28 @@ Current runtime entrypoint:
 - `botique-agent-runtime run-day --briefing-file <path>`
 - `botique-agent-runtime run-day --shop-id <shop_id>`
 - `botique-agent-runtime run-days --shop-id <shop_id> --days <n>`
-- the CLI can still load a structured briefing directly, but it can also build one from live Botique state and execute a simple multi-day run that advances the simulation between days
+- the CLI can still load a structured briefing directly, but the main reference-run path is now `run-days`, which builds each morning briefing from live Botique state, executes the agent day, advances the simulation between days, and persists an inspectable artifact bundle for the run
 - the default provider wiring is Mistral through `MISTRAL_API_KEY` and optional `BOTIQUE_MISTRAL_*` settings, but the loop itself remains provider-agnostic
-- the current runtime expects the briefing payload to be supplied externally; fully automated briefing assembly and day advancement orchestration are follow-on integration work
+- live runs accept `--output-dir`; if omitted, artifacts are written under `artifacts/agent-runtime/<timestamp>__shop-...__<run_id>`
+
+Documented example command:
+
+```bash
+BOTIQUE_CORE_BASE_URL=http://localhost:3000/v3/application \
+MISTRAL_API_KEY=your-key \
+botique-agent-runtime run-days \
+  --shop-id 1001 \
+  --days 5 \
+  --run-id reference_baseline_01 \
+  --max-turns 6 \
+  --output-dir artifacts/agent-runtime/reference-baseline-01 \
+  --pretty
+```
+
+Notes:
+
+- `BOTIQUE_CONTROL_BASE_URL` is optional if the control surface lives next to the seller API; the runtime will derive `/control` from `BOTIQUE_CORE_BASE_URL`
+- the JSON stdout payload now includes an `artifacts` object with the resolved output paths for the run summary and bundle root
 
 ## Core Cognitive Stages
 
@@ -177,6 +196,43 @@ The multi-day runner now keeps the surrounding run structure inspectable too:
 - post-day shop snapshots after the agent acts
 - control-plane day advancement records between daily runs
 - run-level note and reminder snapshots alongside the per-turn event stream
+
+Reference-run artifact layout:
+
+```text
+<output-dir>/
+  README.md
+  manifest.json
+  summary.md
+  summary.json
+  result.json
+  events.jsonl
+  memory/
+    notes.json
+    reminders.json
+  days/
+    day-0003/
+      briefing.json
+      briefing.md
+      summary.md
+      turns.json
+      events.jsonl
+      record.json
+      market_state_before.json
+      state_before.json
+      state_after.json
+      advancement.json
+```
+
+How to read it:
+
+- `summary.md` is the fastest human pass over a run
+- `summary.json` is the comparison-friendly aggregate view across runs
+- `result.json` keeps the full serialized runtime result if you want the entire object graph in one file
+- `days/day-####/briefing.md` shows exactly what the model saw each morning
+- `days/day-####/summary.md` shows each turn decision with tool arguments and tool results
+- `events.jsonl` and `days/day-####/events.jsonl` keep the raw event stream for replay or diffing
+- `advancement.json` captures the explicit control-plane day advance record between days
 
 ## Failure Modes To Guard Against
 

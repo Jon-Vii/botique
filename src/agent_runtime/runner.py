@@ -41,6 +41,9 @@ class LiveDayRunResult:
     day_result: DayRunResult
     state_after: ShopStateSnapshot
     advancement: AdvanceDayResult | None = None
+    events: tuple[RuntimeEvent, ...] = ()
+    notes: tuple[NoteRecord, ...] = ()
+    reminders: tuple[ReminderRecord, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +154,14 @@ class OwnerAgentRunner:
                 },
             )
 
+        live_day_events = tuple(
+            self.event_log.list_events(
+                run_id=active_run_id,
+                shop_id=shop_id,
+                day=day_result.day,
+            )
+        )
+
         return LiveDayRunResult(
             run_id=active_run_id,
             shop_id=shop_id,
@@ -160,6 +171,9 @@ class OwnerAgentRunner:
             day_result=day_result,
             state_after=post_day_state,
             advancement=advancement,
+            events=live_day_events,
+            notes=tuple(self.memory.list_notes(shop_id=shop_id)),
+            reminders=tuple(self.memory.list_reminders(shop_id=shop_id)),
         )
 
     def run_live_days(

@@ -1,5 +1,6 @@
 """System 3 runtime scaffolding for Botique's single-shop owner agent."""
 
+from .artifacts import RunArtifactBundle, persist_run_artifacts, supports_run_artifacts
 from .briefing import (
     BalanceSummary,
     CustomerMessageSummary,
@@ -96,6 +97,7 @@ __all__ = [
     "ProviderResponse",
     "ProviderToolCall",
     "ProviderToolDefinition",
+    "RunArtifactBundle",
     "ReminderRecord",
     "ReminderStatus",
     "ReviewSummary",
@@ -115,4 +117,6 @@ __all__ = [
     "build_owner_agent_tool_registry",
     "build_default_owner_agent_runner",
     "morning_briefing_from_payload",
+    "persist_run_artifacts",
+    "supports_run_artifacts",
 ]
