@@ -18,6 +18,37 @@ describe("Botique server core endpoints", () => {
     await app.close();
   });
 
+  test("starts with seeded in-memory marketplace state by default", async (t) => {
+    const defaultApp = await buildApp({
+      config: {
+        databaseUrl: undefined
+      }
+    });
+
+    t.after(async () => {
+      await defaultApp.close();
+    });
+
+    const [shopResponse, searchResponse, paymentsResponse, taxonomyResponse] = await Promise.all([
+      defaultApp.inject({ method: "GET", url: "/v3/application/shops/1001" }),
+      defaultApp.inject({ method: "GET", url: "/v3/application/listings/active?limit=10&offset=0" }),
+      defaultApp.inject({ method: "GET", url: "/v3/application/shops/1001/payments" }),
+      defaultApp.inject({ method: "GET", url: "/v3/application/seller-taxonomy/nodes?taxonomy_id=9000" })
+    ]);
+
+    assert.equal(shopResponse.statusCode, 200);
+    assert.equal(shopResponse.json().shop_name, "northwind-printables");
+
+    assert.equal(searchResponse.statusCode, 200);
+    assert.ok(searchResponse.json().count >= 3);
+
+    assert.equal(paymentsResponse.statusCode, 200);
+    assert.equal(paymentsResponse.json().results[0].payment_id, 8001);
+
+    assert.equal(taxonomyResponse.statusCode, 200);
+    assert.equal(taxonomyResponse.json().count, 5);
+  });
+
   test("creates, updates, reads, and deletes listings through the Etsy-shaped contract", async () => {
     const createResponse = await app.inject({
       method: "POST",
