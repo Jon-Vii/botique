@@ -213,6 +213,166 @@ Factors:
 
 Purchase outcomes should be probabilistic, but based on deterministic features.
 
+### Serious Sales Model Default
+
+Botique should use a small staged sales model, not a monolithic sales guess.
+
+The right level of seriousness for hackathon scope is:
+
+- hidden but inspectable demand parameters
+- explicit price-response logic
+- marketplace-relative discoverability rather than absolute unit demand per listing
+- delayed consequences after purchase
+- no LLM involvement in sales outcomes
+
+This borrows the strongest discipline from VendingBench without pretending Botique is a vending-machine benchmark.
+
+### Sales Resolution Stages
+
+Use four explicit stages inside System 2:
+
+1. resolve taxonomy-level daily traffic
+2. allocate views across active listings
+3. convert a subset of views into favorites and orders
+4. queue delayed payments, reviews, and later optional messages
+
+This keeps the simulation legible and makes tuning easier than a single opaque score.
+
+### Core Equations
+
+Recommended first-pass equations:
+
+`taxonomy_traffic(t, d) = round(base_traffic(t) * trend_multiplier(t, d) * calendar_multiplier(d) * noise(d, t))`
+
+`discoverability_score(l, d) = exposure(l, d) * price_click_fit(l, d)`
+
+`view_share(l, t, d) = discoverability_score(l, d) / sum(discoverability_score(*, t, d))`
+
+`views(l, d) = stochastic_round(taxonomy_traffic(t, d) * view_share(l, t, d))`
+
+`favorite_prob(l, d) = clamp(favorite_base + favorite_quality + favorite_trend + favorite_reputation, min, max)`
+
+`order_prob(l, d) = clamp(conversion_base + conversion_quality + conversion_reputation + conversion_price + conversion_trend, min, max)`
+
+`orders(l, d) = stochastic_round((views(l, d) * order_prob(l, d)) + (favorites(l, d) * revisit_bonus))`
+
+`review_prob(o) = clamp(review_base + review_satisfaction_term + review_disappointment_term, min, max)`
+
+Where:
+
+- `t` is taxonomy
+- `l` is listing
+- `d` is simulation day
+- `o` is a completed order
+
+### Hidden Parameters That Matter
+
+To stay relevant without overengineering, keep only these hidden business parameters:
+
+- `base_traffic(t)`: baseline shopper volume by taxonomy
+- `calendar_multiplier(d)`: optional low-cardinality time effects such as weekday or weekend
+- `reference_price(t)` or later `reference_price(c, t)`: expected “normal” price anchor for a taxonomy, and later for a cohort-taxonomy pair
+- `price_elasticity(t)` or later `price_elasticity(c)`: how sharply overpricing hurts clicks and orders
+- `review_baseline`: default review likelihood before satisfaction effects
+- `noise(seed)`: bounded deterministic variation to prevent flat repetitive outcomes
+
+Avoid adding more hidden knobs unless one of these fails to capture a real business behavior.
+
+### Exposure Formula
+
+Exposure should remain marketplace-relative. A listing is not selling because it has an intrinsic unit-demand constant alone; it sells because it wins attention inside a marketplace.
+
+Recommended first-pass exposure formula:
+
+`exposure(l, d) = quality(l) ^ a * reputation(shop(l)) ^ b * freshness(l, d) ^ c * trend_fit(l, d) ^ e`
+
+Recommended defaults:
+
+- `a = 1.0`
+- `b = 0.8`
+- `c = 0.5`
+- `e = 0.7`
+
+This is close to the current Botique shape and should remain deterministic and inspectable.
+
+### Price Formula
+
+Price should matter more explicitly than it does in the first pass today.
+
+Recommended first-pass price anchor:
+
+`reference_price(t) = taxonomy_median_active_price(t)`
+
+Recommended click-stage price term:
+
+`price_click_fit(l, d) = clamp(1 - click_elasticity(t) * max(0, (price(l) - reference_price(t)) / reference_price(t)), 0.55, 1.15)`
+
+Recommended conversion-stage price term:
+
+`conversion_price(l, d) = clamp(1 - order_elasticity(t) * abs(price(l) - reference_price(t)) / reference_price(t), -0.03, 0.03)`
+
+This gives Botique a serious, testable pricing model without requiring a large econometric system.
+
+When cohorts are added, replace `reference_price(t)` with `reference_price(cohort, taxonomy)` or cohort `target_price` plus `price_ceiling`. The staged sales model can stay otherwise unchanged.
+
+### Cohort Hook
+
+The cohort model should plug into the same equations, not replace them.
+
+When explicit buyer sessions are added, use:
+
+- `taxonomy_traffic` to determine how many sessions exist for a niche that day
+- cohort weights to assign those sessions across customer types
+- `discoverability_score` to decide which listings get considered
+- cohort-specific `target_price`, `price_sensitivity`, `review_reliance`, and `trend_response` to modify click and order probability
+
+That keeps Botique serious: customer heterogeneity changes the parameters, not the ownership boundary or the sales pipeline.
+
+### What Makes This Credible
+
+This sales model is good enough for a serious hackathon experiment if it satisfies these checks:
+
+- pricing changes can clearly help or hurt demand
+- better listing quality can recover some pricing mistakes, but not erase them
+- reputation matters more for conversion than for initial traffic
+- trend lift creates opportunity without dominating all other terms
+- the same listing does not receive identical outcomes every day
+- delayed reviews and payments are downstream of sales rather than baked into a single reward number
+
+If the model cannot explain outcomes in these terms, it is not yet strong enough.
+
+### Implementation Hooks
+
+Map the sales model to explicit System 2 functions:
+
+- `taxonomyDailyTraffic(taxonomyId, currentDay, trendState)`
+- `listingExposure(listing, currentDay, trendState, shopReviewAverage)`
+- `referencePrice(taxonomyId, marketplaceState)`
+- `priceClickFit(listing, referencePrice, elasticity)`
+- `favoriteProbability(factors)`
+- `orderProbability(factors)`
+- `schedulePostPurchaseEvents(order, factors, currentDay)`
+
+This keeps the code layout aligned with the current `day-resolution.ts` structure while making the price model and later cohort hook much clearer.
+
+### Immediate Refactor Target
+
+The next clean iteration of `server/src/simulation/day-resolution.ts` should do these things:
+
+- separate taxonomy traffic calculation from listing scoring
+- rename `demandScore` toward `discoverabilityScore` or `exposureScore`
+- separate click-stage price fit from order-stage price fit
+- keep favorites as a distinct intermediate signal, not just a cosmetic counter
+- keep review scheduling downstream from orders
+- add only enough extra state to explain outcomes in `last_day_resolution`
+
+Do not add:
+
+- freeform customer agents
+- LLM-written purchase decisions
+- dozens of hidden coefficients
+- persistent per-customer memories for hackathon scope
+
 ### How Cohorts Affect Discoverability
 
 For each daily buyer session:
