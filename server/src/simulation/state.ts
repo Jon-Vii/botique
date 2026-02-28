@@ -1,4 +1,5 @@
 import type { Listing } from "../schemas/domain";
+import { isMarketplaceActiveListing } from "../listing-availability";
 import type {
   MarketSnapshot,
   MarketTrend,
@@ -107,7 +108,7 @@ export function buildTrendState(
   currentDay: SimulationDay,
   generatedAt = currentDay.advanced_at ?? currentDay.date
 ): TrendState {
-  const activeListings = marketplaceState.listings.filter((listing) => listing.state === "active");
+  const activeListings = marketplaceState.listings.filter(isMarketplaceActiveListing);
   const taxonomyNodes = marketplaceState.taxonomyNodes
     .filter((node) => node.level > 0)
     .sort((left, right) => left.level - right.level || left.taxonomy_id - right.taxonomy_id);
@@ -148,7 +149,7 @@ export function buildMarketSnapshot(
   trendState: TrendState,
   generatedAt = trendState.generated_at
 ): MarketSnapshot {
-  const activeListings = marketplaceState.listings.filter((listing) => listing.state === "active");
+  const activeListings = marketplaceState.listings.filter(isMarketplaceActiveListing);
   const activeShops = new Set(activeListings.map((listing) => listing.shop_id));
   const trendMultipliers = new Map<number, number>();
 

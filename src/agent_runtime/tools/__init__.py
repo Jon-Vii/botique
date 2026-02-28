@@ -19,10 +19,11 @@ def build_owner_agent_tool_registry(
     client: SellerCoreClient,
     *,
     memory: AgentMemoryStore | None = None,
+    shop_id: int | str | None = None,
 ) -> AgentToolRegistry:
     registry = AgentToolRegistry()
-    register_seller_core_tools(registry, client)
-    register_memory_tools(registry, memory or InMemoryAgentMemory())
+    register_seller_core_tools(registry, client, shop_id=shop_id)
+    register_memory_tools(registry, memory or InMemoryAgentMemory(), shop_id=shop_id)
     return registry
 
 

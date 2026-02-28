@@ -28,6 +28,7 @@ import type {
   UpdateListingData,
   UpdateShopData
 } from "./types";
+import { isMarketplaceActiveListing } from "../listing-availability";
 import { createSimulationState } from "../simulation/state";
 import type { SimulationState, StoredMarketplaceState } from "../simulation/state-types";
 
@@ -223,7 +224,9 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
       .innerJoin(shopsTable, eq(listingsTable.shopId, shopsTable.shopId))
       .where(eq(listingsTable.state, "active"));
 
-    return rows.map((row) => this.mapListing(row.listing, row.shopName));
+    return rows
+      .map((row) => this.mapListing(row.listing, row.shopName))
+      .filter(isMarketplaceActiveListing);
   }
 
   async createListing(data: CreateListingData, metadata?: MutationMetadata): Promise<Listing> {
@@ -427,7 +430,7 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
 
     return {
       ...shop,
-      listing_active_count: listings.filter((listing) => listing.state === "active").length,
+      listing_active_count: listings.filter(isMarketplaceActiveListing).length,
       total_sales_count: orders.filter((order) => order.was_paid).reduce(
         (sum, order) => sum + order.line_items.reduce((lineSum, lineItem) => lineSum + lineItem.quantity, 0),
         0

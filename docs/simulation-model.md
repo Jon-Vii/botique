@@ -20,6 +20,10 @@ Recommended product schema:
 - tags
 - price
 
+Operational note:
+
+- a listing should count as marketplace-active only when it is in `active` state and still has enabled inventory available
+
 Example combinatorial space:
 
 - base types: sticker pack, wall art print, phone wallpaper, planner

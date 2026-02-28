@@ -97,6 +97,7 @@ Suggested starting extension set:
 - `write_note`
 - `read_notes`
 - `set_reminder`
+- `complete_reminder`
 - `get_balance`
 - `get_marketplace_trends`
 
@@ -111,7 +112,7 @@ Status: `Recommended default`
 Current scaffold in `src/agent_runtime/tools/` does two things:
 
 - wraps the initial owner-agent `seller_core` subset through a runtime registry
-- adds simple Botique extension tools for `write_note`, `read_notes`, and `set_reminder`
+- adds simple Botique extension tools for `write_note`, `read_notes`, `set_reminder`, and `complete_reminder`
 
 The current runtime intentionally does not expose delegation helpers, balance/trend shortcuts, or control-plane operations to the shop owner agent.
 

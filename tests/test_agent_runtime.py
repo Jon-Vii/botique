@@ -211,18 +211,19 @@ class ToolRegistryTests(unittest.TestCase):
     def test_owner_registry_wraps_core_tools_and_memory_extensions(self) -> None:
         client = FakeSellerCoreClient()
         memory = InMemoryAgentMemory()
-        registry = build_owner_agent_tool_registry(client, memory=memory)
+        registry = build_owner_agent_tool_registry(client, memory=memory, shop_id=7)
 
         tool_names = {entry.name for entry in registry.manifest()}
         self.assertIn("search_marketplace", tool_names)
         self.assertIn("write_note", tool_names)
         self.assertIn("set_reminder", tool_names)
+        self.assertIn("complete_reminder", tool_names)
 
         core_result = registry.invoke("search_marketplace", {"keywords": "mushroom planner"})
+        shop_result = registry.invoke("get_shop_info", {})
         note_result = registry.invoke(
             "write_note",
             {
-                "shop_id": 7,
                 "title": "Today's angle",
                 "body": "Lean into mushroom planner keywords.",
                 "tags": ["seo"],
@@ -232,22 +233,43 @@ class ToolRegistryTests(unittest.TestCase):
         reminder_result = registry.invoke(
             "set_reminder",
             {
-                "shop_id": 7,
                 "content": "Review conversion on the mushroom planner.",
                 "due_day": 4,
                 "day": 3,
             },
         )
-        notes_result = registry.invoke("read_notes", {"shop_id": 7})
+        notes_result = registry.invoke("read_notes", {})
 
-        self.assertEqual(client.calls, [("search_marketplace", {"keywords": "mushroom planner"})])
+        self.assertEqual(
+            client.calls,
+            [
+                ("search_marketplace", {"keywords": "mushroom planner"}),
+                ("get_shop_info", {"shop_id": 7}),
+            ],
+        )
         self.assertEqual(core_result.output["tool_name"], "search_marketplace")
+        self.assertEqual(shop_result.output["arguments"]["shop_id"], 7)
         self.assertEqual(note_result.output["note"]["title"], "Today's angle")
+        self.assertEqual(note_result.output["note"]["shop_id"], 7)
         self.assertEqual(reminder_result.output["reminder"]["due_day"], 4)
         self.assertEqual(notes_result.output["count"], 1)
 
+    def test_owner_registry_rejects_attempts_to_override_bound_shop_id(self) -> None:
+        registry = build_owner_agent_tool_registry(
+            FakeSellerCoreClient(),
+            memory=InMemoryAgentMemory(),
+            shop_id=7,
+        )
+
+        with self.assertRaisesRegex(ValueError, "shop_id is bound to 7"):
+            registry.invoke("write_note", {"shop_id": 8, "title": "Wrong", "body": "nope"})
+
     def test_registry_manifest_includes_parameter_schemas_for_provider_use(self) -> None:
-        registry = build_owner_agent_tool_registry(FakeSellerCoreClient(), memory=InMemoryAgentMemory())
+        registry = build_owner_agent_tool_registry(
+            FakeSellerCoreClient(),
+            memory=InMemoryAgentMemory(),
+            shop_id=7,
+        )
 
         manifests = {entry.name: entry for entry in registry.manifest()}
         self.assertEqual(
@@ -260,15 +282,51 @@ class ToolRegistryTests(unittest.TestCase):
         )
         self.assertEqual(
             manifests["write_note"].parameters_schema["required"],
-            ["shop_id", "title", "body"],
+            ["title", "body"],
         )
+        self.assertNotIn("shop_id", manifests["write_note"].parameters_schema["properties"])
+        self.assertNotIn("shop_id", manifests["get_shop_info"].parameters_schema["properties"])
+
+    def test_completed_reminders_stop_showing_up_in_future_briefings(self) -> None:
+        memory = InMemoryAgentMemory()
+        registry = build_owner_agent_tool_registry(
+            FakeSellerCoreClient(),
+            memory=memory,
+            shop_id=7,
+        )
+        reminder = registry.invoke(
+            "set_reminder",
+            {"content": "Review planner pricing.", "due_day": 3, "day": 1},
+        ).output["reminder"]
+        builder = MorningBriefingBuilder(memory)
+        common = {
+            "run_id": "run_reminders",
+            "shop_id": 7,
+            "shop_name": "Studio North",
+            "balance_summary": BalanceSummary(available=120.0),
+            "yesterday_orders": OrderSummary(order_count=0, revenue=0.0),
+            "objective_progress": ObjectiveProgress(
+                primary_objective="Grow ending balance",
+                metric_name="ending_balance",
+                current_value=120.0,
+                status_summary="Need a stronger conversion day.",
+            ),
+        }
+
+        self.assertEqual(len(builder.build(day=3, **common).due_reminders), 1)
+        completed = registry.invoke(
+            "complete_reminder",
+            {"reminder_id": reminder["reminder_id"]},
+        )
+        self.assertEqual(completed.output["reminder"]["status"], "completed")
+        self.assertEqual(len(builder.build(day=4, **common).due_reminders), 0)
 
 
 class DailyLoopTests(unittest.TestCase):
     def test_single_shop_loop_runs_one_tool_per_turn_and_logs_note_writes(self) -> None:
         client = FakeSellerCoreClient()
         memory = InMemoryAgentMemory()
-        registry = build_owner_agent_tool_registry(client, memory=memory)
+        registry = build_owner_agent_tool_registry(client, memory=memory, shop_id=7)
         event_log = InMemoryEventLog()
         builder = MorningBriefingBuilder(memory)
         briefing = builder.build(
@@ -297,7 +355,6 @@ class DailyLoopTests(unittest.TestCase):
                     tool_call=ToolCall(
                         "write_note",
                         {
-                            "shop_id": 7,
                             "title": "Pricing follow-up",
                             "body": "If the retro planner stalls again, test a lower price.",
                             "day": 3,
@@ -330,7 +387,7 @@ class DailyLoopTests(unittest.TestCase):
 
     def test_daily_loop_stops_at_max_turns_when_agent_never_ends_day(self) -> None:
         client = FakeSellerCoreClient()
-        registry = build_owner_agent_tool_registry(client, memory=InMemoryAgentMemory())
+        registry = build_owner_agent_tool_registry(client, memory=InMemoryAgentMemory(), shop_id=7)
         briefing = MorningBriefingBuilder(InMemoryAgentMemory()).build(
             run_id="run_day_2",
             shop_id=7,
@@ -370,6 +427,7 @@ class ProviderPolicyTests(unittest.TestCase):
         registry = build_owner_agent_tool_registry(
             FakeSellerCoreClient(),
             memory=InMemoryAgentMemory(),
+            shop_id=7,
         )
         briefing = MorningBriefingBuilder(InMemoryAgentMemory()).build(
             run_id="run_provider",
@@ -508,11 +566,11 @@ class OwnerAgentRunnerTests(unittest.TestCase):
         provider = RecordingProvider(
             [
                 ProviderResponse(
-                    content="Inspect the marketplace first.",
+                    content="Check the shop health before browsing the market.",
                     tool_calls=(
                         ProviderToolCall(
-                            name="search_marketplace",
-                            arguments={"keywords": "planner"},
+                            name="get_shop_info",
+                            arguments={},
                         ),
                     ),
                 ),
@@ -561,7 +619,7 @@ class OwnerAgentRunnerTests(unittest.TestCase):
 
         self.assertEqual(result.end_reason, DayEndReason.AGENT_ENDED_DAY)
         self.assertEqual(len(result.turns), 1)
-        self.assertEqual(seller_client.calls, [("search_marketplace", {"keywords": "planner"})])
+        self.assertEqual(seller_client.calls, [("get_shop_info", {"shop_id": 7})])
 
 
 class RuntimeCliTests(unittest.TestCase):

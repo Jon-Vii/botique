@@ -26,6 +26,7 @@ class EventKind(StrEnum):
     TOOL_FAILED = "tool_failed"
     NOTE_WRITTEN = "note_written"
     REMINDER_SET = "reminder_set"
+    REMINDER_COMPLETED = "reminder_completed"
     DAY_ENDED = "day_ended"
 
 

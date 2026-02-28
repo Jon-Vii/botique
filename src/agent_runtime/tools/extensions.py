@@ -30,9 +30,44 @@ def _require_day(arguments: Mapping[str, Any], key: str) -> int:
     return value
 
 
+def _bound_shop_id(arguments: Mapping[str, Any], shop_id: int | str | None) -> int | str:
+    if shop_id is None:
+        value = arguments.get("shop_id")
+        if value is None:
+            raise ValueError("shop_id is required.")
+        return value
+
+    requested = arguments.get("shop_id")
+    if requested is not None and requested != shop_id:
+        raise ValueError(f"shop_id is bound to {shop_id!r} for this agent.")
+    return shop_id
+
+
+def _memory_parameters_schema(
+    *,
+    properties: dict[str, object],
+    required: list[str],
+    shop_id: int | str | None,
+) -> dict[str, object]:
+    visible_properties = dict(properties)
+    visible_required = list(required)
+    if shop_id is not None:
+        visible_properties.pop("shop_id", None)
+        visible_required = [field for field in visible_required if field != "shop_id"]
+
+    return {
+        "type": "object",
+        "properties": visible_properties,
+        "required": visible_required,
+        "additionalProperties": False,
+    }
+
+
 def register_memory_tools(
     registry: AgentToolRegistry,
     memory: AgentMemoryStore,
+    *,
+    shop_id: int | str | None = None,
 ) -> AgentToolRegistry:
     registry.register(
         ToolManifestEntry(
@@ -44,9 +79,8 @@ def register_memory_tools(
             notes=(
                 "This is a simple Botique extension memory tool, not a hidden retrieval system.",
             ),
-            parameters_schema={
-                "type": "object",
-                "properties": {
+            parameters_schema=_memory_parameters_schema(
+                properties={
                     "shop_id": SHOP_ID_SCHEMA,
                     "title": {
                         "type": "string",
@@ -66,13 +100,13 @@ def register_memory_tools(
                         "description": "Current simulation day.",
                     },
                 },
-                "required": ["shop_id", "title", "body"],
-                "additionalProperties": False,
-            },
+                required=["shop_id", "title", "body"],
+                shop_id=shop_id,
+            ),
         ),
         lambda arguments, *, store=memory: {
             "note": store.write_note(
-                shop_id=arguments["shop_id"],
+                shop_id=_bound_shop_id(arguments, shop_id),
                 title=_require_str(arguments, "title"),
                 body=_require_str(arguments, "body"),
                 tags=tuple(arguments.get("tags", ())),
@@ -88,9 +122,8 @@ def register_memory_tools(
             surface=ToolSurface.EXTENSION,
             required_body_fields=("shop_id",),
             body_encoding="json",
-            parameters_schema={
-                "type": "object",
-                "properties": {
+            parameters_schema=_memory_parameters_schema(
+                properties={
                     "shop_id": SHOP_ID_SCHEMA,
                     "limit": {
                         "type": "integer",
@@ -101,14 +134,14 @@ def register_memory_tools(
                         "description": "Optional tag filter.",
                     },
                 },
-                "required": ["shop_id"],
-                "additionalProperties": False,
-            },
+                required=["shop_id"],
+                shop_id=shop_id,
+            ),
         ),
         lambda arguments, *, store=memory: {
             "count": len(
                 notes := store.read_notes(
-                    shop_id=arguments["shop_id"],
+                    shop_id=_bound_shop_id(arguments, shop_id),
                     limit=arguments.get("limit"),
                     tag=arguments.get("tag"),
                 )
@@ -124,9 +157,8 @@ def register_memory_tools(
             surface=ToolSurface.EXTENSION,
             required_body_fields=("shop_id", "content", "due_day"),
             body_encoding="json",
-            parameters_schema={
-                "type": "object",
-                "properties": {
+            parameters_schema=_memory_parameters_schema(
+                properties={
                     "shop_id": SHOP_ID_SCHEMA,
                     "content": {
                         "type": "string",
@@ -145,17 +177,44 @@ def register_memory_tools(
                         "description": "Current simulation day.",
                     },
                 },
-                "required": ["shop_id", "content", "due_day"],
-                "additionalProperties": False,
-            },
+                required=["shop_id", "content", "due_day"],
+                shop_id=shop_id,
+            ),
         ),
         lambda arguments, *, store=memory: {
             "reminder": store.set_reminder(
-                shop_id=arguments["shop_id"],
+                shop_id=_bound_shop_id(arguments, shop_id),
                 content=_require_str(arguments, "content"),
                 due_day=_require_day(arguments, "due_day"),
                 note_id=arguments.get("note_id"),
                 day=arguments.get("day"),
+            ).to_payload()
+        },
+    )
+
+    registry.register(
+        ToolManifestEntry(
+            name="complete_reminder",
+            description="Mark a reminder as completed so it stops appearing in future briefings.",
+            surface=ToolSurface.EXTENSION,
+            required_body_fields=("shop_id", "reminder_id"),
+            body_encoding="json",
+            parameters_schema=_memory_parameters_schema(
+                properties={
+                    "shop_id": SHOP_ID_SCHEMA,
+                    "reminder_id": {
+                        "type": "string",
+                        "description": "Reminder identifier returned by set_reminder or a briefing.",
+                    },
+                },
+                required=["shop_id", "reminder_id"],
+                shop_id=shop_id,
+            ),
+        ),
+        lambda arguments, *, store=memory: {
+            "reminder": store.complete_reminder(
+                shop_id=_bound_shop_id(arguments, shop_id),
+                reminder_id=_require_str(arguments, "reminder_id"),
             ).to_payload()
         },
     )

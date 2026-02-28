@@ -88,6 +88,10 @@ Current scaffold in `src/agent_runtime/loop.py` uses a `SingleShopDailyLoop` wit
 - structured day/turn/tool events for debugging and demo playback
 - no delegation or sub-agent assumptions
 
+Current runtime note:
+
+- the owner-agent runtime binds the current `shop_id` from the morning briefing into shop-scoped tool calls so the model cannot switch shops by inventing a different seller id mid-run
+
 Current runtime entrypoint:
 
 - `botique-agent-runtime run-day --briefing-file <path>`
@@ -113,6 +117,7 @@ Recommended tools:
 - `write_note`
 - `read_notes`
 - `set_reminder`
+- `complete_reminder`
 
 This keeps the strategy legible and avoids complex retrieval systems during the hackathon.
 

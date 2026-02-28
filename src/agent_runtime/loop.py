@@ -238,6 +238,15 @@ class SingleShopDailyLoop:
                     turn_index=turn_index,
                     payload={"result": jsonify(tool_result.output)},
                 )
+            elif tool_result.tool_name == "complete_reminder":
+                self.event_log.append(
+                    kind=EventKind.REMINDER_COMPLETED,
+                    run_id=active_run_id,
+                    shop_id=briefing.shop_id,
+                    day=briefing.day,
+                    turn_index=turn_index,
+                    payload={"result": jsonify(tool_result.output)},
+                )
 
             turns.append(
                 TurnRecord(

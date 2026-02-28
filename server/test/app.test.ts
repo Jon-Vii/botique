@@ -264,5 +264,19 @@ describe("Botique server core endpoints", () => {
       url: "/v3/application/listings/2001"
     });
     assert.equal(soldOutListing.json().quantity, 0);
+
+    const soldOutSearch = await app.inject({
+      method: "GET",
+      url: "/v3/application/listings/active?keywords=mushroom&limit=10&offset=0"
+    });
+    assert.equal(soldOutSearch.statusCode, 200);
+    assert.equal(soldOutSearch.json().count, 0);
+
+    const updatedShop = await app.inject({
+      method: "GET",
+      url: "/v3/application/shops/1001"
+    });
+    assert.equal(updatedShop.statusCode, 200);
+    assert.equal(updatedShop.json().listing_active_count, 0);
   });
 });

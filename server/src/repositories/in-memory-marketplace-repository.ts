@@ -16,6 +16,7 @@ import type {
   UpdateShopData
 } from "./types";
 import { createDefaultMarketplaceState } from "../default-marketplace-state";
+import { isMarketplaceActiveListing } from "../listing-availability";
 import { normalizeWorldState } from "../simulation/state";
 import type { SimulationState, StoredMarketplaceState, StoredWorldState } from "../simulation/state-types";
 
@@ -92,7 +93,7 @@ export class InMemoryMarketplaceRepository implements MarketplaceRepository {
 
   async listActiveListings(): Promise<Listing[]> {
     return this.state.marketplace.listings
-      .filter((listing) => listing.state === "active")
+      .filter(isMarketplaceActiveListing)
       .map((listing) => clone(listing));
   }
 
@@ -211,7 +212,7 @@ export class InMemoryMarketplaceRepository implements MarketplaceRepository {
 
     return {
       ...clone(shop),
-      listing_active_count: listings.filter((item) => item.state === "active").length,
+      listing_active_count: listings.filter(isMarketplaceActiveListing).length,
       total_sales_count: orders.reduce(
         (sum, order) => sum + order.line_items.reduce((lineSum, lineItem) => lineSum + lineItem.quantity, 0),
         0

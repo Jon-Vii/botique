@@ -34,25 +34,27 @@ class OwnerAgentRunner:
         config: OwnerAgentRunnerConfig | None = None,
         policy_config: ProviderPolicyConfig | None = None,
     ) -> None:
+        self.provider = provider
+        self.seller_client = seller_client
         self.memory = memory or InMemoryAgentMemory()
         self.event_log = event_log or InMemoryEventLog()
         self.config = config or OwnerAgentRunnerConfig()
-        self.tool_registry = build_owner_agent_tool_registry(
-            seller_client,
-            memory=self.memory,
-        )
         self.policy = ToolCallingAgentPolicy(
             provider,
             config=policy_config,
         )
-        self.loop = SingleShopDailyLoop(
-            tool_registry=self.tool_registry,
+
+    def run_day(self, briefing: MorningBriefing) -> DayRunResult:
+        loop = SingleShopDailyLoop(
+            tool_registry=build_owner_agent_tool_registry(
+                self.seller_client,
+                memory=self.memory,
+                shop_id=briefing.shop_id,
+            ),
             event_log=self.event_log,
             config=DailyLoopConfig(max_turns=self.config.max_turns),
         )
-
-    def run_day(self, briefing: MorningBriefing) -> DayRunResult:
-        return self.loop.run_day(briefing=briefing, policy=self.policy)
+        return loop.run_day(briefing=briefing, policy=self.policy)
 
 
 def build_default_owner_agent_runner(

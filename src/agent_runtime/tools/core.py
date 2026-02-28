@@ -24,10 +24,37 @@ DEFAULT_OWNER_AGENT_CORE_TOOLS: tuple[str, ...] = (
 )
 
 
-def _tool_parameters_schema(item: dict[str, object]) -> dict[str, JSONValue]:
-    properties: dict[str, JSONValue] = {}
+def _bound_shop_id(
+    arguments: dict[str, object],
+    *,
+    shop_id: int | str | None,
+    path_params: tuple[str, ...],
+) -> dict[str, object]:
+    if "shop_id" not in path_params:
+        return arguments
 
-    for field_name in item["path_params"]:
+    if shop_id is None:
+        return arguments
+
+    requested = arguments.get("shop_id")
+    if requested is not None and requested != shop_id:
+        raise ValueError(f"shop_id is bound to {shop_id!r} for this agent.")
+
+    return {
+        **arguments,
+        "shop_id": shop_id,
+    }
+
+
+def _tool_parameters_schema(
+    item: dict[str, object],
+    *,
+    shop_id: int | str | None,
+) -> dict[str, JSONValue]:
+    properties: dict[str, JSONValue] = {}
+    visible_path_params = [field for field in item["path_params"] if not (field == "shop_id" and shop_id is not None)]
+
+    for field_name in visible_path_params:
         properties[field_name] = {
             "description": f"Required path parameter `{field_name}`.",
         }
@@ -42,7 +69,7 @@ def _tool_parameters_schema(item: dict[str, object]) -> dict[str, JSONValue]:
             "description": f"Required request body field `{field_name}`.",
         }
 
-    required_fields = list(item["path_params"]) + list(item["required_body_fields"])
+    required_fields = visible_path_params + list(item["required_body_fields"])
     return {
         "type": "object",
         "properties": properties,
@@ -56,6 +83,7 @@ def register_seller_core_tools(
     client: SellerCoreClient,
     *,
     tool_names: Iterable[str] = DEFAULT_OWNER_AGENT_CORE_TOOLS,
+    shop_id: int | str | None = None,
 ) -> AgentToolRegistry:
     manifest_by_name = {
         item["tool_name"]: item
@@ -80,10 +108,15 @@ def register_seller_core_tools(
                 body_encoding=item["body_encoding"],
                 scopes=tuple(item["scopes"]),
                 notes=tuple(item["notes"]),
-                parameters_schema=_tool_parameters_schema(item),
+                parameters_schema=_tool_parameters_schema(item, shop_id=shop_id),
             ),
-            lambda arguments, *, seller_client=client, name=tool_name: seller_client.call(
-                name, arguments
+            lambda arguments, *, seller_client=client, name=tool_name, bound_shop_id=shop_id, path_params=tuple(item["path_params"]): seller_client.call(
+                name,
+                _bound_shop_id(
+                    dict(arguments),
+                    shop_id=bound_shop_id,
+                    path_params=path_params,
+                ),
             ),
         )
 

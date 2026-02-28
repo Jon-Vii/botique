@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Iterable, Protocol
@@ -89,6 +89,13 @@ class ReminderBackend(Protocol):
         include_overdue: bool = True,
     ) -> list[ReminderRecord]: ...
 
+    def complete_reminder(
+        self,
+        *,
+        shop_id: ShopId,
+        reminder_id: str,
+    ) -> ReminderRecord: ...
+
 
 class AgentMemoryStore(NotesBackend, ReminderBackend, Protocol):
     """Simple inspectable memory surface for System 3."""
@@ -171,3 +178,20 @@ class InMemoryAgentMemory(AgentMemoryStore):
             )
         ]
         return sorted(results, key=lambda reminder: (reminder.due_day, reminder.created_at))
+
+    def complete_reminder(
+        self,
+        *,
+        shop_id: ShopId,
+        reminder_id: str,
+    ) -> ReminderRecord:
+        reminders = self._reminders.get(shop_id, [])
+        for index, reminder in enumerate(reminders):
+            if reminder.reminder_id != reminder_id:
+                continue
+
+            completed = replace(reminder, status=ReminderStatus.COMPLETED)
+            reminders[index] = completed
+            return completed
+
+        raise LookupError(f"Reminder {reminder_id!r} was not found for shop {shop_id!r}.")
