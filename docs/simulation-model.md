@@ -6,19 +6,50 @@ Create a marketplace that is structured enough to evaluate strategy, but open-en
 
 Status: `Recommended default`
 
+## Capability Framing
+
+Botique should evaluate autonomous-organization capability under scarce resources, not just tool use or seller roleplay.
+
+The initial simulation should be strong enough to reveal:
+
+- operational capability
+- strategic capability
+- organizational memory
+- adaptive capability
+- resource governance
+
+Recommended evaluation layers:
+
+1. in-lane optimization
+2. adjacent expansion
+3. gradual strategic pivot
+
+Research-informed notes:
+
+- [EcoGym](https://arxiv.org/abs/2602.09514) supports long-horizon economic environments with explicit resource budgets instead of brittle one-step tasks
+- [AMA-Bench](https://arxiv.org/abs/2602.22769) reinforces that stateful memory should stay explicit, causal, and inspectable rather than fuzzy
+- [PhysicsAgentABM](https://arxiv.org/abs/2602.06030) supports structured cohort-level world simulation instead of expensive freeform per-agent roleplay
+
+Status: `Current decision`
+
 ## Product Space
 
-Use a semi-structured digital product model.
+Use a semi-structured creative-goods model with explicit production constraints.
 
 Recommended product schema:
 
-- base type
+- product family
 - style
 - subject
 - title
 - description
 - tags
 - price
+- production_mode
+- quantity_on_hand
+- material_cost_per_unit
+- production_units_required
+- lead_time_days
 
 Operational note:
 
@@ -26,22 +57,64 @@ Operational note:
 
 Example combinatorial space:
 
-- base types: sticker pack, wall art print, phone wallpaper, planner
+- product families: planters, organizers, wall decor, mugs, trays, ornaments, small storage, desk accessories
 - styles: minimalist, retro, kawaii, cottagecore
 - subjects: cats, mushrooms, mountains, florals, celestial
 
-Status: `Recommended default`
+Recommended initial production modes:
+
+- `stocked`: units are produced ahead of time and depleted by sales
+- `made_to_order`: sales create backlog that consumes future production capacity
+
+Current implementation note:
+
+- the current server and seed data still use a digital-first catalog
+- this section defines the next intended product-space migration, not a completed implementation
+
+Status: `Current decision`
 
 ## Shops
 
 Each shop has:
 
 - identity and description
+- an archetype that defines production physics
 - active/draft listings
 - balance and revenue history
+- production capacity and backlog
 - reviews
 - strategy notes and reminders
 - optional hired specialists later
+
+## Archetypes And Pivots
+
+Use archetypes as business physics, not as destiny.
+
+Recommended initial archetypes:
+
+- `3d_print_shop`
+- `laser_cut_decor_shop`
+- `ceramics_shop`
+- `woodwork_shop`
+
+Archetypes should define:
+
+- plausible product families
+- rough price bands
+- material-cost patterns
+- production speed and lead time
+- whether the shop is more naturally `stocked` or `made_to_order`
+
+The agent should still be free to:
+
+- change pricing and positioning
+- explore adjacent product ideas
+- run experiments within the archetype
+- gradually pivot the shop toward a new niche or mix over multiple days
+
+The first build should not support instantaneous cross-archetype pivots. A ceramics shop should not become a woodwork shop overnight just because the prompt says so.
+
+Status: `Current decision`
 
 ## Starting State
 
@@ -60,6 +133,7 @@ Current implementation note:
 - the current server seeds a small digital-first market with taxonomy nodes, two shops, listings, orders, reviews, and payments
 - the in-memory repository starts with that default seed, and the Postgres bootstrap uses the same seed when the database is empty or partially seeded
 - the current simulation day is inferred from the latest seeded marketplace timestamp unless a world state provides an explicit day
+- the next scope migration should replace those digital-first seeds with creative-goods shops that have finite stock, backlog, and production capacity
 
 This gives the agent a business to run and a world to react to without making the orchestrator responsible for world setup.
 
@@ -110,7 +184,7 @@ Recommended hidden cohort fields:
 - `cohort_id`: stable internal identifier
 - `label`: human-readable internal name for debugging and docs
 - `base_share`: default fraction of daily buyer sessions allocated to the cohort
-- `preferred_base_types`: supported listing types this cohort tends to buy
+- `preferred_product_families`: supported listing families this cohort tends to buy
 - `preferred_taxonomy_ids`: optional taxonomy bias if stronger than base type bias
 - `preferred_styles`: favored style tags or descriptors
 - `preferred_subjects`: favored subject tags or descriptors
@@ -131,7 +205,7 @@ Recommended hidden per-session fields:
 - `session_id`
 - `day`
 - `cohort_id`
-- `intent_base_type`
+- `intent_product_family`
 - `intent_taxonomy_id`
 - `intent_tags`
 - `budget`
@@ -149,14 +223,14 @@ Hackathon constraint:
 
 Use eight cohorts for the first build. This is enough variety to create meaningful pricing, positioning, and quality tradeoffs without overdesigning the world.
 
-- `budget_decor_browsers` (`base_share: 0.16`): printable wall art and wallpapers; prefers minimalist, neutral, and floral looks; `price_sensitivity: 0.90`; `quality_sensitivity: 0.45`; `review_reliance: 0.60`; `trend_response: 0.25`; `browse_depth: 4`; `favorite_rate: 0.18`; `review_rate: 0.15`
-- `trend_aesthetic_shoppers` (`base_share: 0.14`): stickers, wallpapers, and wall art tied to active trend tags; likes retro, kawaii, celestial, and cottagecore looks; `price_sensitivity: 0.55`; `quality_sensitivity: 0.40`; `review_reliance: 0.35`; `trend_response: 1.00`; `browse_depth: 8`; `favorite_rate: 0.34`; `review_rate: 0.10`
-- `planner_pragmatists` (`base_share: 0.13`): digital planners and organization products; prefers clean, functional, study, and work-related descriptors; `price_sensitivity: 0.45`; `quality_sensitivity: 0.85`; `review_reliance: 0.80`; `trend_response: 0.15`; `browse_depth: 5`; `favorite_rate: 0.10`; `review_rate: 0.28`
-- `quality_first_decorators` (`base_share: 0.12`): printable wall art buyers who care about polish, print clarity, and cohesive sets; `price_sensitivity: 0.30`; `quality_sensitivity: 0.90`; `review_reliance: 0.75`; `trend_response: 0.30`; `browse_depth: 6`; `favorite_rate: 0.16`; `review_rate: 0.32`
-- `bundle_value_seekers` (`base_share: 0.12`): cross-category buyers who over-index on pack, set, and bundle language; `price_sensitivity: 0.75`; `quality_sensitivity: 0.55`; `review_reliance: 0.55`; `trend_response: 0.45`; `browse_depth: 7`; `favorite_rate: 0.30`; `review_rate: 0.18`
+- `budget_home_decor_browsers` (`base_share: 0.16`): low-price decor and accessories; prefers minimalist and floral looks; `price_sensitivity: 0.90`; `quality_sensitivity: 0.45`; `review_reliance: 0.60`; `trend_response: 0.25`; `browse_depth: 4`; `favorite_rate: 0.18`; `review_rate: 0.15`
+- `trend_aesthetic_shoppers` (`base_share: 0.14`): decor and giftable goods tied to active trend tags; likes retro, kawaii, celestial, and cottagecore looks; `price_sensitivity: 0.55`; `quality_sensitivity: 0.40`; `review_reliance: 0.35`; `trend_response: 1.00`; `browse_depth: 8`; `favorite_rate: 0.34`; `review_rate: 0.10`
+- `practical_organizer_buyers` (`base_share: 0.13`): organizers, desk accessories, hooks, trays, and functional small goods; prefers clean, useful, work-adjacent descriptors; `price_sensitivity: 0.45`; `quality_sensitivity: 0.85`; `review_reliance: 0.80`; `trend_response: 0.15`; `browse_depth: 5`; `favorite_rate: 0.10`; `review_rate: 0.28`
+- `quality_first_collectors` (`base_share: 0.12`): ceramics, woodwork, and other higher-touch goods where finish and craftsmanship matter; `price_sensitivity: 0.30`; `quality_sensitivity: 0.90`; `review_reliance: 0.75`; `trend_response: 0.30`; `browse_depth: 6`; `favorite_rate: 0.16`; `review_rate: 0.32`
+- `set_value_seekers` (`base_share: 0.12`): buyers who over-index on matching sets, bundles, and coordinated decor collections; `price_sensitivity: 0.75`; `quality_sensitivity: 0.55`; `review_reliance: 0.55`; `trend_response: 0.45`; `browse_depth: 7`; `favorite_rate: 0.30`; `review_rate: 0.18`
 - `niche_fandom_collectors` (`base_share: 0.11`): narrow-subject buyers for themes like cats, mushrooms, fantasy, or celestial niches; `price_sensitivity: 0.25`; `quality_sensitivity: 0.75`; `review_reliance: 0.50`; `trend_response: 0.40`; `browse_depth: 9`; `favorite_rate: 0.38`; `review_rate: 0.30`; `repeat_purchase_affinity: 0.70`
-- `impulse_microtreat_buyers` (`base_share: 0.12`): low-price wallpaper and sticker buyers who purchase when fit is instantly obvious; `price_sensitivity: 0.85`; `quality_sensitivity: 0.25`; `review_reliance: 0.20`; `trend_response: 0.65`; `browse_depth: 3`; `favorite_rate: 0.06`; `review_rate: 0.05`
-- `reliability_seekers` (`base_share: 0.10`): buyers across all digital-first categories who filter hard on shop trust and review quality; `price_sensitivity: 0.40`; `quality_sensitivity: 0.70`; `review_reliance: 0.95`; `trend_response: 0.10`; `browse_depth: 4`; `favorite_rate: 0.12`; `review_rate: 0.22`; `negative_review_bias: 0.70`
+- `impulse_gift_buyers` (`base_share: 0.12`): lower-price giftable items purchased when fit is instantly obvious; `price_sensitivity: 0.85`; `quality_sensitivity: 0.25`; `review_reliance: 0.20`; `trend_response: 0.65`; `browse_depth: 3`; `favorite_rate: 0.06`; `review_rate: 0.05`
+- `reliability_seekers` (`base_share: 0.10`): buyers across all creative-goods categories who filter hard on shop trust, lead-time confidence, and review quality; `price_sensitivity: 0.40`; `quality_sensitivity: 0.70`; `review_reliance: 0.95`; `trend_response: 0.10`; `browse_depth: 4`; `favorite_rate: 0.12`; `review_rate: 0.22`; `negative_review_bias: 0.70`
 
 ### Hidden vs Seller-Visible State
 
@@ -173,6 +247,7 @@ Seller-visible state:
 
 - search ranking outcomes and listing placement
 - listing-level views and favorites once those metrics exist
+- stock, backlog, and lead-time state once production constraints are live
 - orders, payments, and reviews after the world resolves them
 - aggregate market snapshot and trend signals
 - occasional customer-facing text only after the world has already decided that a review or message exists
@@ -207,8 +282,10 @@ Factors:
 - tag/title relevance
 - price competitiveness
 - listing quality score
+- stock availability and backlog pressure
 - shop reputation score
 - cohort-to-listing fit
+- lead-time tolerance
 - browse depth and drop-off
 
 Purchase outcomes should be probabilistic, but based on deterministic features.
@@ -234,7 +311,8 @@ Use four explicit stages inside System 2:
 1. resolve taxonomy-level daily traffic
 2. allocate views across active listings
 3. convert a subset of views into favorites and orders
-4. queue delayed payments, reviews, and later optional messages
+4. decrement stock or grow backlog and queue fulfillment consequences
+5. queue delayed payments, reviews, and later optional messages
 
 This keeps the simulation legible and makes tuning easier than a single opaque score.
 
@@ -419,6 +497,7 @@ Examples:
 - delayed purchases instead of immediate perfect feedback
 - reviews arriving after orders, not at listing creation time
 - customers browsing without buying
+- stock-outs or backlog pressure after good demand
 - occasional negative or ambiguous outcomes even after sensible choices
 
 This keeps the benchmark about operating inside a world, not just calling the right tool in the right order.
@@ -457,7 +536,7 @@ Each simulated day should include:
 
 1. market state update
 2. inspectable buyer demand resolution for active listings
-3. listing-level views, favorites, and purchases
+3. listing-level views, favorites, purchases, and inventory or backlog consequences
 4. due payment/review delivery from prior queued events
 5. optional DM/event generation later
 6. shop-level daily summary creation
@@ -509,6 +588,8 @@ Suggested diagnostics:
 - order count
 - conversion rate
 - average review score
+- stock-out rate or backlog pressure
+- cash spent on production or replenishment
 - listing diversity
 - repeated failure or recovery patterns
 

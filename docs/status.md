@@ -39,6 +39,7 @@ These are the current product and architecture priorities.
 
 - get to a first believable reference run as quickly as possible
 - redesign the agent loop so it behaves like a seller workflow instead of an open-ended search loop
+- pivot the intended product scope from digital-first toward creative-goods businesses with production constraints
 - tune the new System 2 consequence pipeline so the world feels believable across multiple days
 - preserve the clean boundary between seller-facing tools and control/runtime surfaces
 - keep the Etsy-compatible `seller_core` story honest without letting portability concerns slow the core demo
@@ -49,6 +50,8 @@ These are the current product and architecture priorities.
 Near-term work that should most improve the first end-to-end run.
 
 - tune `agent-loop v1` against live traces so the inspect/act contract feels natural across scenarios
+- decide the first production/capacity abstraction and which shop archetypes belong in the seeded world
+- migrate the seed taxonomy and marketplace examples away from digital-first products if the scope pivot holds
 - improve the morning briefing so it highlights opportunities, risks, and strongest/weakest listing signals
 - decide whether and how simple note/reminder reflection should fit back into the v1 runtime without becoming the main action
 - tune the first consequence-producing day pipeline against multi-day traces
@@ -70,6 +73,7 @@ Likely expansions once the first believable run is working.
 ## Open Questions
 
 - what the primary business score should be for evaluation
+- how explicit production should be in the first build: stock only, backlog only, or both
 - whether hackathon scope needs persistent repeat customers beyond cohort-level repeat affinity
 - when to add stronger inter-shop competition
 - when, if ever during the hackathon, optional LLM-written review or message text should be added on top of structured outcomes

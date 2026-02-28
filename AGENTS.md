@@ -235,14 +235,21 @@ Status: `Recommended default`
 
 ## Product Scope Guidance
 
-Default to digital-first products:
+Default to creative-goods-first businesses with real production constraints:
 
-- sticker packs
-- printable wall art
-- phone wallpapers
-- digital planners
+- 3D-printed decor and organizers
+- laser-cut decor and accessories
+- ceramics
+- woodwork
 
-This keeps the simulation Etsy-like without pulling in shipping complexity too early.
+Keep the business physics legible:
+
+- production capacity should be scarce
+- stock or backlog should matter
+- material cost should matter
+- shipping-heavy realism can stay abstracted behind lead time and fulfillment delay
+
+The goal is not full Etsy realism. The goal is an environment where organizational capability, resource allocation, and gradual strategy shifts become measurable.
 
 ## Agent Loop Guidance
 
