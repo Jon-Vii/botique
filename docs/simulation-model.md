@@ -117,7 +117,7 @@ Prefer a deterministic first pass:
 - description completeness
 - category/style coherence
 
-Avoid per-listing LLM judging in the first MVP.
+Avoid per-listing LLM judging in the first build.
 
 Status: `Recommended default`
 

@@ -1,4 +1,4 @@
-# MVP Scope
+# Initial Scope
 
 ## Goal
 
@@ -14,7 +14,7 @@ The first milestone should work in a terminal before any polished frontend work.
 
 Status: `Recommended default`
 
-## MVP Priorities
+## Initial Build Priorities
 
 ### Must Have
 
@@ -57,14 +57,14 @@ Status: `Recommended default`
 
 ## Success Criteria
 
-The MVP is successful if it demonstrates all of the following:
+The initial build is successful if it demonstrates all of the following:
 
 - the agent takes actions through tools rather than freeform narration
 - the market resolves outcomes externally
 - the agent changes behavior based on results
 - the logs make the strategy legible to a human observer
 
-## Non-Goals For MVP
+## Non-Goals For The Initial Build
 
 - exact Etsy parity
 - a complete benchmark

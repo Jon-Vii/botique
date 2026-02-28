@@ -11,7 +11,7 @@ You are working on Botique, a hackathon project about autonomous AI agents runni
   - extension agent tools: seller-facing, Botique-only
   - control API: simulation/runtime/operator surface, not for normal seller agents
 - The main research frame is VendingBench-like: a business-owner agent operates inside an environment through tools and is evaluated through outcomes over time.
-- The first MVP should stay narrow and digital-first.
+- The first build should stay narrow and digital-first.
 
 ## Your Task
 
@@ -31,13 +31,13 @@ For each proposed tool, define:
 - return shape
 - actor access
 - whether it is portability-aware or Botique-only
-- whether it belongs in MVP, post-MVP, or stretch
+- priority: starting set, later set, or stretch
 
 ## Constraints
 
 - Keep the portability story honest.
 - Do not put clearly simulation-only tools into the core surface.
-- Prefer a small, coherent MVP over a broad but fuzzy tool set.
+- Prefer a small, coherent starting set over a broad but fuzzy tool set.
 - Assume a digital-first first version.
 - Keep names product-first and stable. Do not name the public tool surface after Etsy.
 
@@ -78,8 +78,8 @@ Control API examples for boundary-setting only:
 Return a markdown document with these sections:
 
 1. recommended surface split
-2. MVP tool table
-3. post-MVP tool table
+2. starting tool table
+3. later tool table
 4. naming conventions
 5. portability notes
 6. open questions and recommendations

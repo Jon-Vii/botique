@@ -38,7 +38,7 @@ The original concept document is `botique-initial-concept-draft.md`.
 
 ## Decision Status
 
-This file mixes actual decisions with recommended defaults for the MVP.
+This file mixes actual decisions with recommended defaults for the initial build.
 
 Treat them as:
 
@@ -60,6 +60,8 @@ Keep these boundaries clean.
 ### System 1
 
 Application code, not AI.
+
+Here, "System 1" means the non-AI backend environment the agent acts on through tools.
 
 Responsibilities:
 
@@ -122,7 +124,7 @@ Implications:
 
 There are two agent-facing tool surfaces and one non-agent-facing runtime surface.
 
-### `agent_tools/core`
+### `seller_core`
 
 Portable, seller-facing tools. This is the Etsy-compatible subset in spirit and structure.
 
@@ -142,7 +144,7 @@ Examples:
 
 Status: `Recommended default` on exact tool list, `Current decision` on having a portable core surface
 
-### `agent_tools/extensions`
+### `botique_extensions`
 
 Botique-only seller tools. Useful for research and simulation richness, but not part of the portability story.
 
@@ -191,13 +193,13 @@ The claim is narrower:
 
 Keep this honest:
 
-- do not put simulation-only convenience tools into `agent_tools/core`
+- do not put simulation-only convenience tools into `seller_core`
 - do not name public tool surfaces after Etsy
-- keep Etsy operation mapping internal, for example in `compat/etsy_v3.py`
+- keep Etsy operation mapping internal, for example in `seller_core/compat/etsy_v3.py`
 
-## MVP Priorities
+## Initial Build Priorities
 
-Prefer a narrow digital-first MVP.
+Prefer a narrow digital-first initial build.
 
 Start with:
 
@@ -255,7 +257,7 @@ Use:
 - `docs/agent-tools.md` for tool changes
 - `docs/simulation-model.md` for market logic
 - `docs/agent-loop.md` for prompt/turn/briefing changes
-- `docs/mvp-scope.md` for scope changes
+- `docs/mvp-scope.md` for initial-scope changes
 
 ## Parallel Work Guidance
 

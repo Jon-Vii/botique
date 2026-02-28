@@ -26,7 +26,7 @@ Principles:
 - internally preserve the mapping to Etsy operation names
 - avoid simulation-only convenience tools here
 
-Suggested MVP set:
+Current core surface in `seller_core`:
 
 - `create_draft_listing`
 - `update_listing`
@@ -44,13 +44,15 @@ Suggested MVP set:
 - `get_reviews`
 - `get_taxonomy_nodes`
 
+The exact build priority within this surface is still a planning decision.
+
 Status: `Recommended default`
 
 ## Recommended Core Matrix
 
 Use the portable core surface for the seller actions that are both believable for a shop owner and likely to exist across providers.
 
-`Must have` for the first believable seller loop:
+`Starting priority` for the first believable seller loop:
 
 - `create_draft_listing`
 - `update_listing`
@@ -65,7 +67,7 @@ Use the portable core surface for the seller actions that are both believable fo
 - `get_reviews`
 - `get_taxonomy_nodes`
 
-`Core soon` if Botique wants stronger Etsy-shaped listing realism:
+`Additional compatible tools already modeled in seller_core`:
 
 - `get_listing_inventory`
 - `update_listing_inventory`
@@ -90,7 +92,7 @@ Use the portable core surface for the seller actions that are both believable fo
 
 These are optional tools for research and richer Botique behavior.
 
-Suggested MVP set:
+Suggested starting extension set:
 
 - `write_note`
 - `read_notes`
@@ -226,5 +228,5 @@ Status: `Current decision` for keeping the core CLI transport-only, `Recommended
 
 - whether `get_balance` belongs in core or extensions
 - whether trend access should be direct or inferred from marketplace browsing
-- whether order details should be part of the first milestone or follow immediately after
-- whether media upload belongs in the first digital-only MVP
+- whether order details should be part of the earliest end-to-end loop or follow immediately after
+- whether media upload belongs in the initial digital-first build
