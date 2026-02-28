@@ -4,14 +4,25 @@
 
 Botique is a hackathon project about autonomous AI agents running Etsy-like shops in a simulated marketplace.
 
-The project is inspired by the structure of VendingBench:
+The project is informed by adjacent agent-business work such as VendingBench:
 
 - a business-owner agent
 - operating inside an environment
 - acting through constrained tools
 - evaluated through business outcomes over time
 
-Botique differs in that it emphasizes creative and strategic decisions, not just operational optimization.
+Botique is not trying to recreate VendingBench. It emphasizes creative and strategic decisions, not just operational optimization.
+
+## Research-Informed Defaults
+
+Unless a doc says otherwise, prefer these defaults:
+
+- the world owns outcomes, delays, and failures
+- agents should optimize for one explicit business objective plus supporting diagnostics
+- simple notes/reminders come before complex memory systems
+- single-shop runs should be stable before richer competition or delegation
+- narrative events should enrich the simulation, not become the main mechanic
+- multi-business competition is a later expansion unless a doc explicitly promotes it into the initial build
 
 ## Read This First
 

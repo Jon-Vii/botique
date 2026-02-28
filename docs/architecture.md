@@ -15,7 +15,9 @@ Status: `Current decision`
 
 ## Core Research Framing
 
-Botique is structurally similar to VendingBench:
+Botique is informed by adjacent agent-business work such as VendingBench, but it is not an attempt to recreate those systems or mechanics.
+
+At a high level, Botique shares this structure:
 
 - an AI business-owner agent
 - embedded in an environment
@@ -28,6 +30,19 @@ The main difference is that Botique includes creative and strategic choices:
 - how to position them
 - how to price them
 - how to react to competitors and customer feedback
+
+## Research-Informed Design Rules
+
+These are architecture-level defaults drawn from recent agent-business and e-commerce simulation work.
+
+- the environment owns outcomes, delays, and failures
+- agents act through tools, but the world decides what actually happens
+- evaluation should center on one clear business objective plus supporting diagnostics
+- simple notes and reminders are preferable to opaque memory systems in the initial build
+- a single-shop loop should be stable before adding richer competition or multi-agent delegation
+- narrative events should enrich the world, not replace formula-driven core mechanics
+
+Status: `Recommended default`
 
 ## System Split
 
