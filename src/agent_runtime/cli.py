@@ -33,6 +33,12 @@ def _load_json_payload(json_string: str | None, json_file: str | None) -> dict[s
     return payload
 
 
+def _parse_shop_id_argument(raw_value: str) -> int | str:
+    if raw_value.isdigit():
+        return int(raw_value)
+    return raw_value
+
+
 def _print_json(payload: dict[str, Any], *, pretty: bool) -> None:
     if pretty:
         print(json.dumps(payload, indent=2, sort_keys=True))
@@ -53,7 +59,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--briefing-file",
         help="Path to a JSON file containing the morning briefing, or '-' for stdin.",
     )
+    run_day.add_argument(
+        "--shop-id",
+        help="Live Botique shop id. Use this instead of --briefing/--briefing-file to build the morning briefing from the current server state.",
+    )
+    run_day.add_argument("--run-id")
     run_day.add_argument("--base-url")
+    run_day.add_argument("--control-base-url")
     run_day.add_argument("--api-key")
     run_day.add_argument("--bearer-token")
     run_day.add_argument("--timeout", type=float)
@@ -63,6 +75,25 @@ def build_parser() -> argparse.ArgumentParser:
     run_day.add_argument("--mistral-top-p", type=float)
     run_day.add_argument("--max-turns", type=int, default=6)
     run_day.add_argument("--pretty", action="store_true")
+
+    run_days = subparsers.add_parser(
+        "run-days",
+        help="Build morning briefings from live Botique state and run multiple simulation days in sequence.",
+    )
+    run_days.add_argument("--shop-id", required=True)
+    run_days.add_argument("--days", type=int, required=True)
+    run_days.add_argument("--run-id")
+    run_days.add_argument("--base-url")
+    run_days.add_argument("--control-base-url")
+    run_days.add_argument("--api-key")
+    run_days.add_argument("--bearer-token")
+    run_days.add_argument("--timeout", type=float)
+    run_days.add_argument("--mistral-api-key")
+    run_days.add_argument("--mistral-model")
+    run_days.add_argument("--mistral-temperature", type=float)
+    run_days.add_argument("--mistral-top-p", type=float)
+    run_days.add_argument("--max-turns", type=int, default=6)
+    run_days.add_argument("--pretty", action="store_true")
     return parser
 
 
@@ -71,15 +102,13 @@ def main(argv: list[str] | None = None) -> int:
     namespace = parser.parse_args(argv)
 
     try:
-        if namespace.command != "run-day":
+        if namespace.command not in {"run-day", "run-days"}:
             raise ValueError(f"Unsupported command {namespace.command!r}.")
 
-        briefing = morning_briefing_from_payload(
-            _load_json_payload(namespace.briefing, namespace.briefing_file)
-        )
         runner = build_default_owner_agent_runner(
             max_turns=namespace.max_turns,
             base_url=namespace.base_url,
+            control_base_url=getattr(namespace, "control_base_url", None),
             api_key=namespace.api_key,
             bearer_token=namespace.bearer_token,
             timeout_seconds=namespace.timeout,
@@ -88,7 +117,30 @@ def main(argv: list[str] | None = None) -> int:
             mistral_temperature=namespace.mistral_temperature,
             mistral_top_p=namespace.mistral_top_p,
         )
-        result = runner.run_day(briefing)
+
+        if namespace.command == "run-day":
+            if namespace.shop_id and (namespace.briefing or namespace.briefing_file):
+                raise ValueError(
+                    "Pass either --shop-id or a briefing payload, not both."
+                )
+
+            if namespace.shop_id:
+                result = runner.run_live_day(
+                    shop_id=_parse_shop_id_argument(namespace.shop_id),
+                    run_id=namespace.run_id,
+                )
+            else:
+                briefing = morning_briefing_from_payload(
+                    _load_json_payload(namespace.briefing, namespace.briefing_file)
+                )
+                result = runner.run_day(briefing)
+        else:
+            result = runner.run_live_days(
+                shop_id=_parse_shop_id_argument(namespace.shop_id),
+                days=namespace.days,
+                run_id=namespace.run_id,
+            )
+
         _print_json({"ok": True, "result": jsonify(result)}, pretty=namespace.pretty)
         return 0
     except Exception as exc:

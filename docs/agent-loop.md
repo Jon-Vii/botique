@@ -70,6 +70,13 @@ Current scaffold in `src/agent_runtime/briefing.py` models the briefing with exp
 
 The initial implementation also includes a small `MorningBriefingBuilder` that pulls due reminders from the simple reminder store so the loop can stay inspectable.
 
+The runtime now also includes a live Botique briefing path:
+
+- read seller-facing shop, listing, order, review, and payment state through `seller_core`
+- read `current_day`, `market_snapshot`, and `trend_state` through the separate control API
+- derive compact briefing sections from that live state instead of requiring fully hand-authored JSON
+- compare against the prior captured shop snapshot during multi-day runs so listing deltas stay inspectable
+
 ## Turn Rules
 
 - one tool call per turn
@@ -95,7 +102,9 @@ Current runtime note:
 Current runtime entrypoint:
 
 - `botique-agent-runtime run-day --briefing-file <path>`
-- the CLI loads a structured morning briefing, builds the owner-agent tool registry, and runs one day through the configured provider
+- `botique-agent-runtime run-day --shop-id <shop_id>`
+- `botique-agent-runtime run-days --shop-id <shop_id> --days <n>`
+- the CLI can still load a structured briefing directly, but it can also build one from live Botique state and execute a simple multi-day run that advances the simulation between days
 - the default provider wiring is Mistral through `MISTRAL_API_KEY` and optional `BOTIQUE_MISTRAL_*` settings, but the loop itself remains provider-agnostic
 
 ## Core Cognitive Stages
@@ -160,6 +169,13 @@ Current scaffold in `src/agent_runtime/events.py` and `src/agent_runtime/loop.py
 - tool call, result, and failure
 - note writes
 - reminder creation
+
+The multi-day runner now keeps the surrounding run structure inspectable too:
+
+- pre-day shop snapshots used to build the briefing
+- post-day shop snapshots after the agent acts
+- control-plane day advancement records between daily runs
+- run-level note and reminder snapshots alongside the per-turn event stream
 
 ## Failure Modes To Guard Against
 

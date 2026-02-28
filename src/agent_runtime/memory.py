@@ -69,6 +69,8 @@ class NotesBackend(Protocol):
         tag: str | None = None,
     ) -> list[NoteRecord]: ...
 
+    def list_notes(self, *, shop_id: ShopId) -> list[NoteRecord]: ...
+
 
 class ReminderBackend(Protocol):
     def set_reminder(
@@ -95,6 +97,13 @@ class ReminderBackend(Protocol):
         shop_id: ShopId,
         reminder_id: str,
     ) -> ReminderRecord: ...
+
+    def list_reminders(
+        self,
+        *,
+        shop_id: ShopId,
+        status: ReminderStatus | None = None,
+    ) -> list[ReminderRecord]: ...
 
 
 class AgentMemoryStore(NotesBackend, ReminderBackend, Protocol):
@@ -139,6 +148,9 @@ class InMemoryAgentMemory(AgentMemoryStore):
         if limit is not None:
             notes = notes[:limit]
         return notes
+
+    def list_notes(self, *, shop_id: ShopId) -> list[NoteRecord]:
+        return list(self._notes.get(shop_id, ()))
 
     def set_reminder(
         self,
@@ -195,3 +207,14 @@ class InMemoryAgentMemory(AgentMemoryStore):
             return completed
 
         raise LookupError(f"Reminder {reminder_id!r} was not found for shop {shop_id!r}.")
+
+    def list_reminders(
+        self,
+        *,
+        shop_id: ShopId,
+        status: ReminderStatus | None = None,
+    ) -> list[ReminderRecord]:
+        reminders = list(self._reminders.get(shop_id, ()))
+        if status is None:
+            return reminders
+        return [reminder for reminder in reminders if reminder.status == status]

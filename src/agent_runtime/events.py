@@ -28,6 +28,7 @@ class EventKind(StrEnum):
     REMINDER_SET = "reminder_set"
     REMINDER_COMPLETED = "reminder_completed"
     DAY_ENDED = "day_ended"
+    SIMULATION_ADVANCED = "simulation_advanced"
 
 
 @dataclass(frozen=True, slots=True)

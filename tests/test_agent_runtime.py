@@ -14,6 +14,8 @@ from agent_runtime import (
     DayEndReason,
     InMemoryAgentMemory,
     InMemoryEventLog,
+    ListingSnapshot,
+    LiveMorningBriefingBuilder,
     MistralProviderConfig,
     MistralToolCallingProvider,
     MorningBriefingBuilder,
@@ -26,6 +28,7 @@ from agent_runtime import (
     ProviderToolCall,
     ProviderToolDefinition,
     SingleShopDailyLoop,
+    ShopStateSnapshot,
     ToolCallingAgentPolicy,
     ToolCall,
     build_default_owner_agent_runner,
@@ -35,6 +38,25 @@ from agent_runtime import (
 from agent_runtime.cli import main as runtime_cli_main
 from agent_runtime.providers.policy import END_DAY_TOOL_NAME
 from agent_runtime.tools import DEFAULT_OWNER_AGENT_CORE_TOOLS
+from control_api import (
+    AdvanceDayResult,
+    AdvanceDayStep,
+    GlobalMarketState,
+    MarketSnapshot,
+    MarketTrend,
+    SimulationDay,
+    TaxonomyMarketSnapshot,
+    TrendState,
+)
+
+
+def page_payload(results):
+    return {
+        "count": len(results),
+        "limit": len(results),
+        "offset": 0,
+        "results": list(results),
+    }
 
 
 class FakeSellerCoreClient:
@@ -66,6 +88,51 @@ class FakeSellerCoreClient:
         copied = dict(arguments)
         self.calls.append((tool_name, copied))
         return {"tool_name": tool_name, "arguments": copied}
+
+
+class FakeLiveSellerCoreClient(FakeSellerCoreClient):
+    def __init__(
+        self,
+        *,
+        shop: dict[str, object],
+        listings: list[dict[str, object]],
+        orders: list[dict[str, object]],
+        reviews: list[dict[str, object]],
+        payments: list[dict[str, object]],
+    ) -> None:
+        super().__init__()
+        self.shop = dict(shop)
+        self.listings = [dict(item) for item in listings]
+        self.orders = [dict(item) for item in orders]
+        self.reviews = [dict(item) for item in reviews]
+        self.payments = [dict(item) for item in payments]
+        self.state_calls: list[tuple[str, dict[str, object]]] = []
+
+    def get_shop_info(self, *, shop_id):
+        self.state_calls.append(("get_shop_info", {"shop_id": shop_id}))
+        return dict(self.shop)
+
+    def get_shop_listings(self, *, shop_id, limit=100, offset=0, **kwargs):
+        self.state_calls.append(
+            ("get_shop_listings", {"shop_id": shop_id, "limit": limit, "offset": offset, **kwargs})
+        )
+        return page_payload(self.listings[offset : offset + limit])
+
+    def get_orders(self, *, shop_id, limit=100, offset=0, **kwargs):
+        self.state_calls.append(
+            ("get_orders", {"shop_id": shop_id, "limit": limit, "offset": offset, **kwargs})
+        )
+        return page_payload(self.orders[offset : offset + limit])
+
+    def get_reviews(self, *, shop_id, limit=100, offset=0, **kwargs):
+        self.state_calls.append(
+            ("get_reviews", {"shop_id": shop_id, "limit": limit, "offset": offset, **kwargs})
+        )
+        return page_payload(self.reviews[offset : offset + limit])
+
+    def get_payments(self, *, shop_id):
+        self.state_calls.append(("get_payments", {"shop_id": shop_id}))
+        return page_payload(self.payments)
 
 
 class ScriptedPolicy:
@@ -114,10 +181,82 @@ class FakeRunner:
     def __init__(self, result: object) -> None:
         self.result = result
         self.received_briefings = []
+        self.live_day_calls = []
+        self.live_days_calls = []
 
     def run_day(self, briefing):
         self.received_briefings.append(briefing)
         return self.result
+
+    def run_live_day(self, *, shop_id, run_id=None):
+        self.live_day_calls.append({"shop_id": shop_id, "run_id": run_id})
+        return self.result
+
+    def run_live_days(self, *, shop_id, days, run_id=None):
+        self.live_days_calls.append({"shop_id": shop_id, "days": days, "run_id": run_id})
+        return self.result
+
+
+class FakeControlApiClient:
+    def __init__(self, market_states: list[GlobalMarketState]) -> None:
+        self.market_states = list(market_states)
+        self.index = 0
+        self.advance_calls = 0
+
+    def get_global_market_state(self) -> GlobalMarketState:
+        return self.market_states[self.index]
+
+    def advance_day(self) -> AdvanceDayResult:
+        previous = self.market_states[self.index]
+        self.advance_calls += 1
+        if self.index < len(self.market_states) - 1:
+            self.index += 1
+        current = self.market_states[self.index]
+        return AdvanceDayResult(
+            previous_day=previous.current_day,
+            current_day=current.current_day,
+            market_snapshot=current.market_snapshot,
+            trend_state=current.trend_state,
+            steps=(
+                AdvanceDayStep(
+                    name="advance_clock",
+                    description="Increment the simulation day.",
+                ),
+            ),
+        )
+
+
+def build_market_state(day: int, date: str, *, label: str, taxonomy_id: int) -> GlobalMarketState:
+    return GlobalMarketState(
+        current_day=SimulationDay(day=day, date=date, advanced_at=None),
+        market_snapshot=MarketSnapshot(
+            generated_at=date,
+            active_listing_count=3,
+            active_shop_count=2,
+            average_active_price=9.5,
+            taxonomy=(
+                TaxonomyMarketSnapshot(
+                    taxonomy_id=taxonomy_id,
+                    listing_count=2,
+                    average_price=11.5,
+                    demand_multiplier=1.3,
+                ),
+            ),
+        ),
+        trend_state=TrendState(
+            generated_at=date,
+            baseline_multiplier=1.0,
+            active_trends=(
+                MarketTrend(
+                    trend_id=f"trend-{day}",
+                    label=label,
+                    taxonomy_id=taxonomy_id,
+                    tags=("mushroom", "planner"),
+                    demand_multiplier=1.3,
+                ),
+            ),
+        ),
+    )
 
 
 class MorningBriefingTests(unittest.TestCase):
@@ -205,6 +344,153 @@ class MorningBriefingTests(unittest.TestCase):
         self.assertEqual(briefing.shop_id, 7)
         self.assertEqual(briefing.listing_changes[0].listing_id, 1001)
         self.assertEqual(briefing.due_reminders[0].reminder_id, "rem_1")
+
+    def test_live_builder_builds_briefing_from_live_state(self) -> None:
+        memory = InMemoryAgentMemory()
+        memory.write_note(
+            shop_id=1001,
+            title="Pricing angle",
+            body="Keep the planner close to the trend tags.",
+            day=3,
+        )
+        memory.set_reminder(
+            shop_id=1001,
+            content="Review whether the planner draft should go live.",
+            due_day=4,
+            day=3,
+        )
+        seller_client = FakeLiveSellerCoreClient(
+            shop={
+                "shop_id": 1001,
+                "shop_name": "northwind-printables",
+                "currency_code": "USD",
+                "listing_active_count": 1,
+                "total_sales_count": 5,
+                "review_average": 4.8,
+                "review_count": 3,
+            },
+            listings=[
+                {
+                    "listing_id": 2001,
+                    "title": "Mushroom Cottage Printable Wall Art",
+                    "state": "active",
+                    "price": 14.0,
+                    "quantity": 999,
+                    "views": 140,
+                    "favorites": 36,
+                    "updated_at": "2026-02-28T08:00:00Z",
+                },
+                {
+                    "listing_id": 2002,
+                    "title": "Minimal Focus Planner",
+                    "state": "draft",
+                    "price": 9.0,
+                    "quantity": 999,
+                    "views": 12,
+                    "favorites": 2,
+                    "updated_at": "2026-02-28T08:10:00Z",
+                },
+            ],
+            orders=[
+                {
+                    "receipt_id": 5004,
+                    "shop_id": 1001,
+                    "status": "paid",
+                    "was_paid": True,
+                    "total_price": 14.0,
+                    "created_at": "2026-02-28T12:00:00Z",
+                    "line_items": [
+                        {
+                            "listing_id": 2001,
+                            "title": "Mushroom Cottage Printable Wall Art",
+                            "quantity": 1,
+                            "price": 14.0,
+                        }
+                    ],
+                }
+            ],
+            reviews=[
+                {
+                    "review_id": 7004,
+                    "listing_id": 2001,
+                    "rating": 5,
+                    "review": "Printed beautifully.",
+                    "buyer_name": "Ava Chen",
+                    "created_at": "2026-02-28T15:00:00Z",
+                }
+            ],
+            payments=[
+                {
+                    "payment_id": 8001,
+                    "receipt_id": 5001,
+                    "amount": 32.0,
+                    "currency_code": "USD",
+                    "status": "posted",
+                    "posted_at": "2026-02-27T10:00:00Z",
+                }
+            ],
+        )
+        control_client = FakeControlApiClient(
+            [build_market_state(4, "2026-03-01T00:00:00Z", label="Wall Art", taxonomy_id=9101)]
+        )
+        builder = LiveMorningBriefingBuilder(
+            seller_client=seller_client,
+            control_client=control_client,
+            memory=memory,
+        )
+        previous_state = ShopStateSnapshot(
+            shop_id=1001,
+            shop_name="northwind-printables",
+            day=3,
+            simulation_date="2026-02-28T00:00:00Z",
+            balance_summary=BalanceSummary(available=32.0),
+            total_sales_count=4,
+            review_count=2,
+            review_average=4.5,
+            active_listing_count=1,
+            draft_listing_count=1,
+            listings=(
+                ListingSnapshot(
+                    listing_id=2001,
+                    title="Mushroom Cottage Printable Wall Art",
+                    state="active",
+                    price=14.0,
+                    quantity=999,
+                    views=120,
+                    favorites=30,
+                    updated_at="2026-02-27T08:00:00Z",
+                ),
+                ListingSnapshot(
+                    listing_id=2002,
+                    title="Minimal Focus Planner",
+                    state="draft",
+                    price=9.0,
+                    quantity=999,
+                    views=10,
+                    favorites=2,
+                    updated_at="2026-02-27T08:10:00Z",
+                ),
+            ),
+        )
+
+        result = builder.build(
+            run_id="run_live_briefing",
+            shop_id=1001,
+            previous_shop_state=previous_state,
+        )
+
+        self.assertEqual(result.briefing.shop_name, "northwind-printables")
+        self.assertEqual(result.briefing.day, 4)
+        self.assertEqual(result.briefing.balance_summary.available, 32.0)
+        self.assertEqual(result.briefing.balance_summary.pending, 14.0)
+        self.assertEqual(result.briefing.yesterday_orders.order_count, 1)
+        self.assertEqual(result.briefing.new_reviews[0].review_id, 7004)
+        self.assertEqual(result.briefing.listing_changes[0].views_delta, 20)
+        self.assertEqual(result.briefing.listing_changes[0].orders_delta, 1)
+        self.assertEqual(len(result.briefing.due_reminders), 1)
+        self.assertEqual(result.briefing.market_movements[0].headline, "Trend watch: Wall Art")
+        self.assertIn("Pricing angle", result.briefing.notes[0])
+        self.assertEqual(result.shop_state.active_listing_count, 1)
 
 
 class ToolRegistryTests(unittest.TestCase):
@@ -621,6 +907,115 @@ class OwnerAgentRunnerTests(unittest.TestCase):
         self.assertEqual(len(result.turns), 1)
         self.assertEqual(seller_client.calls, [("get_shop_info", {"shop_id": 7})])
 
+    def test_runner_can_execute_multiple_live_days_and_advance_simulation(self) -> None:
+        seller_client = FakeLiveSellerCoreClient(
+            shop={
+                "shop_id": 1001,
+                "shop_name": "northwind-printables",
+                "currency_code": "USD",
+                "listing_active_count": 1,
+                "total_sales_count": 5,
+                "review_average": 4.8,
+                "review_count": 3,
+            },
+            listings=[
+                {
+                    "listing_id": 2001,
+                    "title": "Mushroom Cottage Printable Wall Art",
+                    "state": "active",
+                    "price": 14.0,
+                    "quantity": 999,
+                    "views": 140,
+                    "favorites": 36,
+                    "updated_at": "2026-02-28T08:00:00Z",
+                }
+            ],
+            orders=[],
+            reviews=[],
+            payments=[],
+        )
+        control_client = FakeControlApiClient(
+            [
+                build_market_state(3, "2026-02-28T00:00:00Z", label="Wall Art", taxonomy_id=9101),
+                build_market_state(4, "2026-03-01T00:00:00Z", label="Planner", taxonomy_id=9102),
+            ]
+        )
+        provider = RecordingProvider(
+            [
+                ProviderResponse(
+                    content="Check the shop info first.",
+                    tool_calls=(
+                        ProviderToolCall(
+                            name="get_shop_info",
+                            arguments={},
+                        ),
+                    ),
+                ),
+                ProviderResponse(
+                    content="",
+                    tool_calls=(
+                        ProviderToolCall(
+                            name=END_DAY_TOOL_NAME,
+                            arguments={"summary": "Day three is complete."},
+                        ),
+                    ),
+                ),
+                ProviderResponse(
+                    content="Capture the trend note for tomorrow.",
+                    tool_calls=(
+                        ProviderToolCall(
+                            name="write_note",
+                            arguments={
+                                "title": "Trend watch",
+                                "body": "Planner demand is rotating up.",
+                                "day": 4,
+                            },
+                        ),
+                    ),
+                ),
+                ProviderResponse(
+                    content="",
+                    tool_calls=(
+                        ProviderToolCall(
+                            name=END_DAY_TOOL_NAME,
+                            arguments={"summary": "Day four is complete."},
+                        ),
+                    ),
+                ),
+            ]
+        )
+        runner = build_default_owner_agent_runner(
+            max_turns=4,
+            memory=InMemoryAgentMemory(),
+            event_log=InMemoryEventLog(),
+            policy_config=ProviderPolicyConfig(),
+            mistral_api_key="unused",
+        )
+        runner = type(runner)(
+            provider=provider,
+            seller_client=seller_client,
+            control_client=control_client,
+            memory=InMemoryAgentMemory(),
+            event_log=InMemoryEventLog(),
+        )
+
+        result = runner.run_live_days(shop_id=1001, days=2, run_id="run_multi_day")
+
+        self.assertEqual(len(result.days), 2)
+        self.assertEqual(result.days[0].day, 3)
+        self.assertEqual(result.days[1].day, 4)
+        self.assertIsNotNone(result.days[0].advancement)
+        self.assertIsNone(result.days[1].advancement)
+        self.assertEqual(control_client.advance_calls, 1)
+        self.assertEqual(result.days[1].market_state_before.current_day.day, 4)
+        self.assertEqual(seller_client.calls, [("get_shop_info", {"shop_id": 1001})])
+        self.assertEqual(len(result.notes), 1)
+        self.assertEqual(result.notes[0].title, "Trend watch")
+        self.assertIn(
+            "simulation_advanced",
+            [event.kind.value for event in result.events],
+        )
+
 
 class RuntimeCliTests(unittest.TestCase):
     def test_run_day_command_loads_briefing_and_emits_json(self) -> None:
@@ -657,6 +1052,31 @@ class RuntimeCliTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["result"]["run_id"], "run_cli")
         self.assertEqual(fake_runner.received_briefings[0].shop_name, "Studio North")
+
+    def test_run_days_command_executes_live_multi_day_flow(self) -> None:
+        fake_runner = FakeRunner(
+            {
+                "run_id": "run_live_cli",
+                "days": [
+                    {"day": 3},
+                    {"day": 4},
+                ],
+            }
+        )
+        stdout = StringIO()
+
+        with patch("agent_runtime.cli.build_default_owner_agent_runner", return_value=fake_runner):
+            with patch("sys.stdout", stdout):
+                exit_code = runtime_cli_main(
+                    ["run-days", "--shop-id", "1001", "--days", "2", "--run-id", "run_live_cli"]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["run_id"], "run_live_cli")
+        self.assertEqual(fake_runner.live_days_calls[0]["shop_id"], 1001)
+        self.assertEqual(fake_runner.live_days_calls[0]["days"], 2)
 
 
 class TurnDecisionValidationTests(unittest.TestCase):

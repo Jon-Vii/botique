@@ -10,7 +10,6 @@ import {
 } from "../schemas/control";
 import type { RuntimeControlService } from "../services/runtime-control-service";
 import { registerRouteErrorHandler } from "./error-handler";
-
 function sendValidated<TSchema extends ZodTypeAny>(
   reply: FastifyReply,
   schema: TSchema,

@@ -1,10 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Iterable, Mapping
+from datetime import datetime, timedelta, timezone
+from typing import Any, Callable, Iterable, Mapping
 
-from .memory import ReminderBackend, ReminderRecord, ReminderStatus, ShopId
+from control_api import ControlApiClient, GlobalMarketState
+from seller_core.client import SellerCoreClient
+
+from .memory import (
+    AgentMemoryStore,
+    NoteRecord,
+    ReminderBackend,
+    ReminderRecord,
+    ReminderStatus,
+    ShopId,
+)
 from .serialization import jsonify
 
 
@@ -107,6 +117,44 @@ class MorningBriefing:
         return jsonify(self)  # type: ignore[return-value]
 
 
+@dataclass(frozen=True, slots=True)
+class ListingSnapshot:
+    listing_id: int
+    title: str
+    state: str
+    price: float
+    quantity: int
+    views: int
+    favorites: int
+    updated_at: str
+
+
+@dataclass(frozen=True, slots=True)
+class ShopStateSnapshot:
+    shop_id: ShopId
+    shop_name: str
+    day: int
+    simulation_date: str
+    captured_at: datetime = field(default_factory=_utcnow)
+    balance_summary: BalanceSummary = field(default_factory=lambda: BalanceSummary(None))
+    total_sales_count: int = 0
+    review_count: int = 0
+    review_average: float | None = None
+    active_listing_count: int = 0
+    draft_listing_count: int = 0
+    listings: tuple[ListingSnapshot, ...] = ()
+
+    def to_payload(self) -> dict[str, object]:
+        return jsonify(self)  # type: ignore[return-value]
+
+
+@dataclass(frozen=True, slots=True)
+class LiveBriefingBuildResult:
+    briefing: MorningBriefing
+    shop_state: ShopStateSnapshot
+    market_state: GlobalMarketState
+
+
 class MorningBriefingBuilder:
     def __init__(self, reminders: ReminderBackend) -> None:
         self._reminders = reminders
@@ -152,6 +200,195 @@ class MorningBriefingBuilder:
             notes=tuple(notes),
             priorities_prompt=priorities_prompt,
         )
+
+
+class LiveMorningBriefingBuilder:
+    def __init__(
+        self,
+        *,
+        seller_client: SellerCoreClient,
+        control_client: ControlApiClient,
+        memory: AgentMemoryStore,
+    ) -> None:
+        self._seller_client = seller_client
+        self._control_client = control_client
+        self._memory = memory
+        self._briefing_builder = MorningBriefingBuilder(memory)
+
+    def build(
+        self,
+        *,
+        run_id: str,
+        shop_id: ShopId,
+        previous_shop_state: ShopStateSnapshot | None = None,
+    ) -> LiveBriefingBuildResult:
+        market_state = self._control_client.get_global_market_state()
+        current_day = market_state.current_day
+
+        shop = _mapping(
+            self._seller_client.get_shop_info(shop_id=shop_id),
+            "get_shop_info",
+        )
+        listings = tuple(
+            sorted(
+                self._collect_paginated(
+                    self._seller_client.get_shop_listings,
+                    "get_shop_listings",
+                    shop_id=shop_id,
+                ),
+                key=lambda item: int(_mapping(item, "listing")["listing_id"]),
+            )
+        )
+        orders = tuple(
+            self._collect_paginated(
+                self._seller_client.get_orders,
+                "get_orders",
+                shop_id=shop_id,
+                sort_on="created",
+                sort_order="desc",
+            )
+        )
+        reviews = tuple(
+            self._collect_paginated(
+                self._seller_client.get_reviews,
+                "get_reviews",
+                shop_id=shop_id,
+            )
+        )
+        payments = tuple(
+            _items_from_page(
+                self._seller_client.get_payments(shop_id=shop_id),
+                "get_payments",
+            )
+        )
+
+        balance_summary = _build_balance_summary(
+            orders=orders,
+            payments=payments,
+            currency_code=str(shop.get("currency_code", "USD")),
+        )
+        shop_state = self._build_shop_state_snapshot(
+            shop=shop,
+            listings=listings,
+            current_day=current_day.day,
+            current_day_date=current_day.date,
+            balance_summary=balance_summary,
+        )
+        previous_day_window = _previous_day_window(current_day.date)
+        yesterday_orders_raw = tuple(
+            item
+            for item in orders
+            if _timestamp_in_range(
+                _mapping(item, "order").get("created_at"),
+                start=previous_day_window[0],
+                end=previous_day_window[1],
+            )
+        )
+        yesterday_orders = _summarize_orders(yesterday_orders_raw)
+        new_reviews = tuple(
+            _summarize_review(item)
+            for item in reviews
+            if _timestamp_in_range(
+                _mapping(item, "review").get("created_at"),
+                start=previous_day_window[0],
+                end=previous_day_window[1],
+            )
+        )
+        listing_changes = _build_listing_changes(
+            listings=listings,
+            previous_shop_state=previous_shop_state,
+            yesterday_orders=yesterday_orders_raw,
+        )
+        objective_progress = _build_objective_progress(
+            shop_state=shop_state,
+            yesterday_orders=yesterday_orders,
+            market_state=market_state,
+        )
+        briefing = self._briefing_builder.build(
+            run_id=run_id,
+            shop_id=shop_id,
+            shop_name=shop_state.shop_name,
+            day=current_day.day,
+            balance_summary=balance_summary,
+            yesterday_orders=yesterday_orders,
+            objective_progress=objective_progress,
+            listing_changes=listing_changes,
+            new_reviews=new_reviews,
+            market_movements=_build_market_movements(market_state),
+            notes=tuple(
+                _format_note(note)
+                for note in self._memory.read_notes(shop_id=shop_id, limit=5)
+            ),
+        )
+        return LiveBriefingBuildResult(
+            briefing=briefing,
+            shop_state=shop_state,
+            market_state=market_state,
+        )
+
+    def _build_shop_state_snapshot(
+        self,
+        *,
+        shop: Mapping[str, Any],
+        listings: tuple[Any, ...],
+        current_day: int,
+        current_day_date: str,
+        balance_summary: BalanceSummary,
+    ) -> ShopStateSnapshot:
+        listing_snapshots = tuple(
+            ListingSnapshot(
+                listing_id=int(_mapping(item, "listing")["listing_id"]),
+                title=str(_mapping(item, "listing")["title"]),
+                state=str(_mapping(item, "listing")["state"]),
+                price=float(_mapping(item, "listing").get("price", 0.0)),
+                quantity=int(_mapping(item, "listing").get("quantity", 0)),
+                views=int(_mapping(item, "listing").get("views", 0)),
+                favorites=int(_mapping(item, "listing").get("favorites", 0)),
+                updated_at=str(_mapping(item, "listing").get("updated_at", "")),
+            )
+            for item in listings
+        )
+        return ShopStateSnapshot(
+            shop_id=_parse_shop_id(shop["shop_id"]),
+            shop_name=str(shop["shop_name"]),
+            day=current_day,
+            simulation_date=current_day_date,
+            balance_summary=balance_summary,
+            total_sales_count=int(shop.get("total_sales_count", 0)),
+            review_count=int(shop.get("review_count", 0)),
+            review_average=(
+                None
+                if shop.get("review_average") is None
+                else float(shop["review_average"])
+            ),
+            active_listing_count=int(shop.get("listing_active_count", 0)),
+            draft_listing_count=sum(
+                1 for snapshot in listing_snapshots if snapshot.state == "draft"
+            ),
+            listings=listing_snapshots,
+        )
+
+    @staticmethod
+    def _collect_paginated(
+        fetch_page: Callable[..., Any],
+        field_name: str,
+        **arguments: Any,
+    ) -> list[Any]:
+        page_size = 100
+        offset = 0
+        results: list[Any] = []
+
+        while True:
+            payload = _mapping(
+                fetch_page(limit=page_size, offset=offset, **arguments),
+                field_name,
+            )
+            page_results = list(payload.get("results", ()))
+            results.extend(page_results)
+            total = int(payload.get("count", len(results)))
+            if not page_results or len(results) >= total:
+                return results
+            offset += len(page_results)
 
 
 def morning_briefing_from_payload(payload: Mapping[str, Any]) -> MorningBriefing:
@@ -316,3 +553,213 @@ def _parse_shop_id(value: Any) -> ShopId:
     if isinstance(value, (int, str)):
         return value
     raise ValueError("shop_id must be a string or integer.")
+
+
+def _items_from_page(payload: Any, field_name: str) -> tuple[Any, ...]:
+    value = _mapping(payload, field_name)
+    results = value.get("results", ())
+    if not isinstance(results, (list, tuple)):
+        raise ValueError(f"{field_name} results must be iterable.")
+    return tuple(results)
+
+
+def _build_balance_summary(
+    *,
+    orders: tuple[Any, ...],
+    payments: tuple[Any, ...],
+    currency_code: str,
+) -> BalanceSummary:
+    posted_total = sum(
+        float(_mapping(item, "payment").get("amount", 0.0)) for item in payments
+    )
+    posted_receipt_ids = {
+        int(_mapping(item, "payment").get("receipt_id", 0)) for item in payments
+    }
+    pending_total = sum(
+        float(_mapping(item, "order").get("total_price", 0.0))
+        for item in orders
+        if bool(_mapping(item, "order").get("was_paid"))
+        and int(_mapping(item, "order").get("receipt_id", 0)) not in posted_receipt_ids
+        and str(_mapping(item, "order").get("status", "")) != "refunded"
+    )
+    return BalanceSummary(
+        available=posted_total,
+        pending=pending_total,
+        currency_code=currency_code,
+    )
+
+
+def _summarize_orders(orders: Iterable[Any]) -> OrderSummary:
+    order_values = [
+        _mapping(item, "order")
+        for item in orders
+    ]
+    order_count = len(order_values)
+    revenue = sum(float(item.get("total_price", 0.0)) for item in order_values)
+    refunded_order_count = sum(1 for item in order_values if item.get("status") == "refunded")
+    average_order_value = None if order_count == 0 else revenue / order_count
+    return OrderSummary(
+        order_count=order_count,
+        revenue=round(revenue, 2),
+        average_order_value=(
+            None if average_order_value is None else round(average_order_value, 2)
+        ),
+        refunded_order_count=refunded_order_count,
+    )
+
+
+def _summarize_review(review: Any) -> ReviewSummary:
+    value = _mapping(review, "review")
+    return ReviewSummary(
+        review_id=_parse_identifier(value["review_id"]),
+        listing_id=int(value["listing_id"]),
+        rating=float(value["rating"]),
+        excerpt=str(value.get("review", "")),
+        buyer_name=None if value.get("buyer_name") is None else str(value["buyer_name"]),
+    )
+
+
+def _build_listing_changes(
+    *,
+    listings: tuple[Any, ...],
+    previous_shop_state: ShopStateSnapshot | None,
+    yesterday_orders: tuple[Any, ...],
+) -> tuple[ListingPerformanceChange, ...]:
+    previous_by_id = (
+        {}
+        if previous_shop_state is None
+        else {listing.listing_id: listing for listing in previous_shop_state.listings}
+    )
+    order_stats_by_listing: dict[int, dict[str, float]] = {}
+    for order in yesterday_orders:
+        for line_item in _mapping(order, "order").get("line_items", ()):
+            value = _mapping(line_item, "order_line_item")
+            listing_id = int(value["listing_id"])
+            stats = order_stats_by_listing.setdefault(
+                listing_id,
+                {"orders": 0.0, "revenue": 0.0},
+            )
+            quantity = int(value.get("quantity", 1))
+            stats["orders"] += quantity
+            stats["revenue"] += float(value.get("price", 0.0)) * quantity
+
+    changes: list[ListingPerformanceChange] = []
+    for item in listings:
+        listing = _mapping(item, "listing")
+        listing_id = int(listing["listing_id"])
+        previous = previous_by_id.get(listing_id)
+        views_delta = (
+            0
+            if previous is None
+            else int(listing.get("views", 0)) - previous.views
+        )
+        favorites_delta = (
+            0
+            if previous is None
+            else int(listing.get("favorites", 0)) - previous.favorites
+        )
+        orders_delta = int(order_stats_by_listing.get(listing_id, {}).get("orders", 0.0))
+        revenue_delta = float(order_stats_by_listing.get(listing_id, {}).get("revenue", 0.0))
+        state = str(listing.get("state", "draft"))
+        state_changed = previous is not None and previous.state != state
+        if not (
+            state_changed
+            or views_delta
+            or favorites_delta
+            or orders_delta
+            or revenue_delta
+        ):
+            continue
+        changes.append(
+            ListingPerformanceChange(
+                listing_id=listing_id,
+                title=str(listing["title"]),
+                state=state,
+                views_delta=views_delta,
+                favorites_delta=favorites_delta,
+                orders_delta=orders_delta,
+                revenue_delta=round(revenue_delta, 2),
+            )
+        )
+    return tuple(changes)
+
+
+def _build_market_movements(market_state: GlobalMarketState) -> tuple[MarketMovement, ...]:
+    taxonomy_by_id = {
+        item.taxonomy_id: item for item in market_state.market_snapshot.taxonomy
+    }
+    movements: list[MarketMovement] = []
+    for trend in market_state.trend_state.active_trends:
+        details: list[str] = [f"demand x{trend.demand_multiplier:.2f}"]
+        taxonomy = (
+            None if trend.taxonomy_id is None else taxonomy_by_id.get(trend.taxonomy_id)
+        )
+        if taxonomy is not None:
+            details.append(
+                f"{taxonomy.listing_count} active listings avg ${taxonomy.average_price:.2f}"
+            )
+        if trend.tags:
+            details.append(f"tags: {', '.join(trend.tags[:3])}")
+        movements.append(
+            MarketMovement(
+                headline=f"Trend watch: {trend.label}",
+                summary="; ".join(details),
+                urgency="high" if trend.demand_multiplier >= 1.25 else "watch",
+            )
+        )
+    return tuple(movements)
+
+
+def _build_objective_progress(
+    *,
+    shop_state: ShopStateSnapshot,
+    yesterday_orders: OrderSummary,
+    market_state: GlobalMarketState,
+) -> ObjectiveProgress:
+    balance = 0.0 if shop_state.balance_summary.available is None else shop_state.balance_summary.available
+    diagnostics = [
+        f"active_listings={shop_state.active_listing_count}",
+        f"draft_listings={shop_state.draft_listing_count}",
+        (
+            "review_average=n/a"
+            if shop_state.review_average is None
+            else f"review_average={shop_state.review_average:.2f}"
+        ),
+        f"yesterday_orders={yesterday_orders.order_count}",
+    ]
+    top_trend = market_state.trend_state.active_trends[0].label if market_state.trend_state.active_trends else None
+    status_summary = (
+        f"Available balance is ${balance:.2f}; "
+        f"{yesterday_orders.order_count} orders brought in ${yesterday_orders.revenue:.2f} yesterday."
+    )
+    if top_trend:
+        status_summary = f"{status_summary} Top market watch: {top_trend}."
+    return ObjectiveProgress(
+        primary_objective="Grow ending balance",
+        metric_name="available_balance",
+        current_value=round(balance, 2),
+        supporting_diagnostics=tuple(diagnostics),
+        status_summary=status_summary,
+    )
+
+
+def _format_note(note: NoteRecord) -> str:
+    prefix = "Undated" if note.created_day is None else f"Day {note.created_day}"
+    return f"{prefix} - {note.title}: {note.body}"
+
+
+def _previous_day_window(current_day_date: str) -> tuple[datetime, datetime]:
+    current_day = _parse_datetime(current_day_date)
+    return current_day - timedelta(days=1), current_day
+
+
+def _timestamp_in_range(
+    value: Any,
+    *,
+    start: datetime,
+    end: datetime,
+) -> bool:
+    if value is None:
+        return False
+    timestamp = _parse_datetime(value)
+    return start <= timestamp < end
