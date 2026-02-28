@@ -1,0 +1,356 @@
+@import "tailwindcss";
+
+/* ── Self-hosted Geist fonts from npm package ───────── */
+
+@font-face {
+  font-family: "Geist Sans";
+  src: url("/node_modules/geist/dist/fonts/geist-sans/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/node_modules/geist/dist/fonts/geist-mono/GeistMono-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Pixel Square";
+  src: url("/node_modules/geist/dist/fonts/geist-pixel/GeistPixel-Square.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Pixel Grid";
+  src: url("/node_modules/geist/dist/fonts/geist-pixel/GeistPixel-Grid.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Pixel Circle";
+  src: url("/node_modules/geist/dist/fonts/geist-pixel/GeistPixel-Circle.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Pixel Line";
+  src: url("/node_modules/geist/dist/fonts/geist-pixel/GeistPixel-Line.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Pixel Triangle";
+  src: url("/node_modules/geist/dist/fonts/geist-pixel/GeistPixel-Triangle.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@theme {
+  /* Light warm surfaces */
+  --color-cream: #FAFAF6;
+  --color-white: #FFFFFF;
+  --color-warm-50: #F5F3EE;
+  --color-warm-100: #ECEADE;
+
+  /* Mistral orange — single brand color */
+  --color-orange: #FF7000;
+  --color-orange-dark: #E56200;
+  --color-orange-light: #FF8F33;
+  --color-orange-50: #FFF4EB;
+
+  /* Fun accents */
+  --color-teal: #0EA5E9;
+  --color-teal-dim: rgba(14, 165, 233, 0.10);
+  --color-violet: #8B5CF6;
+  --color-violet-dim: rgba(139, 92, 246, 0.10);
+  --color-emerald: #10B981;
+  --color-emerald-dim: rgba(16, 185, 129, 0.10);
+  --color-rose: #F43F5E;
+  --color-rose-dim: rgba(244, 63, 94, 0.10);
+  --color-sky: #38BDF8;
+  --color-sky-dim: rgba(56, 189, 248, 0.10);
+  --color-amber: #F59E0B;
+
+  /* Borders */
+  --color-rule: rgba(160, 150, 140, 0.20);
+  --color-rule-bright: rgba(255, 112, 0, 0.25);
+
+  /* Text — warm charcoal (not black!) */
+  --color-ink: #2D2B2A;
+  --color-secondary: #6B6560;
+  --color-muted: #A8A099;
+
+  /* Fonts */
+  --font-display: "Geist Sans", system-ui, sans-serif;
+  --font-body: "Geist Sans", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --font-pixel: "Geist Pixel Square", monospace;
+  --font-pixel-grid: "Geist Pixel Grid", monospace;
+  --font-pixel-circle: "Geist Pixel Circle", monospace;
+  --font-pixel-line: "Geist Pixel Line", monospace;
+  --font-pixel-triangle: "Geist Pixel Triangle", monospace;
+
+  /* Radius — crisp */
+  --radius-card: 3px;
+  --radius-sm: 2px;
+
+  /* Shadows — warm and soft */
+  --shadow-card: 0 1px 3px rgba(45, 43, 42, 0.05), 0 4px 12px rgba(45, 43, 42, 0.03);
+  --shadow-card-hover: 0 8px 24px rgba(255, 112, 0, 0.08), 0 2px 8px rgba(45, 43, 42, 0.04);
+  --shadow-elevated: 0 12px 40px rgba(45, 43, 42, 0.08), 0 2px 8px rgba(45, 43, 42, 0.03);
+  --shadow-glow: 0 0 0 1px rgba(255, 112, 0, 0.15), 0 4px 20px rgba(255, 112, 0, 0.08);
+}
+
+/* ── Base ───────────────────────────────────────────── */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-muted) transparent;
+}
+
+body {
+  font-family: var(--font-body);
+  font-weight: 400;
+  background: var(--color-cream);
+  color: var(--color-ink);
+  min-height: 100dvh;
+}
+
+::selection {
+  background: var(--color-orange);
+  color: white;
+}
+
+/* ── Blueprint Grid — orange monochrome ─────────────── */
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    /* Major grid */
+    linear-gradient(rgba(255, 112, 0, 0.07) 1.5px, transparent 1.5px),
+    linear-gradient(90deg, rgba(255, 112, 0, 0.07) 1.5px, transparent 1.5px),
+    /* Minor grid */
+    linear-gradient(rgba(255, 112, 0, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 112, 0, 0.025) 1px, transparent 1px);
+  background-size:
+    80px 80px,
+    80px 80px,
+    16px 16px,
+    16px 16px;
+}
+
+/* Warm ambient glow */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 15% 10%, rgba(255, 112, 0, 0.035) 0%, transparent 50%),
+    radial-gradient(ellipse at 85% 80%, rgba(255, 112, 0, 0.025) 0%, transparent 50%);
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Pixel font utility ─────────────────────────────── */
+
+.font-pixel { font-family: var(--font-pixel); }
+.font-pixel-grid { font-family: var(--font-pixel-grid); }
+.font-pixel-circle { font-family: var(--font-pixel-circle); }
+.font-pixel-line { font-family: var(--font-pixel-line); }
+.font-pixel-triangle { font-family: var(--font-pixel-triangle); }
+
+/* ── Card entrance — bouncy ─────────────────────────── */
+
+@keyframes card-in {
+  0% { opacity: 0; transform: translateY(16px) scale(0.97); }
+  60% { opacity: 1; transform: translateY(-3px) scale(1.005); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-card-in {
+  animation: card-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* ── Pulse for sim day ──────────────────────────────── */
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 112, 0, 0.25); }
+  50% { box-shadow: 0 0 0 8px rgba(255, 112, 0, 0); }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* ── Stagger children ───────────────────────────────── */
+
+.stagger > * { --i: 0; animation-delay: calc(var(--i) * 50ms); }
+.stagger > *:nth-child(1) { --i: 0; }
+.stagger > *:nth-child(2) { --i: 1; }
+.stagger > *:nth-child(3) { --i: 2; }
+.stagger > *:nth-child(4) { --i: 3; }
+.stagger > *:nth-child(5) { --i: 4; }
+.stagger > *:nth-child(6) { --i: 5; }
+.stagger > *:nth-child(7) { --i: 6; }
+.stagger > *:nth-child(8) { --i: 7; }
+.stagger > *:nth-child(9) { --i: 8; }
+.stagger > *:nth-child(10) { --i: 9; }
+.stagger > *:nth-child(11) { --i: 10; }
+.stagger > *:nth-child(12) { --i: 11; }
+
+/* ── Tech card — corner brackets ────────────────────── */
+
+.tech-card {
+  position: relative;
+  background: var(--color-white);
+  border: 1px solid var(--color-rule);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.tech-card:hover {
+  border-color: var(--color-rule-bright);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.tech-card::before,
+.tech-card::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.tech-card::before {
+  top: -1px;
+  left: -1px;
+  border-top: 2.5px solid var(--color-orange);
+  border-left: 2.5px solid var(--color-orange);
+}
+
+.tech-card::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 2.5px solid var(--color-orange);
+  border-right: 2.5px solid var(--color-orange);
+}
+
+/* ── Card hover lift ────────────────────────────────── */
+
+.card-lift {
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+  box-shadow: var(--shadow-card);
+}
+
+.card-lift:hover {
+  transform: translateY(-4px) rotate(-0.3deg);
+  box-shadow: var(--shadow-card-hover);
+  border-color: var(--color-rule-bright);
+}
+
+/* ── Product visual ─────────────────────────────────── */
+
+.product-visual {
+  position: relative;
+  overflow: hidden;
+}
+
+.product-visual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 50%, rgba(255, 255, 255, 0.2) 100%);
+  pointer-events: none;
+}
+
+/* ── Tag pill ───────────────────────────────────────── */
+
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--color-secondary);
+  background: var(--color-warm-50);
+  border: 1px solid var(--color-rule);
+  transition: all 0.2s ease;
+}
+
+.tag-pill:hover {
+  border-color: var(--color-orange);
+  color: var(--color-orange);
+  background: var(--color-orange-50);
+  transform: translateY(-1px);
+}
+
+/* ── Tabs ───────────────────────────────────────────── */
+
+.tab-active {
+  color: var(--color-orange);
+  border-bottom: 2.5px solid var(--color-orange);
+  font-weight: 600;
+}
+
+.tab-inactive {
+  color: var(--color-muted);
+  border-bottom: 2.5px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.tab-inactive:hover {
+  color: var(--color-secondary);
+  border-bottom-color: var(--color-rule);
+}
+
+/* ── Status dot pulse ───────────────────────────────── */
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+.dot-pulse {
+  animation: dot-pulse 1.5s ease-in-out infinite;
+}
+
+/* ── Number display ─────────────────────────────────── */
+
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* ── Shimmer text ───────────────────────────────────── */
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.text-shimmer {
+  background: linear-gradient(90deg, var(--color-orange) 0%, #F59E0B 25%, var(--color-orange) 50%, #F59E0B 75%, var(--color-orange) 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 4s linear infinite;
+}
