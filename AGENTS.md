@@ -4,14 +4,25 @@
 
 Botique is a hackathon project about autonomous AI agents running Etsy-like shops in a simulated marketplace.
 
-The project is inspired by the structure of VendingBench:
+The project is informed by adjacent agent-business work such as VendingBench:
 
 - a business-owner agent
 - operating inside an environment
 - acting through constrained tools
 - evaluated through business outcomes over time
 
-Botique differs in that it emphasizes creative and strategic decisions, not just operational optimization.
+Botique is not trying to recreate VendingBench. It emphasizes creative and strategic decisions, not just operational optimization.
+
+## Research-Informed Defaults
+
+Unless a doc says otherwise, prefer these defaults:
+
+- the world owns outcomes, delays, and failures
+- agents should optimize for one explicit business objective plus supporting diagnostics
+- simple notes/reminders come before complex memory systems
+- single-shop runs should be stable before richer competition or delegation
+- narrative events should enrich the simulation, not become the main mechanic
+- multi-business competition is a later expansion unless a doc explicitly promotes it into the initial build
 
 ## Read This First
 
@@ -27,7 +38,7 @@ The original concept document is `botique-initial-concept-draft.md`.
 
 ## Decision Status
 
-This file mixes actual decisions with recommended defaults for the MVP.
+This file mixes actual decisions with recommended defaults for the initial build.
 
 Treat them as:
 
@@ -37,11 +48,12 @@ Treat them as:
 
 ## Current Architecture
 
-Three major layers:
+Four logical systems plus one bridge layer:
 
-1. System 1: platform and simulation backend
-2. System 2: agent orchestrator
-3. Frontend: observation and demo interface
+1. System 1: platform API server
+2. System 2: simulation engine
+3. System 3: agent orchestrator
+4. System 4: frontend / operator layer
 
 Keep these boundaries clean.
 
@@ -49,15 +61,30 @@ Keep these boundaries clean.
 
 Application code, not AI.
 
+Here, "System 1" means the non-AI backend environment the agent acts on through tools.
+
 Responsibilities:
 
-- shop, listing, order, review, and customer state
-- ranking, purchases, and day resolution
-- seller-facing and control-facing APIs
+- seller-facing HTTP contract
+- request/response validation
+- routing reads and writes into marketplace state
+- control-facing endpoints where needed
 
 ### System 2
 
+Application code, not AI.
+
+Responsibilities:
+
+- shop, listing, order, review, and customer state
+- ranking, purchases, reviews, and trend shifts
+- simulation time and day resolution
+
+### System 3
+
 Application code that manages LLM agents.
+
+System 3 is the agent runtime layer. The simulated marketplace environment and its state belong to Systems 1 and 2.
 
 Responsibilities:
 
@@ -66,15 +93,38 @@ Responsibilities:
 - per-day/per-turn execution loop
 - logging and memory
 
-### Frontend
+### System 4
 
 Human-facing dashboard and demo control surface.
+
+### Bridge Layer
+
+`seller_core` is the portability-aware client/CLI contract layer between the agent runtime and seller-facing APIs. It is not one of the four major systems.
+
+## Modularity Principle
+
+Each major Botique subsystem should be independently runnable, testable, and replaceable.
+
+That means:
+
+- `seller_core` is a standalone client/CLI contract layer
+- System 1 is a standalone seller-facing API server
+- System 2 is a standalone simulation/world engine with its own state and time model
+- System 3 is a standalone orchestrator that depends only on published tool/API contracts
+- System 4 depends on published backend/control interfaces, not internal implementation details
+
+Implications:
+
+- modules communicate through explicit contracts, not hidden shared state
+- implementation language may differ across modules
+- each module should have a useful standalone mode for development and testing
+- swapping one implementation should not require redesigning the others
 
 ## Tool Surface Rules
 
 There are two agent-facing tool surfaces and one non-agent-facing runtime surface.
 
-### `agent_tools/core`
+### `seller_core`
 
 Portable, seller-facing tools. This is the Etsy-compatible subset in spirit and structure.
 
@@ -94,7 +144,7 @@ Examples:
 
 Status: `Recommended default` on exact tool list, `Current decision` on having a portable core surface
 
-### `agent_tools/extensions`
+### `botique_extensions`
 
 Botique-only seller tools. Useful for research and simulation richness, but not part of the portability story.
 
@@ -143,13 +193,13 @@ The claim is narrower:
 
 Keep this honest:
 
-- do not put simulation-only convenience tools into `agent_tools/core`
+- do not put simulation-only convenience tools into `seller_core`
 - do not name public tool surfaces after Etsy
-- keep Etsy operation mapping internal, for example in `compat/etsy_v3.py`
+- keep Etsy operation mapping internal, for example in `seller_core/compat/etsy_v3.py`
 
-## MVP Priorities
+## Initial Build Priorities
 
-Prefer a narrow digital-first MVP.
+Prefer a narrow digital-first initial build.
 
 Start with:
 
@@ -207,7 +257,7 @@ Use:
 - `docs/agent-tools.md` for tool changes
 - `docs/simulation-model.md` for market logic
 - `docs/agent-loop.md` for prompt/turn/briefing changes
-- `docs/mvp-scope.md` for scope changes
+- `docs/mvp-scope.md` for initial-scope changes
 
 ## Parallel Work Guidance
 

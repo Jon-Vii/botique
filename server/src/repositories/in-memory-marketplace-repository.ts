@@ -1,0 +1,208 @@
+import type {
+  Listing,
+  ListingInventory,
+  Order,
+  Payment,
+  Review,
+  Shop,
+  StoredShop,
+  TaxonomyNode
+} from "../schemas/domain";
+import type {
+  CreateListingData,
+  MarketplaceRepository,
+  StoredMarketplaceState,
+  UpdateListingData,
+  UpdateShopData
+} from "./types";
+
+function clone<T>(value: T): T {
+  return structuredClone(value);
+}
+
+function average(values: number[]): number {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  return Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2));
+}
+
+export class InMemoryMarketplaceRepository implements MarketplaceRepository {
+  private readonly state: StoredMarketplaceState;
+
+  constructor(seedState?: StoredMarketplaceState) {
+    this.state = clone(
+      seedState ?? {
+        shops: [],
+        listings: [],
+        orders: [],
+        reviews: [],
+        payments: [],
+        taxonomyNodes: []
+      }
+    );
+  }
+
+  async getShop(shopId: number): Promise<Shop | null> {
+    const shop = this.state.shops.find((item) => item.shop_id === shopId);
+    return shop ? this.hydrateShop(shop) : null;
+  }
+
+  async listShops(): Promise<Shop[]> {
+    return this.state.shops.map((shop) => this.hydrateShop(shop));
+  }
+
+  async updateShop(shopId: number, patch: UpdateShopData): Promise<Shop | null> {
+    const index = this.state.shops.findIndex((item) => item.shop_id === shopId);
+    if (index === -1) {
+      return null;
+    }
+
+    this.state.shops[index] = {
+      ...this.state.shops[index],
+      ...patch,
+      updated_at: new Date().toISOString()
+    };
+
+    return this.hydrateShop(this.state.shops[index]);
+  }
+
+  async getListing(listingId: number): Promise<Listing | null> {
+    const listing = this.state.listings.find((item) => item.listing_id === listingId);
+    return listing ? clone(listing) : null;
+  }
+
+  async listShopListings(shopId: number): Promise<Listing[]> {
+    return this.state.listings
+      .filter((listing) => listing.shop_id === shopId)
+      .map((listing) => clone(listing));
+  }
+
+  async listActiveListings(): Promise<Listing[]> {
+    return this.state.listings
+      .filter((listing) => listing.state === "active")
+      .map((listing) => clone(listing));
+  }
+
+  async createListing(data: CreateListingData): Promise<Listing> {
+    const listingId = this.nextId(this.state.listings.map((item) => item.listing_id));
+    const timestamp = new Date().toISOString();
+    const listing: Listing = {
+      ...clone(data),
+      listing_id: listingId,
+      created_at: timestamp,
+      updated_at: timestamp
+    };
+    this.state.listings.push(listing);
+    return clone(listing);
+  }
+
+  async updateListing(shopId: number, listingId: number, patch: UpdateListingData): Promise<Listing | null> {
+    const index = this.state.listings.findIndex(
+      (listing) => listing.shop_id === shopId && listing.listing_id === listingId
+    );
+    if (index === -1) {
+      return null;
+    }
+
+    this.state.listings[index] = {
+      ...this.state.listings[index],
+      ...clone(patch),
+      updated_at: new Date().toISOString()
+    };
+
+    return clone(this.state.listings[index]);
+  }
+
+  async deleteListing(shopId: number, listingId: number): Promise<boolean> {
+    const index = this.state.listings.findIndex(
+      (listing) => listing.shop_id === shopId && listing.listing_id === listingId
+    );
+    if (index === -1) {
+      return false;
+    }
+
+    this.state.listings.splice(index, 1);
+    return true;
+  }
+
+  async replaceListingInventory(listingId: number, inventory: ListingInventory): Promise<ListingInventory | null> {
+    const listing = this.state.listings.find((item) => item.listing_id === listingId);
+    if (!listing) {
+      return null;
+    }
+
+    listing.inventory = clone(inventory);
+    listing.quantity =
+      inventory.products.reduce(
+        (sum, product) =>
+          sum + product.offerings.reduce((offeringSum, offering) => offeringSum + offering.quantity, 0),
+        0
+      ) || listing.quantity;
+    const firstOffering = inventory.products[0]?.offerings[0];
+    if (firstOffering) {
+      listing.price = firstOffering.price;
+    }
+    listing.updated_at = new Date().toISOString();
+    return clone(listing.inventory);
+  }
+
+  async listOrders(shopId: number): Promise<Order[]> {
+    return this.state.orders
+      .filter((order) => order.shop_id === shopId)
+      .map((order) => clone(order));
+  }
+
+  async getOrder(shopId: number, receiptId: number): Promise<Order | null> {
+    const order = this.state.orders.find(
+      (item) => item.shop_id === shopId && item.receipt_id === receiptId
+    );
+    return order ? clone(order) : null;
+  }
+
+  async listReviews(shopId: number): Promise<Review[]> {
+    return this.state.reviews
+      .filter((review) => review.shop_id === shopId)
+      .map((review) => clone(review));
+  }
+
+  async listPayments(shopId: number): Promise<Payment[]> {
+    return this.state.payments
+      .filter((payment) => payment.shop_id === shopId)
+      .map((payment) => clone(payment));
+  }
+
+  async listTaxonomyNodes(): Promise<TaxonomyNode[]> {
+    return this.state.taxonomyNodes.map((node) => clone(node));
+  }
+
+  async snapshot(): Promise<StoredMarketplaceState> {
+    return clone(this.state);
+  }
+
+  private nextId(ids: number[]): number {
+    return ids.reduce((max, value) => (value > max ? value : max), 0) + 1;
+  }
+
+  private hydrateShop(shop: StoredShop): Shop {
+    const listings = this.state.listings.filter((item) => item.shop_id === shop.shop_id);
+    const reviews = this.state.reviews.filter((item) => item.shop_id === shop.shop_id);
+    const orders = this.state.orders.filter((item) => item.shop_id === shop.shop_id && item.was_paid);
+
+    return {
+      ...clone(shop),
+      listing_active_count: listings.filter((item) => item.state === "active").length,
+      total_sales_count: orders.reduce(
+        (sum, order) => sum + order.line_items.reduce((lineSum, lineItem) => lineSum + lineItem.quantity, 0),
+        0
+      ),
+      review_average: average(reviews.map((review) => review.rating)),
+      review_count: reviews.length
+    };
+  }
+}
+
+export function createInMemoryMarketplaceRepository(seedState?: StoredMarketplaceState) {
+  return new InMemoryMarketplaceRepository(seedState);
+}

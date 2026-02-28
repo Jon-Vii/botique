@@ -1,6 +1,6 @@
 # Botique — Hackathon Reference Document
 
-**Project**: Autonomous organizations — AI agents that independently run competing Etsy-like shops in a simulated marketplace. Each shop is a minimal autonomous org: a boss agent making strategic decisions, optionally hiring specialist sub-agents, creating products, managing customers, and competing for market share. The platform API mirrors real Etsy's API signatures, making the agent code theoretically portable to real Etsy.
+**Project**: Autonomous organizations — AI agents that independently run Etsy-like shops in a simulated marketplace. Each shop is a minimal autonomous org: a boss agent making strategic decisions, optionally hiring specialist sub-agents, creating products, and managing customers. Rich multi-business competition is an important roadmap direction, but it does not need to be the first thing the initial build proves. The platform is Botique-first, with a seller-facing surface informed by Etsy's API patterns so the agent logic is portability-aware rather than tightly Botique-specific.
 
 **Solo, 48 hours, any Mistral model, vibe-coded with AI coding agents (Claude Code + Codex hybrid).**
 
@@ -9,20 +9,31 @@
 ## The Five Parts (High Level)
 
 1. **Autonomous organizations** — AI agents that independently run businesses, making strategic decisions, creating products, handling customers, hiring specialists. The core unit.
-2. **A realistic environment** — an Etsy-shaped API the organizations operate through. Real endpoint signatures, theoretically portable to the actual platform.
-3. **An economic simulation** — the world behind the environment. Demand models, customer personas, trends that shift, a marketplace where organizations compete.
+2. **A realistic environment** — an Etsy-informed seller API the organizations operate through. Compatibility-minded shapes and data conventions, without requiring a literal replica of the real platform.
+3. **An economic simulation** — the world behind the environment. Demand models, customer personas, trends that shift, and a seeded market the organizations react to. Richer direct competition can be layered in later.
 4. **A product creation space** — agents ideate and create products in a semi-structured combinatorial space. Creative-strategic decisions, not just pricing knobs. The key differentiator from existing work.
-5. **An observation layer** — frontend where humans watch it unfold, interact as customer, inject events, see how organizations self-structure and compete.
+5. **An observation layer** — frontend where humans watch it unfold, interact as customer, inject events, and see how organizations self-structure. Rich inter-shop competition can become part of that story later.
 
-**Where the thinking power goes**: Not the infrastructure. The platform API, database, frontend — those are solved problems and highly AI-codeable. The hard part is everything surrounding what the agents see and do: the system prompt, the morning briefing format, the tool response formatting, the turn structure, how strategy evaluation works, how sub-agent delegation works. This is what hackathon judges will care about — "what is the agent actually doing and why?" If agents are visibly strategizing, adapting, delegating, competing, that's the win.
+**Where the thinking power goes**: Not the infrastructure. The platform API, database, frontend — those are solved problems and highly AI-codeable. The hard part is everything surrounding what the agents see and do: the system prompt, the morning briefing format, the tool response formatting, the turn structure, how strategy evaluation works, how sub-agent delegation works. This is what hackathon judges will care about — "what is the agent actually doing and why?" If agents are visibly strategizing and adapting, that's already a win; richer competition can deepen the story later.
 
-**What makes this different from VendingBench**: VendingBench is closer to constrained optimization — there's an objectively good strategy and the question is whether the agent finds it. Botique introduces genuine open-endedness where creativity matters and success is probabilistic. That's harder to benchmark cleanly, but it's *much closer to how agents will actually be used in the real world*. Real businesses don't have deterministic demand curves and known-optimal strategies.
+**How VendingBench informs this work**: Botique is not trying to mimic VendingBench. It is useful as adjacent prior work because it surfaces general lessons about tool-constrained agents operating over time in business environments. Botique differs in the center of gravity: VendingBench is closer to constrained optimization, while Botique introduces genuine open-endedness where creativity matters and success is probabilistic. That's harder to benchmark cleanly, but it's *much closer to how agents will actually be used in the real world*. Real businesses don't have deterministic demand curves and known-optimal strategies.
+
+## Research-Informed Defaults
+
+These are defaults informed by adjacent work, not constraints copied from it:
+
+- the world owns outcomes, delays, and failures
+- agents should optimize for one explicit business objective plus supporting diagnostics
+- simple notes and reminders come before complex memory systems
+- a single-shop loop should be stable before richer competition or delegation
+- narrative events should enrich the simulation, not replace formula-driven core mechanics
+- multi-business competition is a roadmap expansion unless explicitly pulled forward
 
 ---
 
 ## Architecture Overview
 
-Three distinct systems, cleanly separated:
+Four logical systems plus one bridge layer:
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -33,24 +44,27 @@ Three distinct systems, cleanly separated:
 └──────────────────────┬──────────────────────────────┘
                        │ WebSocket + REST
 ┌──────────────────────┴──────────────────────────────┐
-│  SYSTEM 1: BOTIQUE PLATFORM                         │
-│  FastAPI server implementing Etsy-shaped REST API   │
-│  + Marketplace engine (demand, search ranking,      │
-│    customer sim, reviews, trends)                   │
-│  + Database (SQLite or in-memory)                   │
+│  SYSTEM 1: PLATFORM API SERVER                      │
+│  Seller-facing HTTP contract, validation, routing   │
+│  of reads/writes into marketplace state             │
+└──────────────────────┬──────────────────────────────┘
+                       │ Internal calls
+┌──────────────────────┴──────────────────────────────┐
+│  SYSTEM 2: SIMULATION ENGINE                        │
+│  The world itself: shops, listings, orders,         │
+│  reviews, search, demand, trends, and day           │
+│  resolution                                          │
 └──────────────────────┬──────────────────────────────┘
                        │ REST API calls
 ┌──────────────────────┴──────────────────────────────┐
-│  CLI TOOL LAYER                                     │
-│  Python functions wrapping API calls                │
-│  Matching Etsy endpoint signatures 1:1              │
-│  Controls what each agent role can access           │
+│  BRIDGE LAYER: SELLER TOOLING / CLI                 │
+│  Botique-first tool names with portability-aware    │
+│  seller contract mapping                            │
 └──────────────────────┬──────────────────────────────┘
                        │ Mistral function calling
 ┌──────────────────────┴──────────────────────────────┐
-│  SYSTEM 2: AGENT ORCHESTRATOR                       │
+│  SYSTEM 3: AGENT ORCHESTRATOR                       │
 │  Custom Python loop (NOT Mistral Agents API)        │
-│  - Simulation clock (discrete days)                 │
 │  - Agent turn management                            │
 │  - Optional delegation / sub-agent support          │
 │  - Context window management                        │
@@ -58,7 +72,11 @@ Three distinct systems, cleanly separated:
 └─────────────────────────────────────────────────────┘
 ```
 
-**Key principle**: System 1 doesn't know its clients are LLMs. System 2 doesn't know the marketplace is simulated. The CLI layer is the bridge. Swapping the CLI layer's backend from simulated Botique to real Etsy should require zero changes to agent code.
+**Key principle**: Systems 1 and 2 form the non-AI environment. System 3 runs agents against that environment through the bridge layer. Swapping the bridge layer's backend from simulated Botique to another Etsy-like seller platform should require minimal or no changes to agent code.
+
+**Key principle**: Systems 1 and 2 form the non-AI environment. System 3 runs agents against that environment through the bridge layer. System 1 should not care whether its client is an LLM, and System 2 should not care whether the marketplace is being observed by a human, an orchestrator, or another system. Swapping the bridge layer's backend from simulated Botique to another Etsy-like seller platform should require minimal or no changes to agent code.
+
+**The simulation engine is where many open design decisions live.** It determines whether agents experience an interesting, responsive world or a flat one. The demand model, trend mechanics, and customer persona behavior are what create the pressure that forces agents to strategize, adapt, and make interesting decisions. A boring simulation produces boring agents.
 
 ---
 
@@ -66,22 +84,25 @@ Three distinct systems, cleanly separated:
 
 - **Own agentic loop**, not Mistral Agents API. We need full control over simulation clock, turn ordering, context windows, and logging.
 - **Mistral chat completions with function calling** for agent decisions.
-- **Etsy API signature matching** — tool names and parameters map 1:1 to real Etsy endpoints.
+- **Etsy-informed compatibility** — the seller surface should be shaped by Etsy's seller API patterns and data model conventions without claiming a literal 1:1 replica everywhere.
 - **Discrete day-based simulation** — each day: morning briefing → N agent actions → day resolves.
-- **Probabilistic demand + LLM for narrative events** (VendingBench pattern: math for high-frequency sales, LLM for low-frequency DMs/reviews/complaints).
-- **Simple memory** — `write_note` / `read_notes` / `set_reminder`. No complex vector DB (VendingBench showed elaborate memory hurt performance).
-- **Sub-agent spawning costs simulated salary** — hiring eats into margin.
+- **Probabilistic demand + optional narrative events** — formula-driven core mechanics, with narrative generation reserved for lower-frequency events where it adds texture.
+- **Simple memory** — `write_note` / `read_notes` / `set_reminder`. Keep memory inspectable and legible before adding more complex retrieval.
+- **Etsy-informed compatibility** — Botique's core seller surface is shaped by Etsy endpoint and data-model patterns, while public naming stays Botique-first.
+- **Discrete day-based simulation** — each day: morning briefing → N agent actions → day resolves.
+- **Probabilistic demand + optional narrative events** — formula-driven core mechanics, with narrative generation reserved for lower-frequency events where it adds texture.
+- **Simple memory** — `write_note` / `read_notes` / `set_reminder`. Keep memory inspectable and legible before adding more complex retrieval.
 - **Agents create products** — they ideate, write listings, set prices. This is the key differentiator from VendingBench where agents sell pre-existing products.
 
 ---
 
 ## Agent Communication Design
 
-Two channels, matching how a real Etsy seller would communicate:
+One core channel is already clear, and one optional channel exists if delegation is added:
 
 **Agent ↔ Customer**: Through the platform's messaging system (mirrors Etsy's buyer-seller messages). Agents read and reply to DMs via `read_messages` / `send_message` tools. Feels natural — this is how Etsy actually works.
 
-**Agent ↔ Sub-agent**: Through the tool call interface itself. The main agent calls `delegate_task(agent="copywriter", instruction="improve the listing for mushroom stickers")` and gets a result back. No need to simulate a whole Slack or email system. The tool calls *are* the communication. This is clean and keeps the focus on the decisions, not the plumbing.
+**Agent ↔ Sub-agent (if added later)**: Through the tool call interface itself. The main agent could call `delegate_task(agent="copywriter", instruction="improve the listing for mushroom stickers")` and get a result back. No need to simulate a whole Slack or email system. The tool calls can be the communication. This keeps the focus on decisions, not plumbing.
 
 Simulated email (like VendingBench) doesn't fit here — VendingBench uses email because a vending machine operator would realistically email suppliers. An Etsy seller messages customers through the platform and manages their team internally.
 
@@ -103,11 +124,11 @@ The agent isn't just calling tools in sequence. There are distinct modes of thin
 
 **Reflect** — did that work? After I lowered prices, did sales recover? After I hired a market researcher, did I get useful intel? This feeds back into the next cycle.
 
-**Design question**: make these modes explicit (e.g., a forced "strategy review" phase each day where the agent writes notes) or let the agent find its own rhythm through a good system prompt? VendingBench found that agents who naturally developed routines outperformed chaotic ones. Nudge the structure without hardcoding it — e.g., morning briefing ends with "what are your priorities today?" and the agent has a `write_strategy_note` tool.
+**Design question**: make these modes explicit (e.g., a forced "strategy review" phase each day where the agent writes notes) or let the agent find its own rhythm through a good system prompt? Adjacent work suggests agents do better with stable routines and legible prompts than with chaotic loops. Nudge the structure without hardcoding it — e.g., morning briefing ends with "what are your priorities today?" and the agent has a `write_strategy_note` tool.
 
 **Strategy evaluation is a big part of this.** The agent needs to be able to step back, evaluate whether its approach is working, and change course. Not just "call tools in a loop" but genuinely strategize — "my cottagecore listings are outselling my minimalist ones 3:1, should I double down or diversify?" This meta-reasoning about its own strategy is what makes the project interesting and what judges want to see. Tools like `write_strategy_note` and `read_notes` enable this, but the system prompt needs to encourage it.
 
-**What determines emergent behavior**: the system prompt, the briefing format, the tool design, the turn structure, the context window management. Everything between the agent and the environment. VendingBench's meltdowns weren't caused by bad infrastructure — they were caused by ambiguous briefings and confusing tool responses.
+**What determines emergent behavior**: the system prompt, the briefing format, the tool design, the turn structure, the context window management. Everything between the agent and the environment. A useful lesson from adjacent work is that many agent failures come from ambiguous briefings and confusing tool responses more than from raw model capability.
 
 ---
 
@@ -117,11 +138,11 @@ Three options, in order of complexity:
 
 **Option A: Single agent does everything.** One system prompt, full tool access, it decides when to create listings vs. answer customers vs. analyze competitors. Simpler to build, easiest to debug, most coherent behavior. Downside: doesn't demonstrate multi-agent anything.
 
-**Option B: Boss agent + on-demand sub-agents.** The VendingBench model. Boss has strategy and delegates specific tasks — "write me a listing for kawaii cat stickers" or "respond to this customer complaint." Sub-agents are stateless; they do a job and return a result. Shows delegation and resource allocation, but sub-agents are really expensive function calls, not true agents.
+**Option B: Boss agent + on-demand sub-agents.** Boss has strategy and delegates specific tasks — "write me a listing for kawaii cat stickers" or "respond to this customer complaint." Sub-agents are stateless; they do a job and return a result. Shows delegation and resource allocation, but sub-agents are really expensive function calls, not true agents.
 
 **Option C: Persistent agents with distinct roles.** Shop owner, copywriter, customer service, market researcher. Each has own context, memory, perspective. They communicate through a shared workspace. The copywriter might push back — "I think we should focus on minimalist styles." Most interesting architecturally, hardest to build. Needs coordination, shared state, turn ordering within a single shop.
 
-**Recommendation**: Start with Option B. It's buildable in 48 hours, demonstrates hiring/delegation, and the economic cost tradeoff is real. If working well by hour 20, evolve one shop toward Option C as a showcase — give one sub-agent persistent memory so it develops its own view.
+**Recommendation**: Do not make this a blocking early decision. Get the single owner-agent loop working first. If delegation is added after that, Option B is the most practical first step.
 
 ---
 
@@ -157,10 +178,12 @@ Use both AI coding agents, playing to their respective strengths:
 
 ### Scope of Etsy API Replica
 - **How many endpoints?** The full Etsy API has ~70. We need a minimum viable subset. See "Endpoint Selection" section below.
-- **How faithful to Etsy's data model?** Do we replicate taxonomy IDs, shipping profiles, return policies? Or simplify to just the core listing/shop/order/review entities? Recommendation: simplify aggressively. The *signatures* match Etsy, but the data model can be thinner.
+- **How faithful to Etsy's data model?** Do we replicate taxonomy IDs, shipping profiles, return policies? Or simplify to just the core listing/shop/order/review entities? Recommendation: simplify aggressively. The public surface should stay Etsy-informed, but the underlying data model can be thinner.
+- **How many endpoints?** The full Etsy API has ~70. We need a small initial subset. See "Endpoint Selection" section below.
+- **How faithful to Etsy's data model?** Do we replicate taxonomy IDs, shipping profiles, return policies? Or simplify to just the core listing/shop/order/review entities? Recommendation: simplify aggressively. The public surface should stay Etsy-informed, but the underlying data model can be thinner.
 
 ### Agent Architecture
-- **How many competing shops?** 3-5 is probably the sweet spot for a demo. More creates richer dynamics but costs more in API calls.
+- **How many competing shops?** For a richer later demo, 3-5 is probably the sweet spot. More creates richer dynamics but costs more in API calls. The initial build does not need full direct multi-shop competition as a requirement.
 - **Different agent personalities?** Different system prompts per shop (trend-chaser vs. artisan vs. price-undercutter) would create more interesting emergent behavior. Worth doing — it's just prompt engineering.
 - **Sub-agent role definitions?** Which specialist roles can be hired? Suggestion: copywriter (listing creation), customer service (DMs/reviews), market researcher (competitor analysis). Each gets a restricted tool set.
 - **Sub-agent pricing?** How much does hiring cost per day? This needs to be calibrated against revenue so it's a meaningful decision. Probably tuned during testing.
@@ -450,15 +473,15 @@ Given AI-assisted coding speed, implementation compresses significantly. Decisio
 
 ---
 
-## Key Lessons from VendingBench to Apply
+## Relevant Lessons from Adjacent Work
 
 1. **Simple memory beats complex memory.** Notes + reminders, not vector DBs.
 2. **The morning briefing is crucial.** Agents need a clear, structured summary of what happened overnight. Poor briefing → poor decisions.
-3. **One tool call per turn prevents chaos.** VendingBench V2 enforces this. Do the same.
+3. **One tool call per turn prevents chaos.** Recent agent-business environments found this helps keep behavior legible. Do the same unless there is a strong reason not to.
 4. **Variable time costs per action create interesting pressure.** Consider making some actions "expensive" in simulated time.
 5. **Agents will melt down.** Plan for it. Log everything. Have a "day limit" failsafe.
 6. **The most interesting findings are emergent.** Don't over-script. Let agents surprise you — price wars, trend copying, strategic hiring. These emergent behaviors ARE the demo.
-7. **Delivery timing ambiguity caused most VendingBench failures.** In Botique, be clear about when orders resolve, when reviews appear, when hired agents start working. Ambiguity in the briefing → agent confusion → doom spiral.
+7. **Timing ambiguity causes avoidable failures.** In Botique, be clear about when orders resolve, when reviews appear, when hired agents start working. Ambiguity in the briefing leads to agent confusion and brittle behavior.
 
 ---
 
@@ -476,7 +499,7 @@ Given AI-assisted coding speed, implementation compresses significantly. Decisio
 
 ## Quick Reference: What to Build First
 
-If you're 12 hours in and behind schedule, here's the **minimum viable demo**:
+If you're 12 hours in and behind schedule, here's the **smallest convincing demo**:
 
 1. Platform API with just 5 endpoints: `create_draft_listing`, `update_listing`, `get_shop_listings`, `search_marketplace`, `get_orders`
 2. Hardcoded customer simulation (no LLM, just probabilistic purchases)
@@ -484,3 +507,145 @@ If you're 12 hours in and behind schedule, here's the **minimum viable demo**:
 4. Simple React page showing the agent's shop and its listings updating over time
 
 Everything else is additive from there.
+
+---
+
+## Task Checklist
+
+### Pre-Hackathon
+- [ ] Read Mistral function calling docs — verify assumptions about tool use, structured output, multi-turn
+- [ ] Check Mistral example repos for agent patterns
+- [ ] Draft agent system prompt (shop owner persona)
+- [ ] Draft morning briefing format (what the agent sees each day)
+- [ ] Decide: which 2-3 product categories (recommend digital: stickers, prints, planners)
+- [ ] Decide: product attribute space (type × style × subject combinations)
+- [ ] Decide: demand model basics (how trend matching maps to purchase probability)
+- [ ] Decide: search ranking formula (relevance × price × quality × reviews weights)
+- [ ] Set up project repo, Python env, Mistral API key
+- [ ] Skim Etsy OpenAPI spec for the endpoints you're implementing
+
+### Phase 0 — Setup & Spec (Hours 0–2)
+- [ ] Lock in endpoint list (Tier 1 + select Tier 2)
+- [ ] Define data models: Shop, Listing, Order, Review, Message, CustomerPersona
+- [ ] Define the product attribute space as concrete enums/lists
+- [ ] Define trending combinations for initial simulation state
+- [ ] Write OpenAPI spec or at minimum a clear endpoint-by-endpoint spec doc
+- [ ] Project structure: `/platform` (System 1), `/tools` (CLI layer), `/orchestrator` (System 2), `/frontend`
+- [ ] Get a hello-world FastAPI server running
+
+### Phase 1 — Platform API + Simulation Engine (Hours 2–7)
+**Platform API (AI-codeable — give to Claude Code/Codex):**
+- [ ] Database layer (SQLite or in-memory dicts)
+- [ ] `POST /shops` — create shop
+- [ ] `GET /shops/{id}` — get shop info
+- [ ] `PUT /shops/{id}` — update shop
+- [ ] `POST /shops/{id}/listings` — create draft listing
+- [ ] `PUT /listings/{id}` — update listing (including state: draft→active)
+- [ ] `DELETE /listings/{id}` — delete listing
+- [ ] `GET /shops/{id}/listings` — get shop's listings
+- [ ] `GET /listings/{id}` — get single listing
+- [ ] `GET /listings/active` — search/browse marketplace (with query params)
+- [ ] `GET /shops/{id}/receipts` — get orders
+- [ ] `GET /shops/{id}/reviews` — get reviews
+- [ ] `GET /shops/{id}/messages` — read messages
+- [ ] `POST /shops/{id}/messages` — send message
+- [ ] `GET /marketplace/trends` — get trending categories/attributes
+
+**Simulation Engine (needs your design decisions):**
+- [ ] Customer persona generation — create 20-50 personas with structured attributes
+- [ ] Demand model — define: `purchase_probability = f(trend_match, price, listing_quality, reviews)`
+- [ ] Search ranking — define: `ranking_score = f(relevance, price_competitiveness, quality, review_count)`
+- [ ] Daily cycle resolver — process overnight: generate browsing sessions, purchases, revenue
+- [ ] Review generator — post-purchase, sentiment based on price/quality ratio (LLM for text, math for sentiment)
+- [ ] DM generator — occasional customer messages (pre-purchase questions, complaints, custom requests)
+- [ ] Trend engine — which attribute combinations are hot/declining (start static, add shifts as stretch)
+- [ ] Morning briefing generator — compile overnight sales, new reviews, new messages, balance, reminders
+- [ ] Test: manually create a shop + listings, run one simulated day, verify sensible output
+
+### Phase 2 — CLI Tool Layer (Hours 7–8)
+- [ ] Python function for each Tier 1 tool, matching Etsy signatures
+- [ ] Python function for each Tier 2 tool
+- [ ] Python functions for agent-only tools: `write_note`, `read_notes`, `set_reminder`, `get_balance`, `hire_agent`, `fire_agent`, `get_marketplace_trends`, `wait_for_next_day`
+- [ ] Each function: HTTP call to platform API → format response as readable text
+- [ ] Permission sets: define tool access per role (owner, copywriter, customer service, researcher)
+- [ ] Convert all tool functions to Mistral function-calling JSON schemas
+- [ ] Test: manually call each tool function, verify correct API call and readable output
+
+### Phase 3 — Agent Orchestrator (Hours 8–17)
+**Loop code (AI-codeable):**
+- [ ] Main simulation loop: for each day → advance_day → for each shop → briefing → agent turns
+- [ ] Mistral chat completions integration with function calling
+- [ ] Tool call execution: parse response → call CLI tool function → append result to messages
+- [ ] One tool call per turn enforcement
+- [ ] `wait_for_next_day` detection to end agent's turn
+- [ ] Context window management: sliding window, always keep system prompt + today's briefing
+- [ ] Structured JSON logging: every tool call, every agent response, timestamps
+
+**Prompt engineering (needs your brain):**
+- [ ] System prompt v1: shop owner persona, business goals, available tools, strategic framing
+- [ ] Morning briefing template: what info, what format, what closing prompt
+- [ ] Tool response formatting: how verbose, what context to include
+- [ ] Run first agent: 1 shop, 5 days — observe behavior, read logs
+- [ ] System prompt v2: fix any issues from first run
+- [ ] Run with 3 shops, 10 days — observe competition dynamics
+- [ ] Iterate on prompts until agents make sensible decisions
+
+**Sub-agent mechanics (optional later track):**
+- [ ] `hire_agent(role)` — deduct daily salary from balance, register sub-agent
+- [ ] `delegate_task(agent, instruction)` — spawn Mistral Small instance with restricted tools, return result
+- [ ] `fire_agent(agent)` — remove sub-agent, stop daily salary
+- [ ] Daily salary deduction in day resolution
+- [ ] Test: does an agent decide to hire? Does the sub-agent produce useful output?
+
+**Error handling:**
+- [ ] Mistral returns no tool call — what happens?
+- [ ] Mistral returns invalid tool name — what happens?
+- [ ] Rate limit handling
+- [ ] Maximum turns per day failsafe
+- [ ] Maximum days failsafe
+- [ ] Agent doom spiral detection (repeated identical actions?)
+
+### Phase 4 — Frontend (Hours 17–23)
+**Core views (AI-codeable — give to Codex in parallel):**
+- [ ] Marketplace browse view: all active listings across shops, prices, reviews
+- [ ] Shop dashboard: per-agent listings, sales chart, balance, hired sub-agents
+- [ ] Agent activity feed: real-time log of decisions and tool calls
+- [ ] Agent strategy viewer: show the agent's notes and reasoning
+- [ ] Message viewer: agent-customer conversations
+
+**Interactive elements:**
+- [ ] User can browse as customer, click "buy", send DMs to agents
+- [ ] User can inject market events ("holiday season", "trend shift", "new competitor")
+- [ ] WebSocket connection for real-time updates during simulation
+
+**Polish:**
+- [ ] Agent hierarchy/org chart visualization (who hired whom)
+- [ ] Sales comparison charts across competing shops
+- [ ] Trend indicator showing what's hot in the marketplace
+
+### Phase 5 — Polish & Demo Prep (Hours 23–40)
+**Tuning:**
+- [ ] End-to-end run: 3-5 shops, 10-30 days
+- [ ] Tune demand model: are purchase rates sensible? Too high/low?
+- [ ] Tune pricing: is the economic pressure real? Can agents go broke? Get rich?
+- [ ] Tune trends: do agents notice and respond to shifts?
+- [ ] Tune sub-agent costs: is hiring a meaningful decision or trivially cheap?
+- [ ] Fix any degenerate agent behaviors (doom loops, repetitive actions, nonsense listings)
+- [ ] Identify the most interesting emergent behavior — this becomes the demo highlight
+
+**Demo prep:**
+- [ ] Record a compelling simulation run (screen recording as backup)
+- [ ] Identify 2-3 "story moments" from the run to highlight in pitch
+- [ ] Architecture diagram (clean version of the three-system diagram plus CLI bridge)
+- [ ] Write README with project description, architecture, how to run
+- [ ] Practice 2-3 minute pitch
+- [ ] Clean up UI rough edges
+- [ ] Test demo flow end-to-end: can you run simulation and show results within pitch time?
+
+### Stretch Goals (if ahead of schedule)
+- [ ] Image generation: agents generate product images via FLUX for their listings
+- [ ] Evolve one shop to Option C (persistent sub-agents with own memory/perspective)
+- [ ] Trend shifts over simulation (seasonal, random events)
+- [ ] Agent personality differentiation (trend-chaser vs. artisan vs. price-undercutter system prompts)
+- [ ] Adversarial customer scenarios (scam attempts, unreasonable complaints)
+- [ ] Multiple simulation runs with different agent configs for comparison

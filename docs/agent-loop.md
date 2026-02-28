@@ -8,6 +8,16 @@ The AI should act as a business operator inside the environment, not as a narrat
 
 Status: `Current decision` on the overall framing. Exact loop details below are mostly `Recommended default`.
 
+## Loop Design Rules
+
+- keep the business objective explicit
+- keep tool descriptions stable across runs
+- let the environment own outcomes and timing
+- prefer simple inspectable memory over hidden retrieval
+- make day boundaries and end-of-day transitions explicit
+
+Status: `Recommended default`
+
 ## Main Loop
 
 Per simulated day:
@@ -35,6 +45,7 @@ Suggested sections:
 - new customer messages
 - reminders due today
 - notable market movement
+- current standing against the main business objective
 - prompt to choose priorities for the day
 
 Status: `Recommended default`
@@ -71,6 +82,8 @@ Recommended tools:
 
 This keeps the strategy legible and avoids complex retrieval systems during the hackathon.
 
+The goal is not sophisticated recall. The goal is to let the agent persist explicit plans, follow-ups, and lessons in a way judges and developers can inspect.
+
 ## Delegation
 
 Not required for the first successful run.
@@ -104,3 +117,4 @@ Logs are part of the product. They make strategy visible to judges and to you wh
 - reacting to stale information
 - overuse of extension tools instead of marketplace evidence
 - ambiguous timing around when orders, reviews, or delegated work appear
+- overfitting to narrative events while ignoring business metrics

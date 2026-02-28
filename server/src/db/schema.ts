@@ -1,0 +1,94 @@
+import { integer, jsonb, numeric, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
+
+import type { ListingInventory, Order, Payment, Review, TaxonomyNode } from "../schemas/domain";
+
+export const shopsTable = pgTable("shops", {
+  shopId: integer("shop_id").primaryKey(),
+  shopName: varchar("shop_name", { length: 128 }).notNull(),
+  title: text("title").notNull(),
+  announcement: text("announcement").notNull(),
+  saleMessage: text("sale_message").notNull(),
+  currencyCode: varchar("currency_code", { length: 3 }).notNull(),
+  digitalProductPolicy: text("digital_product_policy").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull()
+});
+
+export const listingsTable = pgTable("listings", {
+  listingId: integer("listing_id").primaryKey(),
+  shopId: integer("shop_id")
+    .references(() => shopsTable.shopId, { onDelete: "cascade" })
+    .notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  state: varchar("state", { length: 16 }).notNull(),
+  type: varchar("type", { length: 32 }).notNull(),
+  quantity: integer("quantity").notNull(),
+  price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+  currencyCode: varchar("currency_code", { length: 3 }).notNull(),
+  whoMade: varchar("who_made", { length: 64 }).notNull(),
+  whenMade: varchar("when_made", { length: 64 }).notNull(),
+  taxonomyId: integer("taxonomy_id").notNull(),
+  tags: jsonb("tags").$type<string[]>().notNull(),
+  materials: jsonb("materials").$type<string[]>().notNull(),
+  imageIds: jsonb("image_ids").$type<number[]>().notNull(),
+  views: integer("views").notNull(),
+  favorites: integer("favorites").notNull(),
+  url: text("url").notNull(),
+  inventory: jsonb("inventory").$type<ListingInventory>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull()
+});
+
+export const ordersTable = pgTable("orders", {
+  receiptId: integer("receipt_id").primaryKey(),
+  shopId: integer("shop_id")
+    .references(() => shopsTable.shopId, { onDelete: "cascade" })
+    .notNull(),
+  buyerName: text("buyer_name").notNull(),
+  status: varchar("status", { length: 16 }).notNull(),
+  wasPaid: integer("was_paid").notNull(),
+  wasShipped: integer("was_shipped").notNull(),
+  wasDelivered: integer("was_delivered").notNull(),
+  totalPrice: numeric("total_price", { precision: 10, scale: 2 }).notNull(),
+  currencyCode: varchar("currency_code", { length: 3 }).notNull(),
+  lineItems: jsonb("line_items").$type<Order["line_items"]>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull()
+});
+
+export const reviewsTable = pgTable("reviews", {
+  reviewId: integer("review_id").primaryKey(),
+  shopId: integer("shop_id")
+    .references(() => shopsTable.shopId, { onDelete: "cascade" })
+    .notNull(),
+  listingId: integer("listing_id")
+    .references(() => listingsTable.listingId, { onDelete: "cascade" })
+    .notNull(),
+  rating: integer("rating").notNull(),
+  review: text("review").notNull(),
+  buyerName: text("buyer_name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull()
+});
+
+export const paymentsTable = pgTable("payments", {
+  paymentId: integer("payment_id").primaryKey(),
+  shopId: integer("shop_id")
+    .references(() => shopsTable.shopId, { onDelete: "cascade" })
+    .notNull(),
+  receiptId: integer("receipt_id")
+    .references(() => ordersTable.receiptId, { onDelete: "cascade" })
+    .notNull(),
+  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+  currencyCode: varchar("currency_code", { length: 3 }).notNull(),
+  status: varchar("status", { length: 16 }).notNull(),
+  postedAt: timestamp("posted_at", { withTimezone: true }).notNull()
+});
+
+export const taxonomyNodesTable = pgTable("taxonomy_nodes", {
+  taxonomyId: integer("taxonomy_id").primaryKey(),
+  parentTaxonomyId: integer("parent_taxonomy_id"),
+  name: text("name").notNull(),
+  fullPath: text("full_path").notNull(),
+  level: integer("level").notNull()
+});

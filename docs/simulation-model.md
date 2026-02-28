@@ -39,6 +39,22 @@ Each shop has:
 - strategy notes and reminders
 - optional hired specialists later
 
+## Starting State
+
+Seed the world, not the agent.
+
+Recommended starting context:
+
+- one owned shop per evaluated agent
+- a small surrounding market of competitor shops and listings
+- taxonomy/category state
+- some prior business history such as orders or reviews
+- current simulation day and any active market conditions
+
+This gives the agent a business to run and a world to react to without making the orchestrator responsible for world setup.
+
+Status: `Recommended default`
+
 ## Customers
 
 Use structured personas instead of generic random users.
@@ -69,6 +85,21 @@ Purchase outcomes should be probabilistic, but based on deterministic features.
 
 Status: `Recommended default`
 
+## World-Owned Friction
+
+The simulation should own uncertainty and business friction.
+
+Examples:
+
+- delayed purchases instead of immediate perfect feedback
+- reviews arriving after orders, not at listing creation time
+- customers browsing without buying
+- occasional negative or ambiguous outcomes even after sensible choices
+
+This keeps the benchmark about operating inside a world, not just calling the right tool in the right order.
+
+Status: `Recommended default`
+
 ## Ranking Model
 
 Initial ranking can be a weighted score:
@@ -86,7 +117,7 @@ Prefer a deterministic first pass:
 - description completeness
 - category/style coherence
 
-Avoid per-listing LLM judging in the first MVP.
+Avoid per-listing LLM judging in the first build.
 
 Status: `Recommended default`
 
@@ -100,6 +131,28 @@ Each simulated day should include:
 4. optional DM/event generation
 5. shop-level daily summary creation
 
+System 2 should own this process. System 3 consumes the resulting world state; it should not define the simulation rules themselves.
+
+## Evaluation Shape
+
+Track one primary business score and a small set of supporting diagnostics.
+
+Suggested primary score candidates:
+
+- cumulative profit
+- ending balance
+- shop value proxy combining profit and reputation
+
+Suggested diagnostics:
+
+- order count
+- conversion rate
+- average review score
+- listing diversity
+- repeated failure or recovery patterns
+
+The exact primary score is still an `Open question`, but the single-score-plus-diagnostics pattern is a `Recommended default`.
+
 ## Optional Narrative Layer
 
 Low-frequency events can be generated later:
@@ -110,6 +163,14 @@ Low-frequency events can be generated later:
 - trend shifts
 
 This should enrich the simulation, not carry the core mechanics.
+
+## Competition Rollout
+
+Start with a single owned shop operating in a seeded market. Add stronger inter-shop competition only after the basic business loop is stable and legible.
+
+Treat multi-business competition as a roadmap expansion unless it is explicitly pulled forward for a later demo milestone.
+
+Status: `Recommended default`
 
 ## Tuning Goals
 
