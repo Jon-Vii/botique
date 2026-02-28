@@ -11,6 +11,7 @@ import type {
 import type {
   CreateListingData,
   MarketplaceRepository,
+  MutationMetadata,
   UpdateListingData,
   UpdateShopData
 } from "./types";
@@ -28,6 +29,10 @@ function average(values: number[]): number {
   }
 
   return Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2));
+}
+
+function mutationTimestamp(metadata?: MutationMetadata): string {
+  return metadata?.timestamp ?? new Date().toISOString();
 }
 
 export class InMemoryMarketplaceRepository implements MarketplaceRepository {
@@ -59,7 +64,7 @@ export class InMemoryMarketplaceRepository implements MarketplaceRepository {
     return this.state.marketplace.shops.map((shop) => this.hydrateShop(shop));
   }
 
-  async updateShop(shopId: number, patch: UpdateShopData): Promise<Shop | null> {
+  async updateShop(shopId: number, patch: UpdateShopData, metadata?: MutationMetadata): Promise<Shop | null> {
     const index = this.state.marketplace.shops.findIndex((item) => item.shop_id === shopId);
     if (index === -1) {
       return null;
@@ -68,7 +73,7 @@ export class InMemoryMarketplaceRepository implements MarketplaceRepository {
     this.state.marketplace.shops[index] = {
       ...this.state.marketplace.shops[index],
       ...patch,
-      updated_at: new Date().toISOString()
+      updated_at: mutationTimestamp(metadata)
     };
 
     return this.hydrateShop(this.state.marketplace.shops[index]);
@@ -91,9 +96,9 @@ export class InMemoryMarketplaceRepository implements MarketplaceRepository {
       .map((listing) => clone(listing));
   }
 
-  async createListing(data: CreateListingData): Promise<Listing> {
+  async createListing(data: CreateListingData, metadata?: MutationMetadata): Promise<Listing> {
     const listingId = this.nextId(this.state.marketplace.listings.map((item) => item.listing_id));
-    const timestamp = new Date().toISOString();
+    const timestamp = mutationTimestamp(metadata);
     const listing: Listing = {
       ...clone(data),
       listing_id: listingId,
@@ -104,7 +109,12 @@ export class InMemoryMarketplaceRepository implements MarketplaceRepository {
     return clone(listing);
   }
 
-  async updateListing(shopId: number, listingId: number, patch: UpdateListingData): Promise<Listing | null> {
+  async updateListing(
+    shopId: number,
+    listingId: number,
+    patch: UpdateListingData,
+    metadata?: MutationMetadata
+  ): Promise<Listing | null> {
     const index = this.state.marketplace.listings.findIndex(
       (listing) => listing.shop_id === shopId && listing.listing_id === listingId
     );
@@ -115,7 +125,7 @@ export class InMemoryMarketplaceRepository implements MarketplaceRepository {
     this.state.marketplace.listings[index] = {
       ...this.state.marketplace.listings[index],
       ...clone(patch),
-      updated_at: new Date().toISOString()
+      updated_at: mutationTimestamp(metadata)
     };
 
     return clone(this.state.marketplace.listings[index]);
@@ -133,24 +143,27 @@ export class InMemoryMarketplaceRepository implements MarketplaceRepository {
     return true;
   }
 
-  async replaceListingInventory(listingId: number, inventory: ListingInventory): Promise<ListingInventory | null> {
+  async replaceListingInventory(
+    listingId: number,
+    inventory: ListingInventory,
+    metadata?: MutationMetadata
+  ): Promise<ListingInventory | null> {
     const listing = this.state.marketplace.listings.find((item) => item.listing_id === listingId);
     if (!listing) {
       return null;
     }
 
     listing.inventory = clone(inventory);
-    listing.quantity =
-      inventory.products.reduce(
-        (sum, product) =>
-          sum + product.offerings.reduce((offeringSum, offering) => offeringSum + offering.quantity, 0),
-        0
-      ) || listing.quantity;
+    listing.quantity = inventory.products.reduce(
+      (sum, product) =>
+        sum + product.offerings.reduce((offeringSum, offering) => offeringSum + offering.quantity, 0),
+      0
+    );
     const firstOffering = inventory.products[0]?.offerings[0];
     if (firstOffering) {
       listing.price = firstOffering.price;
     }
-    listing.updated_at = new Date().toISOString();
+    listing.updated_at = mutationTimestamp(metadata);
     return clone(listing.inventory);
   }
 

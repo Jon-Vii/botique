@@ -144,6 +144,7 @@ export class MarketplaceService {
   ) {}
 
   async createDraftListing(shopId: number, input: CreateDraftListingBody): Promise<Listing> {
+    const mutation = await this.mutationMetadata();
     const shop = await this.repository.getShop(shopId);
     if (!shop) {
       throw new NotFoundError(`Shop ${shopId} not found.`);
@@ -188,7 +189,7 @@ export class MarketplaceService {
         quantity_on_property: [],
         sku_on_property: []
       }
-    });
+    }, mutation);
 
     const inventory: ListingInventory = {
       ...listing.inventory,
@@ -206,7 +207,7 @@ export class MarketplaceService {
     const updatedListing = await this.repository.updateListing(shopId, listing.listing_id, {
       inventory,
       url: input.url ?? `https://botique.local/shops/${shop.shop_name}/listings/${listing.listing_id}`
-    });
+    }, mutation);
 
     if (!updatedListing) {
       throw new NotFoundError(`Listing ${listing.listing_id} not found after creation.`);
@@ -217,7 +218,12 @@ export class MarketplaceService {
 
   async updateListing(shopId: number, listingId: number, patch: UpdateListingBody): Promise<Listing> {
     await this.assertShopExists(shopId);
-    const listing = await this.repository.updateListing(shopId, listingId, patch);
+    const listing = await this.repository.updateListing(
+      shopId,
+      listingId,
+      patch,
+      await this.mutationMetadata()
+    );
     if (!listing) {
       throw new NotFoundError(`Listing ${listingId} not found in shop ${shopId}.`);
     }
@@ -338,7 +344,11 @@ export class MarketplaceService {
       sku_on_property: body.sku_on_property
     };
 
-    const updated = await this.repository.replaceListingInventory(listingId, inventory);
+    const updated = await this.repository.replaceListingInventory(
+      listingId,
+      inventory,
+      await this.mutationMetadata()
+    );
     if (!updated) {
       throw new NotFoundError(`Listing ${listingId} not found.`);
     }
@@ -354,7 +364,7 @@ export class MarketplaceService {
   }
 
   async updateShop(shopId: number, patch: UpdateShopBody): Promise<Shop> {
-    const shop = await this.repository.updateShop(shopId, patch);
+    const shop = await this.repository.updateShop(shopId, patch, await this.mutationMetadata());
     if (!shop) {
       throw new NotFoundError(`Shop ${shopId} not found.`);
     }
@@ -401,7 +411,9 @@ export class MarketplaceService {
 
   async getPayments(shopId: number): Promise<PaginatedResults<Payment>> {
     await this.assertShopExists(shopId);
-    const payments = (await this.repository.listPayments(shopId)).sort(compareSimpleDateDesc);
+    const payments = (await this.repository.listPayments(shopId))
+      .filter((payment) => payment.status === "posted")
+      .sort(compareSimpleDateDesc);
     return {
       count: payments.length,
       limit: payments.length,
@@ -463,5 +475,11 @@ export class MarketplaceService {
     if (!shop) {
       throw new NotFoundError(`Shop ${shopId} not found.`);
     }
+  }
+
+  private async mutationMetadata(): Promise<{ timestamp: string }> {
+    return {
+      timestamp: (await this.simulation.getCurrentDay()).date
+    };
   }
 }

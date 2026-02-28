@@ -69,4 +69,36 @@ describe("System 2 simulation module", () => {
     assert.ok(afterScore !== undefined);
     assert.ok(afterScore < beforeScore);
   });
+
+  test("seller mutations use the simulation day timestamp instead of wall clock time", async () => {
+    const repository = createInMemoryMarketplaceRepository(createSampleState());
+    const simulation = createWorldSimulation(repository);
+    const service = new MarketplaceService(repository, simulation);
+
+    await simulation.advanceDay();
+    await simulation.advanceDay();
+    const currentDay = await simulation.getCurrentDay();
+
+    const created = await service.createDraftListing(1001, {
+      quantity: 2,
+      title: "Day-aligned planner",
+      description: "Created after the simulation advanced.",
+      price: 12,
+      who_made: "i_did",
+      when_made: "2020_2025",
+      taxonomy_id: 9102,
+      type: "download"
+    });
+    const updated = await service.updateListing(1001, created.listing_id, {
+      state: "active"
+    });
+    const shop = await service.updateShop(1001, {
+      announcement: "Fresh listings for the current simulation day."
+    });
+
+    assert.equal(created.created_at, currentDay.date);
+    assert.equal(created.updated_at, currentDay.date);
+    assert.equal(updated.updated_at, currentDay.date);
+    assert.equal(shop.updated_at, currentDay.date);
+  });
 });

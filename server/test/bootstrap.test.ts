@@ -10,27 +10,35 @@ type RecordedQuery = {
   values: unknown[];
 };
 
-function createFakeClient(shopRowCount: number) {
+type FakeSqlClient = DatabaseClient["client"] & {
+  reserve(): Promise<FakeSqlClient & { release(): void }>;
+  release(): void;
+};
+
+function createFakeClient(existingShopIds: number[]) {
   const queries: RecordedQuery[] = [];
 
   const client = (async (strings: TemplateStringsArray, ...values: unknown[]) => {
     const text = strings.join("?").replace(/\s+/g, " ").trim();
     queries.push({ text, values });
 
-    if (text.includes("select count(*)::int as row_count from shops")) {
-      return [{ row_count: shopRowCount }];
+    if (text.includes("select shop_id from shops")) {
+      return existingShopIds.map((shop_id) => ({ shop_id }));
     }
 
     return [];
-  }) as unknown as DatabaseClient["client"];
+  }) as unknown as FakeSqlClient;
 
-  return { client, queries };
+  client.release = () => undefined;
+  client.reserve = async () => client;
+
+  return { client: client as unknown as DatabaseClient["client"], queries };
 }
 
 describe("Postgres marketplace bootstrap", () => {
   test("seeds the default marketplace state when the database is empty", async () => {
     const defaultState = createDefaultMarketplaceState();
-    const { client, queries } = createFakeClient(0);
+    const { client, queries } = createFakeClient([]);
 
     const seeded = await seedMarketplaceStateIfEmpty(client, defaultState);
 
@@ -54,12 +62,22 @@ describe("Postgres marketplace bootstrap", () => {
     assert.equal(insertQueries.length, expectedInsertCount);
   });
 
-  test("skips default seeding when shops already exist", async () => {
-    const { client, queries } = createFakeClient(2);
+  test("skips default seeding when the database already contains non-seed shops", async () => {
+    const { client, queries } = createFakeClient([9999]);
 
     const seeded = await seedMarketplaceStateIfEmpty(client);
 
     assert.equal(seeded, false);
     assert.equal(queries.filter((query) => query.text.startsWith("insert into ")).length, 0);
+  });
+
+  test("repairs a partial default seed when one of the default shops already exists", async () => {
+    const { client, queries } = createFakeClient([1001]);
+
+    const seeded = await seedMarketplaceStateIfEmpty(client);
+
+    assert.equal(seeded, true);
+    assert.ok(queries.some((query) => query.text.includes("insert into listings")));
+    assert.ok(queries.some((query) => query.text.includes("insert into payments")));
   });
 });

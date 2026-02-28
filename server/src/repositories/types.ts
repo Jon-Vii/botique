@@ -20,20 +20,33 @@ export type UpdateListingData = Partial<
 
 export type UpdateShopData = Partial<Pick<StoredShop, "title" | "announcement" | "sale_message">>;
 
+export type MutationMetadata = {
+  timestamp?: string;
+};
+
 export interface MarketplaceRepository {
   getMarketplaceState(): Promise<StoredMarketplaceState>;
   getSimulationState(): Promise<SimulationState>;
   setSimulationState(state: SimulationState): Promise<SimulationState>;
   getShop(shopId: number): Promise<Shop | null>;
   listShops(): Promise<Shop[]>;
-  updateShop(shopId: number, patch: UpdateShopData): Promise<Shop | null>;
+  updateShop(shopId: number, patch: UpdateShopData, metadata?: MutationMetadata): Promise<Shop | null>;
   getListing(listingId: number): Promise<Listing | null>;
   listShopListings(shopId: number): Promise<Listing[]>;
   listActiveListings(): Promise<Listing[]>;
-  createListing(data: CreateListingData): Promise<Listing>;
-  updateListing(shopId: number, listingId: number, patch: UpdateListingData): Promise<Listing | null>;
+  createListing(data: CreateListingData, metadata?: MutationMetadata): Promise<Listing>;
+  updateListing(
+    shopId: number,
+    listingId: number,
+    patch: UpdateListingData,
+    metadata?: MutationMetadata
+  ): Promise<Listing | null>;
   deleteListing(shopId: number, listingId: number): Promise<boolean>;
-  replaceListingInventory(listingId: number, inventory: ListingInventory): Promise<ListingInventory | null>;
+  replaceListingInventory(
+    listingId: number,
+    inventory: ListingInventory,
+    metadata?: MutationMetadata
+  ): Promise<ListingInventory | null>;
   listOrders(shopId: number): Promise<Order[]>;
   getOrder(shopId: number, receiptId: number): Promise<Order | null>;
   listReviews(shopId: number): Promise<Review[]>;

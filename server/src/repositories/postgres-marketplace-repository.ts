@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 import { createDatabaseClient } from "../db/client";
 import { bootstrapDatabase } from "../db/bootstrap";
@@ -24,6 +24,7 @@ import type {
 import type {
   CreateListingData,
   MarketplaceRepository,
+  MutationMetadata,
   UpdateListingData,
   UpdateShopData
 } from "./types";
@@ -161,14 +162,14 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
     return Promise.all(rows.map((row) => this.hydrateShop(this.mapStoredShop(row))));
   }
 
-  async updateShop(shopId: number, patch: UpdateShopData): Promise<Shop | null> {
+  async updateShop(shopId: number, patch: UpdateShopData, metadata?: MutationMetadata): Promise<Shop | null> {
     const rows = await this.db
       .update(shopsTable)
       .set({
         ...(patch.title !== undefined ? { title: patch.title } : {}),
         ...(patch.announcement !== undefined ? { announcement: patch.announcement } : {}),
         ...(patch.sale_message !== undefined ? { saleMessage: patch.sale_message } : {}),
-        updatedAt: new Date()
+        updatedAt: this.resolveTimestamp(metadata)
       })
       .where(eq(shopsTable.shopId, shopId))
       .returning();
@@ -225,41 +226,89 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
     return rows.map((row) => this.mapListing(row.listing, row.shopName));
   }
 
-  async createListing(data: CreateListingData): Promise<Listing> {
-    const listingId = await this.nextId("listings", "listing_id");
-    const timestamp = new Date();
+  async createListing(data: CreateListingData, metadata?: MutationMetadata): Promise<Listing> {
+    const timestamp = this.resolveTimestamp(metadata);
+    const sql = await this.dbClient.client.reserve();
 
-    const rows = await this.db
-      .insert(listingsTable)
-      .values({
-        listingId,
-        shopId: data.shop_id,
-        title: data.title,
-        description: data.description,
-        state: data.state,
-        type: data.type,
-        quantity: data.quantity,
-        price: data.price.toFixed(2),
-        currencyCode: data.currency_code,
-        whoMade: data.who_made,
-        whenMade: data.when_made,
-        taxonomyId: data.taxonomy_id,
-        tags: data.tags,
-        materials: data.materials,
-        imageIds: data.image_ids,
-        views: data.views,
-        favorites: data.favorites,
-        url: data.url,
-        inventory: data.inventory,
-        createdAt: timestamp,
-        updatedAt: timestamp
-      })
-      .returning();
+    let listingId: number | null = null;
+    try {
+      await sql`begin`;
+      await sql`lock table listings in exclusive mode`;
+      const result = (await sql`
+        select coalesce(max(listing_id), 0) + 1 as next_id from listings
+      `) as Array<{ next_id: number | string }>;
+      listingId = Number(result[0]?.next_id ?? 1);
 
-    return this.mapListing(rows[0], data.shop_name);
+      await sql`
+        insert into listings (
+          listing_id,
+          shop_id,
+          title,
+          description,
+          state,
+          type,
+          quantity,
+          price,
+          currency_code,
+          who_made,
+          when_made,
+          taxonomy_id,
+          tags,
+          materials,
+          image_ids,
+          views,
+          favorites,
+          url,
+          inventory,
+          created_at,
+          updated_at
+        )
+        values (
+          ${listingId},
+          ${data.shop_id},
+          ${data.title},
+          ${data.description},
+          ${data.state},
+          ${data.type},
+          ${data.quantity},
+          ${data.price},
+          ${data.currency_code},
+          ${data.who_made},
+          ${data.when_made},
+          ${data.taxonomy_id},
+          ${JSON.stringify(data.tags)}::jsonb,
+          ${JSON.stringify(data.materials)}::jsonb,
+          ${JSON.stringify(data.image_ids)}::jsonb,
+          ${data.views},
+          ${data.favorites},
+          ${data.url},
+          ${JSON.stringify(data.inventory)}::jsonb,
+          ${timestamp},
+          ${timestamp}
+        )
+      `;
+      await sql`commit`;
+    } catch (error) {
+      await sql`rollback`;
+      throw error;
+    } finally {
+      sql.release();
+    }
+
+    const listing = await this.getListing(listingId ?? 0);
+    if (!listing) {
+      throw new Error(`Listing ${listingId} was not found after insert.`);
+    }
+
+    return listing;
   }
 
-  async updateListing(shopId: number, listingId: number, patch: UpdateListingData): Promise<Listing | null> {
+  async updateListing(
+    shopId: number,
+    listingId: number,
+    patch: UpdateListingData,
+    metadata?: MutationMetadata
+  ): Promise<Listing | null> {
     const rows = await this.db
       .update(listingsTable)
       .set({
@@ -278,7 +327,7 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
         ...(patch.image_ids !== undefined ? { imageIds: patch.image_ids } : {}),
         ...(patch.url !== undefined ? { url: patch.url } : {}),
         ...(patch.inventory !== undefined ? { inventory: patch.inventory } : {}),
-        updatedAt: new Date()
+        updatedAt: this.resolveTimestamp(metadata)
       })
       .where(and(eq(listingsTable.shopId, shopId), eq(listingsTable.listingId, listingId)))
       .returning();
@@ -300,7 +349,11 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
     return rows.length > 0;
   }
 
-  async replaceListingInventory(listingId: number, inventory: ListingInventory): Promise<ListingInventory | null> {
+  async replaceListingInventory(
+    listingId: number,
+    inventory: ListingInventory,
+    metadata?: MutationMetadata
+  ): Promise<ListingInventory | null> {
     const quantity = inventory.products.reduce(
       (sum, product) => sum + product.offerings.reduce((offeringSum, offering) => offeringSum + offering.quantity, 0),
       0
@@ -311,9 +364,9 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
       .update(listingsTable)
       .set({
         inventory,
-        ...(quantity > 0 ? { quantity } : {}),
+        quantity,
         ...(price !== undefined ? { price: price.toFixed(2) } : {}),
-        updatedAt: new Date()
+        updatedAt: this.resolveTimestamp(metadata)
       })
       .where(eq(listingsTable.listingId, listingId))
       .returning({ inventory: listingsTable.inventory });
@@ -478,11 +531,7 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
     };
   }
 
-  private async nextId(tableName: string, columnName: string): Promise<number> {
-    const result = await this.db.execute<{ next_id: string }>(
-      sql.raw(`select coalesce(max(${columnName}), 0) + 1 as next_id from ${tableName}`)
-    );
-
-    return Number(result[0]?.next_id ?? 1);
+  private resolveTimestamp(metadata?: MutationMetadata): Date {
+    return metadata?.timestamp ? new Date(metadata.timestamp) : new Date();
   }
 }

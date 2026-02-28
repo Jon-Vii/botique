@@ -4,198 +4,220 @@ import { createDefaultMarketplaceState } from "../default-marketplace-state";
 import type { StoredMarketplaceState } from "../simulation/state-types";
 import type { BotiqueDatabase, DatabaseClient } from "./client";
 
-async function shopsTableHasRows(client: DatabaseClient["client"]): Promise<boolean> {
-  const rows = (await client`select count(*)::int as row_count from shops`) as Array<{
-    row_count: number | string;
+async function shouldSeedDefaultMarketplaceState(
+  client: DatabaseClient["client"],
+  seedState: StoredMarketplaceState
+): Promise<boolean> {
+  const rows = (await client`select shop_id from shops`) as Array<{
+    shop_id: number | string;
   }>;
-  return Number(rows[0]?.row_count ?? 0) > 0;
+
+  if (rows.length === 0) {
+    return true;
+  }
+
+  const seededShopIds = new Set(seedState.shops.map((shop) => shop.shop_id));
+  return rows.some((row) => seededShopIds.has(Number(row.shop_id)));
 }
 
 export async function seedMarketplaceStateIfEmpty(
   client: DatabaseClient["client"],
   seedState: StoredMarketplaceState = createDefaultMarketplaceState()
 ): Promise<boolean> {
-  if (await shopsTableHasRows(client)) {
-    return false;
-  }
+  const sql = await client.reserve();
 
-  for (const taxonomyNode of seedState.taxonomyNodes) {
-    await client`
-      insert into taxonomy_nodes (taxonomy_id, parent_taxonomy_id, name, full_path, level)
-      values (
-        ${taxonomyNode.taxonomy_id},
-        ${taxonomyNode.parent_taxonomy_id},
-        ${taxonomyNode.name},
-        ${taxonomyNode.full_path},
-        ${taxonomyNode.level}
-      )
-      on conflict (taxonomy_id) do nothing
-    `;
-  }
+  try {
+    await sql`begin`;
 
-  for (const shop of seedState.shops) {
-    await client`
-      insert into shops (
-        shop_id,
-        shop_name,
-        title,
-        announcement,
-        sale_message,
-        currency_code,
-        digital_product_policy,
-        created_at,
-        updated_at
-      )
-      values (
-        ${shop.shop_id},
-        ${shop.shop_name},
-        ${shop.title},
-        ${shop.announcement},
-        ${shop.sale_message},
-        ${shop.currency_code},
-        ${shop.digital_product_policy},
-        ${shop.created_at},
-        ${shop.updated_at}
-      )
-      on conflict (shop_id) do nothing
-    `;
-  }
+    if (!(await shouldSeedDefaultMarketplaceState(sql, seedState))) {
+      await sql`commit`;
+      return false;
+    }
 
-  for (const listing of seedState.listings) {
-    await client`
-      insert into listings (
-        listing_id,
-        shop_id,
-        title,
-        description,
-        state,
-        type,
-        quantity,
-        price,
-        currency_code,
-        who_made,
-        when_made,
-        taxonomy_id,
-        tags,
-        materials,
-        image_ids,
-        views,
-        favorites,
-        url,
-        inventory,
-        created_at,
-        updated_at
-      )
-      values (
-        ${listing.listing_id},
-        ${listing.shop_id},
-        ${listing.title},
-        ${listing.description},
-        ${listing.state},
-        ${listing.type},
-        ${listing.quantity},
-        ${listing.price},
-        ${listing.currency_code},
-        ${listing.who_made},
-        ${listing.when_made},
-        ${listing.taxonomy_id},
-        ${JSON.stringify(listing.tags)}::jsonb,
-        ${JSON.stringify(listing.materials)}::jsonb,
-        ${JSON.stringify(listing.image_ids)}::jsonb,
-        ${listing.views},
-        ${listing.favorites},
-        ${listing.url},
-        ${JSON.stringify(listing.inventory)}::jsonb,
-        ${listing.created_at},
-        ${listing.updated_at}
-      )
-      on conflict (listing_id) do nothing
-    `;
-  }
+    for (const taxonomyNode of seedState.taxonomyNodes) {
+      await sql`
+        insert into taxonomy_nodes (taxonomy_id, parent_taxonomy_id, name, full_path, level)
+        values (
+          ${taxonomyNode.taxonomy_id},
+          ${taxonomyNode.parent_taxonomy_id},
+          ${taxonomyNode.name},
+          ${taxonomyNode.full_path},
+          ${taxonomyNode.level}
+        )
+        on conflict (taxonomy_id) do nothing
+      `;
+    }
 
-  for (const order of seedState.orders) {
-    await client`
-      insert into orders (
-        receipt_id,
-        shop_id,
-        buyer_name,
-        status,
-        was_paid,
-        was_shipped,
-        was_delivered,
-        total_price,
-        currency_code,
-        line_items,
-        created_at,
-        updated_at
-      )
-      values (
-        ${order.receipt_id},
-        ${order.shop_id},
-        ${order.buyer_name},
-        ${order.status},
-        ${order.was_paid ? 1 : 0},
-        ${order.was_shipped ? 1 : 0},
-        ${order.was_delivered ? 1 : 0},
-        ${order.total_price},
-        ${order.currency_code},
-        ${JSON.stringify(order.line_items)}::jsonb,
-        ${order.created_at},
-        ${order.updated_at}
-      )
-      on conflict (receipt_id) do nothing
-    `;
-  }
+    for (const shop of seedState.shops) {
+      await sql`
+        insert into shops (
+          shop_id,
+          shop_name,
+          title,
+          announcement,
+          sale_message,
+          currency_code,
+          digital_product_policy,
+          created_at,
+          updated_at
+        )
+        values (
+          ${shop.shop_id},
+          ${shop.shop_name},
+          ${shop.title},
+          ${shop.announcement},
+          ${shop.sale_message},
+          ${shop.currency_code},
+          ${shop.digital_product_policy},
+          ${shop.created_at},
+          ${shop.updated_at}
+        )
+        on conflict (shop_id) do nothing
+      `;
+    }
 
-  for (const review of seedState.reviews) {
-    await client`
-      insert into reviews (
-        review_id,
-        shop_id,
-        listing_id,
-        rating,
-        review,
-        buyer_name,
-        created_at
-      )
-      values (
-        ${review.review_id},
-        ${review.shop_id},
-        ${review.listing_id},
-        ${review.rating},
-        ${review.review},
-        ${review.buyer_name},
-        ${review.created_at}
-      )
-      on conflict (review_id) do nothing
-    `;
-  }
+    for (const listing of seedState.listings) {
+      await sql`
+        insert into listings (
+          listing_id,
+          shop_id,
+          title,
+          description,
+          state,
+          type,
+          quantity,
+          price,
+          currency_code,
+          who_made,
+          when_made,
+          taxonomy_id,
+          tags,
+          materials,
+          image_ids,
+          views,
+          favorites,
+          url,
+          inventory,
+          created_at,
+          updated_at
+        )
+        values (
+          ${listing.listing_id},
+          ${listing.shop_id},
+          ${listing.title},
+          ${listing.description},
+          ${listing.state},
+          ${listing.type},
+          ${listing.quantity},
+          ${listing.price},
+          ${listing.currency_code},
+          ${listing.who_made},
+          ${listing.when_made},
+          ${listing.taxonomy_id},
+          ${JSON.stringify(listing.tags)}::jsonb,
+          ${JSON.stringify(listing.materials)}::jsonb,
+          ${JSON.stringify(listing.image_ids)}::jsonb,
+          ${listing.views},
+          ${listing.favorites},
+          ${listing.url},
+          ${JSON.stringify(listing.inventory)}::jsonb,
+          ${listing.created_at},
+          ${listing.updated_at}
+        )
+        on conflict (listing_id) do nothing
+      `;
+    }
 
-  for (const payment of seedState.payments) {
-    await client`
-      insert into payments (
-        payment_id,
-        shop_id,
-        receipt_id,
-        amount,
-        currency_code,
-        status,
-        posted_at
-      )
-      values (
-        ${payment.payment_id},
-        ${payment.shop_id},
-        ${payment.receipt_id},
-        ${payment.amount},
-        ${payment.currency_code},
-        ${payment.status},
-        ${payment.posted_at}
-      )
-      on conflict (payment_id) do nothing
-    `;
-  }
+    for (const order of seedState.orders) {
+      await sql`
+        insert into orders (
+          receipt_id,
+          shop_id,
+          buyer_name,
+          status,
+          was_paid,
+          was_shipped,
+          was_delivered,
+          total_price,
+          currency_code,
+          line_items,
+          created_at,
+          updated_at
+        )
+        values (
+          ${order.receipt_id},
+          ${order.shop_id},
+          ${order.buyer_name},
+          ${order.status},
+          ${order.was_paid ? 1 : 0},
+          ${order.was_shipped ? 1 : 0},
+          ${order.was_delivered ? 1 : 0},
+          ${order.total_price},
+          ${order.currency_code},
+          ${JSON.stringify(order.line_items)}::jsonb,
+          ${order.created_at},
+          ${order.updated_at}
+        )
+        on conflict (receipt_id) do nothing
+      `;
+    }
 
-  return true;
+    for (const review of seedState.reviews) {
+      await sql`
+        insert into reviews (
+          review_id,
+          shop_id,
+          listing_id,
+          rating,
+          review,
+          buyer_name,
+          created_at
+        )
+        values (
+          ${review.review_id},
+          ${review.shop_id},
+          ${review.listing_id},
+          ${review.rating},
+          ${review.review},
+          ${review.buyer_name},
+          ${review.created_at}
+        )
+        on conflict (review_id) do nothing
+      `;
+    }
+
+    for (const payment of seedState.payments) {
+      await sql`
+        insert into payments (
+          payment_id,
+          shop_id,
+          receipt_id,
+          amount,
+          currency_code,
+          status,
+          posted_at
+        )
+        values (
+          ${payment.payment_id},
+          ${payment.shop_id},
+          ${payment.receipt_id},
+          ${payment.amount},
+          ${payment.currency_code},
+          ${payment.status},
+          ${payment.posted_at}
+        )
+        on conflict (payment_id) do nothing
+      `;
+    }
+
+    await sql`commit`;
+    return true;
+  } catch (error) {
+    await sql`rollback`;
+    throw error;
+  } finally {
+    sql.release();
+  }
 }
 
 export async function bootstrapDatabase(

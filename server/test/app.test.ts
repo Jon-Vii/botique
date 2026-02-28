@@ -180,7 +180,19 @@ describe("Botique server core endpoints", () => {
     assert.equal(orderResponse.json().buyer_name, "Ava Chen");
   });
 
-  test("replaces full listing inventory with the JSON inventory contract", async () => {
+  test("lists only posted payments through the seller-facing contract", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/v3/application/shops/1002/payments"
+    });
+
+    assert.equal(response.statusCode, 200);
+    const payload = response.json();
+    assert.equal(payload.count, 0);
+    assert.deepEqual(payload.results, []);
+  });
+
+  test("replaces full listing inventory with the JSON inventory contract, including zero stock", async () => {
     const response = await app.inject({
       method: "PUT",
       url: "/v3/application/listings/2001/inventory",
@@ -212,5 +224,45 @@ describe("Botique server core endpoints", () => {
     assert.equal(inventory.products[0].sku, "NEW-SKU-1");
     assert.equal(inventory.products[0].offerings[0].price, 18);
     assert.equal(inventory.listing_id, 2001);
+
+    const updatedListing = await app.inject({
+      method: "GET",
+      url: "/v3/application/listings/2001"
+    });
+    assert.equal(updatedListing.json().quantity, 20);
+
+    const zeroStockResponse = await app.inject({
+      method: "PUT",
+      url: "/v3/application/listings/2001/inventory",
+      headers: {
+        "content-type": "application/json"
+      },
+      payload: JSON.stringify({
+        products: [
+          {
+            sku: "NEW-SKU-1",
+            property_values: [],
+            offerings: [
+              {
+                price: 18,
+                quantity: 0,
+                is_enabled: true
+              }
+            ]
+          }
+        ],
+        price_on_property: [],
+        quantity_on_property: [],
+        sku_on_property: []
+      })
+    });
+
+    assert.equal(zeroStockResponse.statusCode, 200);
+
+    const soldOutListing = await app.inject({
+      method: "GET",
+      url: "/v3/application/listings/2001"
+    });
+    assert.equal(soldOutListing.json().quantity, 0);
   });
 });
