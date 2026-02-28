@@ -20,6 +20,8 @@ import type {
   UpdateShopBody
 } from "../schemas/requests";
 import type { MarketplaceRepository } from "../repositories/types";
+import type { SimulationModule } from "../simulation/world-simulation";
+import { computeKeywordRelevance, scoreMarketplaceListing } from "../simulation/ranking";
 
 type PaginatedResults<T> = {
   count: number;
@@ -61,13 +63,6 @@ function tokenize(value: string): string[] {
     .split(/[^a-z0-9]+/i)
     .map((token) => token.trim())
     .filter(Boolean);
-}
-
-function computeListingQuality(listing: Listing): number {
-  const titleScore = Math.min(listing.title.length / 20, 3);
-  const descriptionScore = Math.min(listing.description.length / 80, 3);
-  const tagScore = Math.min(listing.tags.length * 0.6, 3);
-  return Number((titleScore + descriptionScore + tagScore).toFixed(2));
 }
 
 function compareListings(
@@ -143,7 +138,10 @@ function compareSimpleDateDesc<T extends { created_at?: string; posted_at?: stri
 }
 
 export class MarketplaceService {
-  constructor(private readonly repository: MarketplaceRepository) {}
+  constructor(
+    private readonly repository: MarketplaceRepository,
+    private readonly simulation: SimulationModule
+  ) {}
 
   async createDraftListing(shopId: number, input: CreateDraftListingBody): Promise<Listing> {
     const shop = await this.repository.getShop(shopId);
@@ -259,6 +257,7 @@ export class MarketplaceService {
     const shops = new Map((await this.repository.listShops()).map((shop) => [shop.shop_id, shop]));
     const keywords = tokenize(query.keywords ?? "");
     const requestedCategory = query.category?.toLowerCase();
+    const searchContext = await this.simulation.getSearchContext();
 
     const activeListings = await this.repository.listActiveListings();
     const newestListingTimestamp = activeListings.reduce((max, listing) => {
@@ -284,44 +283,22 @@ export class MarketplaceService {
         }
       }
 
-      const terms =
-        keywords.length === 0
-          ? 0
-          : keywords.reduce((score, term) => {
-              const title = listing.title.toLowerCase();
-              const description = listing.description.toLowerCase();
-              const tags = listing.tags.map((tag) => tag.toLowerCase());
-
-              let termScore = 0;
-              if (title.includes(term)) {
-                termScore += 4;
-              }
-              if (description.includes(term)) {
-                termScore += 2;
-              }
-              if (tags.some((tag) => tag.includes(term))) {
-                termScore += 3;
-              }
-
-              return score + termScore;
-            }, 0);
+      const terms = computeKeywordRelevance(listing, keywords);
 
       if (keywords.length > 0 && terms === 0) {
         continue;
       }
 
       const shop = shops.get(listing.shop_id);
-      const reviewBonus = shop ? shop.review_average : 0;
-      const quality = computeListingQuality(listing);
-      const priceFit = listing.price <= 15 ? 2 : listing.price <= 25 ? 1 : 0;
-      const recencyBonus = Math.max(
-        0,
-        7 - Math.floor((newestListingTimestamp - Date.parse(listing.created_at)) / 86_400_000)
-      );
-
       scoredListings.push({
         ...listing,
-        ranking_score: Number((terms + quality + reviewBonus + priceFit + recencyBonus).toFixed(2))
+        ranking_score: scoreMarketplaceListing({
+          listing,
+          keywords,
+          shopReviewAverage: shop?.review_average ?? 0,
+          newestListingTimestamp,
+          searchContext
+        })
       });
     }
 

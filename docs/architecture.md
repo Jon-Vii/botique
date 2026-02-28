@@ -74,6 +74,22 @@ Responsibilities:
 
 System 2 is the world the agents live in.
 
+### System 1 / System 2 Boundary
+
+For the current TypeScript server, keep the boundary explicit:
+
+- System 1 owns HTTP routes, request validation, response shaping, and seller-facing compatibility behavior.
+- System 2 owns current day, market snapshot, trend state, ranking inputs, and day advancement rules.
+- System 1 may call into System 2 to resolve world-derived results such as ranking context, but it should not embed simulation formulas inline in route handlers.
+- System 2 should expose inspectable interfaces for `current_day`, `market_snapshot`, `trend_state`, and `advanceDay`.
+- advancing the world belongs to the control/runtime layer, not normal seller-facing routes.
+
+Current implementation note:
+
+- `server/src/routes/` and the seller-facing parts of `MarketplaceService` are System 1 concerns.
+- `server/src/simulation/` is the System 2 module boundary inside the current codebase.
+- the HTTP contract stays unchanged while System 2 evolves behind that boundary.
+
 ### System 3: Agent Orchestrator
 
 Application code that manages LLM-driven agents.

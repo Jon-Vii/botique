@@ -59,6 +59,19 @@ This gives the agent a business to run and a world to react to without making th
 
 Status: `Recommended default`
 
+## World State Ownership
+
+System 2 should own an explicit world state rather than scattering simulation data across request handlers.
+
+Recommended initial world-state shape:
+
+- marketplace state: shops, listings, orders, reviews, payments, taxonomy
+- current day: explicit day index and canonical simulation date
+- market snapshot: inspectable aggregate counts and demand context
+- trend state: active trend labels, taxonomy focus, and simple demand multipliers
+
+The important boundary is that System 1 can read from this state, but System 2 owns how it is created and advanced.
+
 ## Customers
 
 Use structured personas instead of generic random users.
@@ -136,6 +149,25 @@ Each simulated day should include:
 5. shop-level daily summary creation
 
 System 2 should own this process. System 3 consumes the resulting world state; it should not define the simulation rules themselves.
+
+## First Advance-Day Pipeline
+
+The first implementation can stay simple as long as the steps are explicit and inspectable.
+
+Suggested initial pipeline:
+
+1. advance the world clock by one day
+2. refresh deterministic trend state
+3. rebuild the market snapshot from current listings and trends
+
+This is enough to establish the contract surface for `advanceDay` before adding richer order, review, or customer-resolution behavior.
+
+Recommended default for the first build:
+
+- keep formulas simple and visible in code
+- favor deterministic trend rotation over opaque randomness
+- do not require rich multi-business competition yet
+- let later milestones add more realistic demand and purchase resolution on top of the same pipeline shape
 
 ## Evaluation Shape
 

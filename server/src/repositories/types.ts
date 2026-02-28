@@ -8,15 +8,7 @@ import type {
   StoredShop,
   TaxonomyNode
 } from "../schemas/domain";
-
-export type StoredMarketplaceState = {
-  shops: StoredShop[];
-  listings: Listing[];
-  orders: Order[];
-  reviews: Review[];
-  payments: Payment[];
-  taxonomyNodes: TaxonomyNode[];
-};
+import type { SimulationState, StoredMarketplaceState } from "../simulation/state-types";
 
 export type CreateListingData = Omit<Listing, "listing_id" | "created_at" | "updated_at" | "ranking_score">;
 
@@ -29,6 +21,9 @@ export type UpdateListingData = Partial<
 export type UpdateShopData = Partial<Pick<StoredShop, "title" | "announcement" | "sale_message">>;
 
 export interface MarketplaceRepository {
+  getMarketplaceState(): Promise<StoredMarketplaceState>;
+  getSimulationState(): Promise<SimulationState>;
+  setSimulationState(state: SimulationState): Promise<SimulationState>;
   getShop(shopId: number): Promise<Shop | null>;
   listShops(): Promise<Shop[]>;
   updateShop(shopId: number, patch: UpdateShopData): Promise<Shop | null>;
