@@ -1,6 +1,5 @@
 import {
   ArrowLeft,
-  Cpu,
   CurrencyDollar,
   Package,
   ShoppingCart,
@@ -9,15 +8,16 @@ import {
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Badge } from "../components/Badge";
 import { ListingCard } from "../components/ListingCard";
+import { ShopRoleBadge } from "../components/ShopRoleBadge";
 import { Skeleton } from "../components/Skeleton";
 import { Stars } from "../components/Stars";
-import { StatusDot } from "../components/StatusDot";
 import { formatCurrency, formatDateShort } from "../lib/format";
 import {
   useShop,
   useShopListings,
   useShopReceipts,
   useShopReviews,
+  useWorldState,
 } from "../hooks/useApi";
 
 type Tab = "listings" | "orders" | "reviews";
@@ -39,6 +39,7 @@ export function ShopDetail() {
     tabParam === "orders" || tabParam === "reviews" ? tabParam : "listings";
 
   const { data: shop, isLoading: shopLoading } = useShop(id);
+  const { data: world } = useWorldState();
   const { data: listingsData } = useShopListings(id, { limit: 50 });
   const { data: ordersData } = useShopReceipts(id, { limit: 50 });
   const { data: reviewsData } = useShopReviews(id, { limit: 50 });
@@ -109,14 +110,11 @@ export function ShopDetail() {
             background: `linear-gradient(135deg, oklch(0.88 0.08 ${hue}) 0%, oklch(0.82 0.10 ${hue + 40}) 50%, oklch(0.86 0.06 ${hue + 80}) 100%)`,
           }}
         >
-          {/* Agent badge */}
-          <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-white/85 backdrop-blur-sm px-3 py-1 border border-rule">
-            <Cpu size={12} weight="duotone" className="text-orange" />
-            <span className="text-[10px] font-pixel-grid font-bold text-secondary">
-              AI Agent
-            </span>
-            <StatusDot state="active" />
-          </div>
+          <ShopRoleBadge
+            shopId={shop.shop_id}
+            scenario={world?.simulation.scenario}
+            className="absolute top-3 right-3 border-white/60 bg-white/85 backdrop-blur-sm"
+          />
         </div>
 
         {/* Shop info */}

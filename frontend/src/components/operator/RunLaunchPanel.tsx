@@ -1,12 +1,9 @@
 import { useState } from "react";
-import { Rocket, Warning } from "@phosphor-icons/react";
+import { CheckCircle, Rocket } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
-import { BackendNotice } from "../BackendNotice";
 import { LoadingDots } from "../LoadingDots";
 import { Badge } from "../Badge";
-import { Snippet } from "../Snippet";
 import { ScenarioPicker } from "./ScenarioPicker";
-import { frontendFeatures } from "../../config/features";
 import { useLaunchRun, useWorldState } from "../../hooks/useApi";
 import { DEFAULT_SCENARIO_ID, getScenarioMeta } from "../../lib/scenarios";
 import type { ScenarioId } from "../../types/api";
@@ -29,7 +26,6 @@ export function RunLaunchPanel({
   const { data: world } = useWorldState();
   const launchRun = useLaunchRun();
   const shops = world?.marketplace.shops ?? [];
-  const canLaunchFromUi = frontendFeatures.enableRunLaunchControls;
 
   const [shopId, setShopId] = useState("");
   const [days, setDays] = useState(5);
@@ -44,10 +40,6 @@ export function RunLaunchPanel({
     const sid = shopId ? Number(shopId) : shops[0]?.shop_id;
     if (!sid) {
       onError("No shop selected");
-      return;
-    }
-    if (!canLaunchFromUi) {
-      onError("Run launch is disabled in the frontend feature flags");
       return;
     }
     const rid = runId.trim() || `run-${Date.now()}`;
@@ -82,9 +74,9 @@ export function RunLaunchPanel({
             Single Run
           </span>
         </div>
-        <Badge variant={canLaunchFromUi ? "emerald" : "amber"} subtle>
-          <Warning size={10} weight="fill" />
-          {canLaunchFromUi ? "Backend live" : "CLI fallback"}
+        <Badge variant="emerald" subtle>
+          <CheckCircle size={10} weight="fill" />
+          Browser launch live
         </Badge>
       </div>
 
@@ -196,8 +188,8 @@ export function RunLaunchPanel({
         <button
           type="button"
           onClick={handleLaunch}
-          disabled={!canLaunchFromUi || launchRun.isPending || shops.length === 0}
-          aria-disabled={!canLaunchFromUi || launchRun.isPending || shops.length === 0}
+          disabled={launchRun.isPending || shops.length === 0}
+          aria-disabled={launchRun.isPending || shops.length === 0}
           className="flex cursor-pointer items-center gap-2 bg-orange px-5 py-2.5 text-sm font-semibold text-white transition-[box-shadow,transform,opacity] hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(255,112,0,0.3)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {launchRun.isPending ? (
@@ -219,30 +211,6 @@ export function RunLaunchPanel({
           </Link>
         )}
       </div>
-
-      {!canLaunchFromUi ? (
-        <div className="mt-5">
-          <BackendNotice
-            title="Use the CLI for single runs"
-            description="The control-plane endpoint exists, but this frontend build has browser launch disabled by feature flag."
-            endpoints={["POST /control/runs/launch"]}
-            compact
-          >
-            <Snippet
-              dark={false}
-              text={[
-                "botique-agent-runtime run-days \\",
-                `  --shop-id ${(shopId || shops[0]?.shop_id || 1001).toString()} \\`,
-                `  --days ${days} \\`,
-                `  --turns-per-day ${turnsPerDay} \\`,
-                `  --scenario ${scenarioId} \\`,
-                `  --run-id ${runId.trim() || "reference_baseline_01"} \\`,
-                `  --mistral-model ${model}`,
-              ]}
-            />
-          </BackendNotice>
-        </div>
-      ) : null}
     </div>
   );
 }

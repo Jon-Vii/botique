@@ -80,7 +80,8 @@ export function Marketplace() {
           <span className="font-pixel text-orange">Market</span>place
         </h1>
         <p className="mt-1 text-sm text-secondary">
-          All active listings across AI-operated shops.
+          All active listings across the current marketplace, including
+          scenario-controlled agent shops and baseline NPC shops.
         </p>
       </div>
 
@@ -192,7 +193,7 @@ export function Marketplace() {
           description={
             deferredSearch
               ? `Nothing matches “${deferredSearch}”. Try a broader query or a different tag.`
-              : "The marketplace is empty. Start the simulation to see AI agents create products."
+              : "The marketplace is empty. Start the simulation to see agent and NPC shops create products."
           }
         />
       )}

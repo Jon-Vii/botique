@@ -5,6 +5,7 @@ import {
   Lightning,
   Package,
   Play,
+  Robot,
   ShoppingCart,
   Storefront,
   TrendUp,
@@ -19,6 +20,7 @@ import { ShopCardSkeleton, StatSkeleton } from "../components/Skeleton";
 import { Stat } from "../components/Stat";
 import { useToast } from "../components/toast-context";
 import { TrendTag } from "../components/TrendTag";
+import { ScenarioBadge } from "../components/ScenarioBadge";
 import {
   useAdvanceDay,
   useMarketSnapshot,
@@ -27,6 +29,7 @@ import {
   useWorldState,
 } from "../hooks/useApi";
 import { formatCurrency } from "../lib/format";
+import { countShopsByRole } from "../lib/shop-roles";
 
 export function Dashboard() {
   const { data: simDay, isLoading: dayLoading } = useSimulationDay();
@@ -41,6 +44,10 @@ export function Dashboard() {
   const shops = world?.marketplace.shops ?? [];
   const orders = world?.marketplace.orders ?? [];
   const reviews = world?.marketplace.reviews ?? [];
+  const scenario = world?.simulation.scenario;
+  const shopIds = shops.map((shop) => shop.shop_id);
+  const agentShopCount = countShopsByRole(shopIds, "agent", scenario);
+  const npcShopCount = countShopsByRole(shopIds, "npc", scenario);
   const recentOrders = [...orders]
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
     .slice(0, 6);
@@ -62,10 +69,30 @@ export function Dashboard() {
               <span className="font-pixel text-orange">Observatory</span>
             </h1>
             <p className="mt-4 text-secondary text-[15px] leading-relaxed max-w-lg">
-              AI agents autonomously run competing shops — creating
-              products, setting prices, reacting to trends, and competing for
-              customers. Watch the marketplace evolve!
+              Scenario-controlled agent shops compete inside a broader NPC
+              market, creating products, setting prices, reacting to trends,
+              and fighting for customers in the same shared world.
             </p>
+
+            {scenario ? (
+              <div className="mt-5 flex flex-wrap items-center gap-2">
+                <ScenarioBadge scenario={scenario} subtle />
+                <Badge
+                  variant="orange"
+                  subtle
+                  icon={<Robot size={10} weight="duotone" />}
+                >
+                  {agentShopCount} agent shop{agentShopCount === 1 ? "" : "s"}
+                </Badge>
+                <Badge
+                  variant="gray"
+                  subtle
+                  icon={<Storefront size={10} weight="duotone" />}
+                >
+                  {npcShopCount} NPC shop{npcShopCount === 1 ? "" : "s"}
+                </Badge>
+              </div>
+            ) : null}
 
             {/* Inline stats */}
             {snapshot && (
@@ -160,7 +187,7 @@ export function Dashboard() {
               accent="emerald"
             />
             <Stat
-              label="Shops Running"
+              label="Active Shops"
               value={snapshot.active_shop_count}
               icon={<Storefront size={12} weight="duotone" />}
               accent="orange"
@@ -205,10 +232,14 @@ export function Dashboard() {
               label="Stock"
             />
             <Gauge
-              value={Math.min(100, shops.length * 20)}
+              value={
+                shops.length > 0
+                  ? Math.round((agentShopCount / shops.length) * 100)
+                  : 0
+              }
               color="orange"
               size="lg"
-              label="Agents"
+              label="Agent Share"
             />
             <Gauge
               value={Math.min(100, orders.length * 4)}
@@ -257,9 +288,27 @@ export function Dashboard() {
       {/* Shops */}
       <section>
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-semibold text-ink">
-            Agent Shops
-          </h2>
+          <div className="space-y-2">
+            <h2 className="text-lg font-semibold text-ink">
+              Shop Network
+            </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge
+                variant="orange"
+                subtle
+                icon={<Robot size={10} weight="duotone" />}
+              >
+                {agentShopCount} agent-controlled
+              </Badge>
+              <Badge
+                variant="gray"
+                subtle
+                icon={<Storefront size={10} weight="duotone" />}
+              >
+                {npcShopCount} NPC market
+              </Badge>
+            </div>
+          </div>
           <Link
             to="/marketplace"
             className="text-sm text-orange hover:text-orange-dark font-medium flex items-center gap-1 transition-colors"
@@ -279,6 +328,7 @@ export function Dashboard() {
             {shops.map((shop) => (
               <ShopCard
                 key={shop.shop_id}
+                scenario={scenario}
                 shop={{
                   ...shop,
                   listing_active_count:
@@ -309,7 +359,7 @@ export function Dashboard() {
           <EmptyState
             icon={<Storefront size={48} weight="duotone" />}
             title="No shops yet"
-            description="Start the simulation to see AI agents open their shops and begin competing in the marketplace."
+            description="Start the simulation to see agent shops and NPC market shops populate the shared world."
           />
         )}
       </section>

@@ -45,7 +45,7 @@ export function Operator() {
 
       <BackendNotice
         title="Operator control-plane contract"
-        description="World inspection, reset, single-run launch, and tournament launch are available through the control plane. Browser-triggered launch still depends on the frontend feature flag."
+        description="World inspection, reset, single-run launch, and tournament launch are available through the control plane."
         endpoints={[
           "POST /control/runs/launch",
           "POST /control/tournaments/launch",

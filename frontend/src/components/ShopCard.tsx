@@ -1,7 +1,7 @@
 import { Package, ShoppingCart, Star } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
-import { StatusDot } from "./StatusDot";
-import type { Shop } from "../types/api";
+import { ShopRoleBadge } from "./ShopRoleBadge";
+import type { Shop, SimulationScenario } from "../types/api";
 
 function shopHue(name: string): number {
   let h = 0;
@@ -11,7 +11,13 @@ function shopHue(name: string): number {
   return Math.abs(h) % 360;
 }
 
-export function ShopCard({ shop }: { shop: Shop }) {
+export function ShopCard({
+  shop,
+  scenario,
+}: {
+  shop: Shop;
+  scenario?: SimulationScenario | null;
+}) {
   const hue = shopHue(shop.shop_name);
 
   return (
@@ -27,13 +33,11 @@ export function ShopCard({ shop }: { shop: Shop }) {
             background: `linear-gradient(135deg, oklch(0.85 0.08 ${hue}), oklch(0.80 0.10 ${hue + 30}))`,
           }}
         >
-          {/* Agent indicator */}
-          <div className="absolute top-2 right-2 flex items-center gap-1.5 bg-white/80 backdrop-blur-sm px-2 py-0.5 border border-rule">
-            <StatusDot state="active" />
-            <span className="text-[9px] font-pixel-grid font-semibold text-secondary">
-              AI agent
-            </span>
-          </div>
+          <ShopRoleBadge
+            shopId={shop.shop_id}
+            scenario={scenario}
+            className="absolute top-2 right-2 border-white/60 bg-white/85 backdrop-blur-sm"
+          />
         </div>
 
         {/* Avatar */}
