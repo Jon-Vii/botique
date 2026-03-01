@@ -74,6 +74,17 @@ export function RunList() {
                     <Badge variant={run.mode === "live" ? "emerald" : "gray"}>
                       {run.mode}
                     </Badge>
+                    {run.scenario ? (
+                      <Badge variant="teal" subtle>
+                        {run.scenario}
+                      </Badge>
+                    ) : null}
+                    {run.model ? (
+                      <Badge variant="violet" subtle>
+                        {run.provider ? `${run.provider}/` : ""}
+                        {run.model}
+                      </Badge>
+                    ) : null}
                     {run.created_at ? (
                       <span className="text-[10px] font-mono text-muted">
                         {formatDateTimeShort(run.created_at)}

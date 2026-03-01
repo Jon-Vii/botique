@@ -79,6 +79,9 @@ export class RunControlService {
           shop_id: artifact.summary.shop_id,
           mode: artifact.summary.mode,
           day_count: artifact.summary.day_count,
+          scenario: extractRunScenario(artifact.summary),
+          provider: extractRunProvider(artifact.manifest),
+          model: extractRunModel(artifact.manifest),
           has_summary: true,
           has_manifest: artifact.manifest !== null,
           created_at: artifact.createdAt,
@@ -91,7 +94,7 @@ export class RunControlService {
 
   async getRunSummary(runId: string): Promise<RunSummary> {
     const artifact = await this.getRunArtifact(runId);
-    const payload = normalizeRunSummaryPayload(artifact.summary);
+    const payload = normalizeRunSummaryPayload(artifact.summary, artifact.manifest);
     return runSummarySchema.parse(payload);
   }
 
@@ -166,6 +169,8 @@ export class RunControlService {
       "--reset-world",
       "--mistral-model",
       payload.model,
+      "--provider",
+      payload.provider,
     ];
 
     if (payload.scenario) {
@@ -295,12 +300,15 @@ function formatDayDirectory(day: number): string {
   return `day-${String(day).padStart(4, "0")}`;
 }
 
-function normalizeRunSummaryPayload(summary: any) {
+function normalizeRunSummaryPayload(summary: any, manifest: any | null) {
   return {
     run_id: summary.run_id,
     shop_id: summary.shop_id,
     mode: summary.mode,
     day_count: summary.day_count,
+    scenario: extractRunScenario(summary),
+    provider: extractRunProvider(manifest),
+    model: extractRunModel(manifest),
     start_day: summary.start_day,
     end_day: summary.end_day,
     start_simulation_date: summary.start_simulation_date,
@@ -333,6 +341,9 @@ function normalizeRunManifestPayload(manifest: any, summary: any) {
     shop_id: manifest?.shop_id ?? summary?.shop_id,
     mode: manifest?.mode ?? summary?.mode ?? "live",
     day_count: manifest?.day_count ?? summary?.day_count ?? 0,
+    scenario: extractRunScenario(summary),
+    provider: extractRunProvider(manifest),
+    model: extractRunModel(manifest),
     invocation: {
       command: manifest?.invocation?.command ?? "run-days",
       days: manifest?.invocation?.days ?? summary?.day_count ?? 0,
@@ -447,4 +458,19 @@ function inferMemoryTitle(content: string, fallback: string): string {
     return fallback;
   }
   return firstLine.length > 72 ? `${firstLine.slice(0, 69)}...` : firstLine;
+}
+
+function extractRunScenario(summary: any): "operate" | "bootstrap" | undefined {
+  const scenarioId = summary?.scenario?.scenario_id;
+  return scenarioId === "operate" || scenarioId === "bootstrap" ? scenarioId : undefined;
+}
+
+function extractRunProvider(manifest: any | null | undefined): string | undefined {
+  const provider = manifest?.invocation?.provider;
+  return typeof provider === "string" && provider.trim() ? provider : undefined;
+}
+
+function extractRunModel(manifest: any | null | undefined): string | undefined {
+  const model = manifest?.invocation?.mistral_model;
+  return typeof model === "string" && model.trim() ? model : undefined;
 }

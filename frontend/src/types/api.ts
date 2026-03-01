@@ -275,6 +275,9 @@ export type RunSummary = {
   shop_id: number;
   mode: "live" | "mock";
   day_count: number;
+  scenario?: "operate" | "bootstrap";
+  provider?: string;
+  model?: string;
   start_day: number;
   end_day: number;
   start_simulation_date: string;
@@ -291,6 +294,9 @@ export type RunManifest = {
   shop_id: number;
   mode: "live" | "mock";
   day_count: number;
+  scenario?: "operate" | "bootstrap";
+  provider?: string;
+  model?: string;
   invocation: {
     command: string;
     days: number;
@@ -305,6 +311,9 @@ export type RunListEntry = {
   shop_id: number;
   mode: "live" | "mock";
   day_count: number;
+  scenario?: "operate" | "bootstrap";
+  provider?: string;
+  model?: string;
   has_summary: boolean;
   has_manifest: boolean;
   created_at?: string;
