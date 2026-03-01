@@ -132,11 +132,13 @@ export function useRunStatus(runId: string) {
   });
 }
 
-export function useRunSummary(runId: string) {
+export function useRunSummary(runId: string, options?: { refetchInterval?: number | false }) {
   return useQuery({
     queryKey: ["runs", runId, "summary"],
     queryFn: () => api.getRunSummary(runId),
     enabled: !!runId,
+    retry: false,
+    refetchInterval: options?.refetchInterval,
   });
 }
 

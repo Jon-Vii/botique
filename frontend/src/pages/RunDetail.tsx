@@ -55,15 +55,18 @@ export function RunDetail() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [rawTurnsOpen, setRawTurnsOpen] = useState(false);
 
-  const summaryQuery = useRunSummary(id);
+  const statusQuery = useRunStatus(id);
+  const progressQuery = useRunProgress(id);
+  const summaryQuery = useRunSummary(id, {
+    // Poll for summary while run is in progress (picks it up when run completes)
+    refetchInterval: 4000,
+  });
   const manifestQuery = useRunManifest(id);
   const daySnapshotsQuery = useRunDaySnapshots(id);
   const notesQuery = useRunMemoryNotes(id);
   const remindersQuery = useRunMemoryReminders(id);
   const workspaceQuery = useRunWorkspace(id);
   const workspaceRevisionsQuery = useRunWorkspaceRevisions(id);
-  const progressQuery = useRunProgress(id);
-  const statusQuery = useRunStatus(id);
 
   const summary = summaryQuery.data;
   const manifest = manifestQuery.data;
@@ -104,7 +107,9 @@ export function RunDetail() {
     [searchParams, setSearchParams],
   );
 
-  if (summaryQuery.isLoading) {
+  // Only show the full loading skeleton when we have NO data from any source.
+  // If status or progress are available, skip ahead to show the in-progress view.
+  if (summaryQuery.isLoading && !statusQuery.data && !progressQuery.data) {
     return (
       <div className="space-y-8">
         <Skeleton width="240px" height="28px" />
