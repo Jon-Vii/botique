@@ -69,6 +69,13 @@ function tokenize(value: string): string[] {
     .filter(Boolean);
 }
 
+function taxonomySearchTexts(node: TaxonomyNode | undefined): string[] {
+  if (!node) {
+    return [];
+  }
+  return [node.name, node.full_path].filter((value) => value.trim().length > 0);
+}
+
 function compareListings(
   left: Listing,
   right: Listing,
@@ -294,6 +301,9 @@ export class MarketplaceService {
 
   async searchMarketplace(query: SearchMarketplaceQuery): Promise<PaginatedResults<Listing>> {
     const shops = new Map((await this.repository.listShops()).map((shop) => [shop.shop_id, shop]));
+    const taxonomyNodes = new Map(
+      (await this.repository.listTaxonomyNodes()).map((node) => [node.taxonomy_id, node])
+    );
     const keywords = tokenize(query.keywords ?? "");
     const requestedCategory = query.category?.toLowerCase();
     const searchContext = await this.simulation.getSearchContext();
@@ -315,14 +325,22 @@ export class MarketplaceService {
       if (query.max_price !== undefined && listing.price > query.max_price) {
         continue;
       }
+      const keywordSupplementalTexts = taxonomySearchTexts(taxonomyNodes.get(listing.taxonomy_id));
       if (requestedCategory) {
-        const haystack = [listing.title, listing.description, ...listing.tags].join(" ").toLowerCase();
+        const haystack = [
+          listing.title,
+          listing.description,
+          ...listing.tags,
+          ...keywordSupplementalTexts
+        ]
+          .join(" ")
+          .toLowerCase();
         if (!haystack.includes(requestedCategory)) {
           continue;
         }
       }
 
-      const terms = computeKeywordRelevance(listing, keywords);
+      const terms = computeKeywordRelevance(listing, keywords, keywordSupplementalTexts);
 
       if (keywords.length > 0 && terms === 0) {
         continue;
@@ -334,6 +352,7 @@ export class MarketplaceService {
         ranking_score: scoreMarketplaceListing({
           listing,
           keywords,
+          keywordSupplementalTexts,
           shopReviewAverage: shop?.review_average ?? 0,
           newestListingTimestamp,
           searchContext
