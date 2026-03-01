@@ -73,7 +73,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_day.add_argument("--mistral-model")
     run_day.add_argument("--mistral-temperature", type=float)
     run_day.add_argument("--mistral-top-p", type=float)
-    run_day.add_argument("--max-turns", type=int, default=6)
+    run_day.add_argument("--work-budget", type=int, default=8)
+    run_day.add_argument("--max-turns", type=int, help=argparse.SUPPRESS)
     run_day.add_argument("--pretty", action="store_true")
 
     run_days = subparsers.add_parser(
@@ -92,7 +93,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_days.add_argument("--mistral-model")
     run_days.add_argument("--mistral-temperature", type=float)
     run_days.add_argument("--mistral-top-p", type=float)
-    run_days.add_argument("--max-turns", type=int, default=6)
+    run_days.add_argument("--work-budget", type=int, default=8)
+    run_days.add_argument("--max-turns", type=int, help=argparse.SUPPRESS)
     run_days.add_argument("--pretty", action="store_true")
     return parser
 
@@ -106,6 +108,7 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError(f"Unsupported command {namespace.command!r}.")
 
         runner = build_default_owner_agent_runner(
+            work_budget=namespace.work_budget,
             max_turns=namespace.max_turns,
             base_url=namespace.base_url,
             control_base_url=getattr(namespace, "control_base_url", None),

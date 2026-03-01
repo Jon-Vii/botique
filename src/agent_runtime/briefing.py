@@ -23,8 +23,9 @@ def _utcnow() -> datetime:
 
 
 DEFAULT_PRIORITIES_PROMPT = (
-    "Choose the highest-leverage priorities for today, then use the available "
-    "tools to inspect evidence, adjust the shop, and end the day once the plan is done."
+    "Set the highest-leverage priorities for this workday, spend the work budget "
+    "carefully, use notes or reminders when they genuinely help, and stop once the "
+    "important work is done."
 )
 
 
@@ -113,8 +114,74 @@ class MorningBriefing:
     notes: tuple[str, ...] = ()
     priorities_prompt: str = DEFAULT_PRIORITIES_PROMPT
 
-    def to_prompt_payload(self) -> dict[str, object]:
+    def to_payload(self) -> dict[str, object]:
         return jsonify(self)  # type: ignore[return-value]
+
+    def to_prompt_payload(self) -> dict[str, object]:
+        return self.to_payload()
+
+    def render_for_agent(self) -> str:
+        lines = [
+            f"# {self.shop_name} workday",
+            f"- Day: {self.day}",
+            f"- Objective: {self.objective_progress.primary_objective}",
+            f"- Current status: {self.objective_progress.status_summary or 'No objective update provided.'}",
+            "",
+            "## Morning brief",
+            f"- Cash: {_format_balance_summary(self.balance_summary)}",
+            f"- Yesterday: {_format_order_summary(self.yesterday_orders)}",
+        ]
+
+        if self.objective_progress.supporting_diagnostics:
+            lines.append(
+                f"- Key diagnostics: {', '.join(self.objective_progress.supporting_diagnostics)}"
+            )
+
+        if self.listing_changes:
+            lines.append("- Listing movement:")
+            lines.extend(
+                f"  - {_format_listing_change(change)}" for change in self.listing_changes
+            )
+
+        if self.new_reviews:
+            lines.append("- New reviews:")
+            lines.extend(
+                f"  - {_format_review_summary(review)}" for review in self.new_reviews
+            )
+
+        if self.new_customer_messages:
+            lines.append("- Customer messages:")
+            lines.extend(
+                f"  - {_format_customer_message(message)}"
+                for message in self.new_customer_messages
+            )
+
+        if self.due_reminders:
+            lines.append("- Reminders due:")
+            lines.extend(
+                f"  - [{reminder.reminder_id}] {reminder.content} (due day {reminder.due_day})"
+                for reminder in self.due_reminders
+            )
+
+        if self.market_movements:
+            lines.append("- Market watch:")
+            lines.extend(
+                f"  - {_format_market_movement(movement)}"
+                for movement in self.market_movements
+            )
+
+        if self.notes:
+            lines.append("- Relevant notes:")
+            lines.extend(f"  - {note}" for note in self.notes)
+
+        lines.extend(
+            [
+                "",
+                "## Today",
+                f"- {self.priorities_prompt}",
+            ]
+        )
+        return "\n".join(lines)
 
 
 @dataclass(frozen=True, slots=True)
@@ -746,6 +813,59 @@ def _build_objective_progress(
 def _format_note(note: NoteRecord) -> str:
     prefix = "Undated" if note.created_day is None else f"Day {note.created_day}"
     return f"{prefix} - {note.title}: {note.body}"
+
+
+def _format_balance_summary(summary: BalanceSummary) -> str:
+    currency = summary.currency_code
+    available = _format_money(summary.available, currency)
+    pending = _format_money(summary.pending, currency)
+    if summary.pending is None:
+        return f"{available} available"
+    return f"{available} available, {pending} pending"
+
+
+def _format_order_summary(summary: OrderSummary) -> str:
+    parts = [f"{summary.order_count} orders", f"${summary.revenue:.2f} revenue"]
+    if summary.average_order_value is not None:
+        parts.append(f"${summary.average_order_value:.2f} average order value")
+    if summary.refunded_order_count:
+        parts.append(f"{summary.refunded_order_count} refunded")
+    return ", ".join(parts)
+
+
+def _format_listing_change(change: ListingPerformanceChange) -> str:
+    metrics: list[str] = []
+    if change.views_delta:
+        metrics.append(f"{change.views_delta:+d} views")
+    if change.favorites_delta:
+        metrics.append(f"{change.favorites_delta:+d} favorites")
+    if change.orders_delta:
+        metrics.append(f"{change.orders_delta:+d} orders")
+    if change.revenue_delta:
+        metrics.append(f"{change.revenue_delta:+.2f} revenue")
+    metric_summary = ", ".join(metrics) if metrics else "no measurable change"
+    return f"{change.title} ({change.state}): {metric_summary}"
+
+
+def _format_review_summary(review: ReviewSummary) -> str:
+    buyer = "" if review.buyer_name is None else f" from {review.buyer_name}"
+    return f"{review.rating:.1f} stars{buyer}: {review.excerpt}"
+
+
+def _format_customer_message(message: CustomerMessageSummary) -> str:
+    return f"{message.subject} [{message.priority}]: {message.excerpt}"
+
+
+def _format_market_movement(movement: MarketMovement) -> str:
+    return f"{movement.headline} [{movement.urgency}]: {movement.summary}"
+
+
+def _format_money(value: float | None, currency_code: str) -> str:
+    if value is None:
+        return f"{currency_code} n/a"
+    if currency_code == "USD":
+        return f"${value:.2f}"
+    return f"{currency_code} {value:.2f}"
 
 
 def _previous_day_window(current_day_date: str) -> tuple[datetime, datetime]:

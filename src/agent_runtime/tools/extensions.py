@@ -74,6 +74,7 @@ def register_memory_tools(
             name="write_note",
             description="Persist a short inspectable strategy note for the current shop.",
             surface=ToolSurface.EXTENSION,
+            work_cost=1,
             required_body_fields=("shop_id", "title", "body"),
             body_encoding="json",
             notes=(
@@ -120,6 +121,7 @@ def register_memory_tools(
             name="read_notes",
             description="Read recent notes for the current shop.",
             surface=ToolSurface.EXTENSION,
+            work_cost=1,
             required_body_fields=("shop_id",),
             body_encoding="json",
             parameters_schema=_memory_parameters_schema(
@@ -155,6 +157,7 @@ def register_memory_tools(
             name="set_reminder",
             description="Create a simple reminder tied to a future simulation day.",
             surface=ToolSurface.EXTENSION,
+            work_cost=1,
             required_body_fields=("shop_id", "content", "due_day"),
             body_encoding="json",
             parameters_schema=_memory_parameters_schema(
@@ -197,6 +200,7 @@ def register_memory_tools(
             name="complete_reminder",
             description="Mark a reminder as completed so it stops appearing in future briefings.",
             surface=ToolSurface.EXTENSION,
+            work_cost=1,
             required_body_fields=("shop_id", "reminder_id"),
             body_encoding="json",
             parameters_schema=_memory_parameters_schema(

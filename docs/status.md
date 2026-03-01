@@ -9,7 +9,6 @@ The repo currently has three implemented code areas:
 - `src/agent_runtime/`: Python owner-agent runtime, provider wiring, tool registry, and simple note/reminder memory
 
 System 4 remains unimplemented in this repo.
-
 ## Current Default World
 
 The default seeded world is now creative-goods-first rather than digital-first.
@@ -22,7 +21,6 @@ Current behavior:
 - the default taxonomy now centers 3D printed goods, laser-cut decor, ceramics, and woodwork
 
 This is a `Current decision` for the default benchmark direction.
-
 ## Current Runtime Contract
 
 The owner-agent loop now runs as a budgeted seller workday.

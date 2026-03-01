@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 from seller_core.models import JSONValue
 
-from agent_runtime.loop import AgentTurnContext, AgentTurnDecision, DailyAgentPolicy, ToolCall
+from agent_runtime.loop import (
+    AgentTurnContext,
+    AgentTurnDecision,
+    DailyAgentPolicy,
+    ToolCall,
+    TurnRecord,
+)
 from agent_runtime.serialization import jsonify
 from agent_runtime.tools.registry import ToolManifestEntry
 
@@ -15,18 +22,23 @@ from .base import (
     ProviderToolCall,
     ProviderToolDefinition,
     ToolCallingProvider,
-    dump_json,
 )
 
 
 END_DAY_TOOL_NAME = "end_day"
+SUPPORT_TOOL_NAMES = {
+    "write_note",
+    "read_notes",
+    "set_reminder",
+    "complete_reminder",
+}
 DEFAULT_SYSTEM_PROMPT = (
-    "You are the owner-agent for a single Botique shop. "
-    "Choose exactly one action for this turn: call one seller-facing tool or call "
-    "`end_day` if the day should stop now. "
-    "Prefer marketplace evidence from core tools over Botique-only memory tools unless "
-    "you genuinely need to save or retrieve a note or reminder. "
-    "Do not plan multiple future turns in one response."
+    "You are the owner of a single Botique shop, working through one constrained seller "
+    "workday at a time. Each turn must do exactly one thing: call one available tool or "
+    "call `end_day` when the remaining work is not worth more budget today. Treat notes "
+    "and reminders as ordinary support tools that are visible to you, not hidden memory. "
+    "Use marketplace evidence when you need it, keep actions grounded in the current shop "
+    "state, and do not rely on hidden world knowledge or provider-specific behavior."
 )
 
 
@@ -75,39 +87,6 @@ class ToolCallingAgentPolicy(DailyAgentPolicy):
         )
 
     def _build_messages(self, context: AgentTurnContext) -> tuple[ProviderMessage, ...]:
-        prompt_payload: dict[str, JSONValue] = {
-            "run_id": context.run_id,
-            "turn_index": context.turn_index,
-            "max_turns": context.max_turns,
-            "remaining_turns": context.remaining_turns,
-            "briefing": context.briefing.to_prompt_payload(),
-            "prior_turns": [
-                {
-                    "turn_index": record.turn_index,
-                    "decision_summary": record.decision_summary,
-                    "tool_call": None
-                    if record.tool_call is None
-                    else {
-                        "name": record.tool_call.name,
-                        "arguments": jsonify(record.tool_call.arguments),
-                    },
-                    "tool_result": None
-                    if record.tool_result is None
-                    else {
-                        "tool_name": record.tool_result.tool_name,
-                        "output": jsonify(record.tool_result.output),
-                    },
-                    "state_changes": record.state_changes,
-                }
-                for record in context.prior_turns
-            ],
-            "available_tools": [tool.name for tool in context.available_tools] + [END_DAY_TOOL_NAME],
-            "instructions": [
-                "Return exactly one tool call for this turn.",
-                "If the day should stop, call end_day with a short summary.",
-                "If you call a seller tool, provide only the arguments for this turn.",
-            ],
-        }
         return (
             ProviderMessage(
                 role=ProviderMessageRole.SYSTEM,
@@ -115,9 +94,62 @@ class ToolCallingAgentPolicy(DailyAgentPolicy):
             ),
             ProviderMessage(
                 role=ProviderMessageRole.USER,
-                content=dump_json(prompt_payload),
+                content=self._build_user_message(context),
             ),
         )
+
+    def _build_user_message(self, context: AgentTurnContext) -> str:
+        support_tools = [
+            tool for tool in context.available_tools if tool.name in SUPPORT_TOOL_NAMES
+        ]
+        lines = [
+            context.briefing.render_for_agent(),
+            "",
+            "## Work session",
+            f"- Turn: {context.turn_index}",
+            (
+                f"- Work budget: {context.work_budget_remaining} left / "
+                f"{context.work_budget} total ({context.work_budget_spent} spent)"
+            ),
+            (
+                "- Available tools right now: "
+                + ", ".join(
+                    f"{tool.name} ({tool.work_cost})" for tool in context.available_tools
+                )
+            ),
+            "",
+            "## Work completed so far",
+        ]
+
+        if support_tools:
+            lines.insert(
+                5,
+                "- Support tools available now: "
+                + ", ".join(
+                    f"{tool.name} ({tool.work_cost})" for tool in support_tools
+                )
+                + ".",
+            )
+
+        if context.prior_turns:
+            lines.extend(
+                f"- {_summarize_turn(record)}" for record in context.prior_turns[-6:]
+            )
+        else:
+            lines.append("- No work completed yet today.")
+
+        lines.extend(
+            [
+                "",
+                "## Decision",
+                "- Choose the single highest-leverage next action for the shop.",
+                (
+                    "- Return exactly one tool call. If it is time to stop for today, "
+                    "call end_day with a short business reason."
+                ),
+            ]
+        )
+        return "\n".join(lines)
 
     def _build_tools(
         self,
@@ -126,7 +158,7 @@ class ToolCallingAgentPolicy(DailyAgentPolicy):
         tools = [
             ProviderToolDefinition(
                 name=tool.name,
-                description=tool.description,
+                description=_provider_tool_description(tool),
                 parameters_schema=tool.parameters_schema or _fallback_parameters_schema(tool),
             )
             for tool in context.available_tools
@@ -134,13 +166,13 @@ class ToolCallingAgentPolicy(DailyAgentPolicy):
         tools.append(
             ProviderToolDefinition(
                 name=END_DAY_TOOL_NAME,
-                description="End the current simulation day without calling another seller tool.",
+                description="End the current workday without spending more budget.",
                 parameters_schema={
                     "type": "object",
                     "properties": {
                         "summary": {
                             "type": "string",
-                            "description": "Short explanation of why the day is ending now.",
+                            "description": "Short business reason for stopping work now.",
                         }
                     },
                     "required": ["summary"],
@@ -153,8 +185,15 @@ class ToolCallingAgentPolicy(DailyAgentPolicy):
     @staticmethod
     def _default_summary(tool_call: ProviderToolCall) -> str:
         if tool_call.name == END_DAY_TOOL_NAME:
-            return "End the day."
+            return "End the workday."
         return f"Call {tool_call.name}."
+
+
+def _provider_tool_description(tool: ToolManifestEntry) -> str:
+    description = f"{tool.description} Work cost: {tool.work_cost}."
+    if tool.notes:
+        description = f"{description} {tool.notes[0]}"
+    return description
 
 
 def _fallback_parameters_schema(tool: ToolManifestEntry) -> dict[str, JSONValue]:
@@ -171,3 +210,50 @@ def _string_argument(arguments: dict[str, JSONValue], key: str) -> str | None:
     if isinstance(value, str) and value.strip():
         return value
     return None
+
+
+def _summarize_turn(record: TurnRecord) -> str:
+    tool_name = "no tool"
+    if record.tool_call is not None:
+        tool_name = record.tool_call.name
+
+    summary = (
+        f"Turn {record.turn_index}: {record.decision_summary} "
+        f"Used {tool_name} for {record.work_cost} budget."
+    )
+    if record.tool_result is None:
+        return summary
+    return f"{summary} Outcome: {_summarize_tool_output(record.tool_result.output)}"
+
+
+def _summarize_tool_output(output: object) -> str:
+    value = jsonify(output)
+    if isinstance(value, dict):
+        if isinstance(value.get("count"), int):
+            return f"{value['count']} item(s) returned."
+
+        note = value.get("note")
+        if isinstance(note, dict):
+            title = note.get("title")
+            if isinstance(title, str) and title:
+                return f'Note saved: "{title}".'
+            return "Note saved."
+
+        reminder = value.get("reminder")
+        if isinstance(reminder, dict):
+            content = reminder.get("content")
+            due_day = reminder.get("due_day")
+            if isinstance(content, str) and due_day is not None:
+                return f'Reminder tracked for day {due_day}: "{content}".'
+            status = reminder.get("status")
+            if isinstance(status, str) and status:
+                return f"Reminder status: {status}."
+
+        results = value.get("results")
+        if isinstance(results, list):
+            return f"{len(results)} result(s) returned."
+
+    compact = json.dumps(value, separators=(",", ":"), sort_keys=True)
+    if len(compact) <= 140:
+        return compact
+    return f"{compact[:137]}..."

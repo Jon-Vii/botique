@@ -9,6 +9,7 @@ Use these files as follows:
 - `agent-tools.md`: agent-facing tool surfaces and portability rules
 - `simulation-model.md`: marketplace mechanics, product space, and day resolution
 - `agent-loop.md`: shop-owner agent loop, briefing format, and delegation rules
+- `status.md`: current build state, active focus, and open runtime questions
 - `prompts/agent-tools-thread.md`: reusable prompt for a parallel thread focused on agent tools
 
 ## Current Repo Snapshot

@@ -2,187 +2,194 @@
 
 ## Purpose
 
-Define the VendingBench-style operating loop for Botique's shop-owner agents.
+Define the Botique shop-owner loop as a constrained seller workday, not a synthetic action quota.
 
-The AI should act as a business operator inside the environment, not as a narrator outside it.
+The AI should feel like a business operator spending a limited day on meaningful shop work inside the environment.
 
-Status: `Current decision` on the overall framing. Exact loop details below are mostly `Recommended default`.
+Status: `Current decision` on the workday framing and runtime-owned day settlement. Exact budget sizing remains a `Recommended default`.
 
 ## Loop Design Rules
 
 - keep the business objective explicit
-- keep tool descriptions stable across runs
-- let the environment own outcomes and timing
-- prefer simple inspectable memory over hidden retrieval
-- make day boundaries and end-of-day transitions explicit
+- let the environment own outcomes, timing, and day settlement
+- keep one tool call per turn
+- use a visible daily work budget instead of a hidden action cap
+- keep notes and reminders available as ordinary support tools
+- prefer compact inspectable session state over orchestration-heavy payloads
+- avoid provider-specific hacks or hidden reasoning dependencies
 
-Status: `Recommended default`
+Status: `Current decision`
 
 ## Main Loop
 
 Per simulated day:
 
 1. simulation resolves overnight outcomes
-2. orchestrator generates a morning briefing
-3. agent receives the briefing plus available tools
-4. agent takes up to `N` turns
-5. each turn allows at most one tool call
-6. agent may end the day early
-7. logs and notes persist into the next day
+2. orchestrator builds a morning brief from current seller and world state
+3. runtime opens a seller work session with a bounded daily work budget
+4. the agent takes turns, with at most one tool call per turn
+5. each tool call spends a small amount of work budget
+6. the agent may end the day early with `end_day`
+7. the runtime ends the workday automatically when no remaining tool is affordable
+8. the runtime persists logs, notes, and reminders, then the control/runtime layer advances the simulation between days
 
-Status: `Recommended default`
+Status: `Current decision`
 
 Boundary note:
 
-- System 3 should consume `current_day`, `market_snapshot`, `trend_state`, and `advanceDay` outputs from System 2.
-- System 1 remains the seller-facing API surface; it should not become the owner of day advancement logic.
+- System 3 consumes seller-facing state plus `current_day`, `market_snapshot`, and `trend_state` from the control API.
+- System 3 does not own simulation settlement rules.
+- day advancement remains a runtime/control concern, not a seller-facing tool.
 
-## Morning Briefing
+## Work Budget Model
 
-The briefing should be compact, structured, and unambiguous.
+The loop should feel like a believable owner workday:
 
-Suggested sections:
+- the day starts with a finite work budget
+- each tool advertises a small integer work cost
+- cheap inspection and support actions usually cost `1`
+- heavier shop-changing actions such as listing or shop updates may cost `2`
+- `end_day` costs `0`
 
-- cash and balance summary
-- yesterday's orders and revenue
-- listing performance changes
-- new reviews
-- new customer messages
-- reminders due today
-- notable market movement
-- current standing against the main business objective
-- prompt to choose priorities for the day
+Recommended default for the current runtime:
+
+- daily work budget: `8`
+- core read/search tools: `1`
+- note/reminder tools: `1`
+- create/update/delete listing and `update_shop`: `2`
 
 Status: `Recommended default`
 
-Current implementation in `src/agent_runtime/briefing.py` models the briefing with explicit sections for:
+Current implementation in `src/agent_runtime/loop.py` and `src/agent_runtime/tools/` now uses:
 
-- balance summary
-- yesterday order summary
-- listing performance deltas
-- new reviews
-- new customer messages
+- `DailyLoopConfig(work_budget=8)`
+- `ToolManifestEntry.work_cost`
+- a compact `WorkSessionState` with turn index plus budget total/spent/remaining
+- affordable-tool filtering each turn so the model only sees actions it can still pay for
+
+## Morning Brief
+
+The model should receive a natural seller brief, not runtime JSON to parse.
+
+Recommended sections:
+
+- day and shop header
+- primary objective and current business status
+- available and pending cash
+- yesterday order and revenue summary
+- listing movement worth noticing
+- new reviews or customer messages
 - reminders due today
-- market movements
-- primary objective progress
-- operator/runtime notes
-- a stable priorities prompt
+- market watch items
+- recent notes worth carrying into the day
+- short instruction to choose the highest-leverage work
 
-The initial implementation also includes a small `MorningBriefingBuilder` that pulls due reminders from the simple reminder store so the loop can stay inspectable.
+Status: `Current decision`
 
-The runtime now also includes a live Botique briefing path:
+Current implementation in `src/agent_runtime/briefing.py` now provides both:
 
-- read seller-facing shop, listing, order, review, and payment state through `seller_core`
-- read `current_day`, `market_snapshot`, and `trend_state` through the separate control API
-- derive compact briefing sections from that live state instead of requiring fully hand-authored JSON
-- compare against the prior captured shop snapshot during multi-day runs so listing deltas stay inspectable
+- structured payloads for logging and testability
+- `MorningBriefing.render_for_agent()` for the provider-facing morning brief text
+
+The live briefing path still pulls seller-facing shop, listing, order, review, and payment data through `seller_core`, and world/day state through the separate control API.
+
+## Work Session State
+
+The model should see only the session information needed to operate the current workday:
+
+- current turn number
+- work budget left, total, and already spent
+- tools still affordable right now, including work cost
+- short summaries of work already completed today
+
+Keep this compact. The goal is to support business decisions, not force the model to reconstruct runtime internals.
+
+Status: `Current decision`
+
+Current implementation in `src/agent_runtime/providers/policy.py` uses a plain-language user message with:
+
+- the rendered morning brief
+- a short work-session summary
+- explicit visibility of note/reminder tools
+- a concise summary of prior turns rather than a raw prior-turn JSON dump
 
 ## Turn Rules
 
 - one tool call per turn
-- bounded number of turns per day
-- stable tool descriptions
-- explicit day-ending action
-- no hidden control-plane powers
+- exactly one next action or `end_day`
+- every seller tool call spends work budget
+- only currently affordable tools are exposed for the next turn
+- notes and reminders remain available as normal tools, not hidden memory
+- the runtime still binds the current `shop_id` into shop-scoped tools
+- the runtime still owns day-end accounting and simulation advancement
 
-Status: `Recommended default`
+Status: `Current decision`
 
-Current implementation in `src/agent_runtime/loop.py` uses a `SingleShopDailyLoop` with:
-
-- one `AgentTurnDecision` per turn
-- either exactly one tool call or an explicit end-day action
-- a configurable max-turn cap
-- structured day/turn/tool events for debugging and demo playback
-- no delegation or sub-agent assumptions
-
-Current runtime note:
-
-- the owner-agent runtime binds the current `shop_id` from the morning briefing into shop-scoped tool calls so the model cannot switch shops by inventing a different seller id mid-run
-
-Current runtime entrypoint:
+Current runtime entrypoints:
 
 - `botique-agent-runtime run-day --briefing-file <path>`
 - `botique-agent-runtime run-day --shop-id <shop_id>`
+- `botique-agent-runtime run-day --shop-id <shop_id> --work-budget <n>`
 - `botique-agent-runtime run-days --shop-id <shop_id> --days <n>`
-- the CLI can still load a structured briefing directly, but it can also build one from live Botique state and execute a simple multi-day run that advances the simulation between days
-- the default provider wiring is Mistral through `MISTRAL_API_KEY` and optional `BOTIQUE_MISTRAL_*` settings, but the loop itself remains provider-agnostic
-- the current runtime expects the briefing payload to be supplied externally; fully automated briefing assembly and day advancement orchestration are follow-on integration work
 
-## Core Cognitive Stages
+The CLI still accepts the older `--max-turns` flag as a compatibility alias, but the contract is now work-budget based.
 
-The prompt should encourage these modes without over-hardcoding them:
+## Prompt Framing
 
-- sense
-- evaluate
-- strategize
-- act
-- reflect
+The system prompt should frame the model as operating a business:
 
-## Notes and Reminders
+- you are running one shop for one workday
+- spend the remaining budget where it matters most
+- use visible tools only
+- use notes/reminders when they help with follow-through
+- rely on marketplace evidence when evaluating the business
+- stop when more work is not worth the remaining budget
 
-Use simple memory only.
+Status: `Current decision`
 
-Recommended tools:
+Avoid:
+
+- exposing provider-specific instructions
+- asking for hidden chain-of-thought
+- overloading the prompt with runtime bookkeeping fields
+- treating note/reminder tools as secret runtime capabilities
+
+## Notes And Reminders
+
+Use simple inspectable support tools only:
 
 - `write_note`
 - `read_notes`
 - `set_reminder`
 - `complete_reminder`
 
-This keeps the strategy legible and avoids complex retrieval systems during the hackathon.
+These are part of the visible workday tool surface. They are not hidden from the model and they do consume work budget like other small support tasks.
 
-The goal is not sophisticated recall. The goal is to let the agent persist explicit plans, follow-ups, and lessons in a way judges and developers can inspect.
-
-Current implementation in `src/agent_runtime/memory.py` is an in-memory placeholder store. It is intentionally simple and suitable for a single-shop run before adding persistence or retrieval layers.
-
-## Delegation
-
-Not required for the first successful run.
-
-If added later:
-
-- the owner agent decides when to delegate
-- delegated agents get restricted tools
-- delegation has a simulated cost
-- returned work should be structured and inspectable
-
-Status: `Recommended default`
+Status: `Current decision`
 
 ## Logging
 
 Every day and every turn should log:
 
 - briefing content
-- model response
+- model response summary
 - tool name and arguments
 - tool result
-- resulting state changes
-- any note or reminder writes
+- work cost spent
+- remaining budget after tool calls
+- note and reminder writes
+- day end reason and budget totals
 
-Logs are part of the product. They make strategy visible to judges and to you while debugging.
+Logs remain part of the product because they make seller strategy legible.
 
-Current implementation in `src/agent_runtime/events.py` and `src/agent_runtime/loop.py` emits structured events for:
-
-- day start and end
-- briefing generation
-- turn start
-- model response
-- tool call, result, and failure
-- note writes
-- reminder creation
-
-The multi-day runner now keeps the surrounding run structure inspectable too:
-
-- pre-day shop snapshots used to build the briefing
-- post-day shop snapshots after the agent acts
-- control-plane day advancement records between daily runs
-- run-level note and reminder snapshots alongside the per-turn event stream
+Status: `Current decision`
 
 ## Failure Modes To Guard Against
 
-- repetitive tool loops
-- failure to end the day
-- reacting to stale information
-- overuse of extension tools instead of marketplace evidence
-- ambiguous timing around when orders, reviews, or delegated work appear
-- overfitting to narrative events while ignoring business metrics
+- repetitive low-value inspection loops
+- burning the whole budget on bookkeeping instead of business leverage
+- hiding support tools or making them feel second-class
+- leaking runtime-internal JSON into the provider payload
+- ambiguous timing around when world outcomes arrive
+- accidentally giving the agent control-plane powers
+- treating budget exhaustion as simulation settlement instead of a runtime boundary
