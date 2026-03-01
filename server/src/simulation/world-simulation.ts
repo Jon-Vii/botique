@@ -12,6 +12,10 @@ import type {
   TrendState
 } from "./state-types";
 
+export interface AdvanceDayOptions {
+  controlled_shop_ids?: readonly number[];
+}
+
 export interface SimulationStateStore {
   getMarketplaceState(): Promise<StoredMarketplaceState>;
   replaceWorldState(state: StoredWorldState): Promise<StoredWorldState>;
@@ -27,7 +31,7 @@ export interface SimulationModule {
   getMarketSnapshot(): Promise<MarketSnapshot>;
   getTrendState(): Promise<TrendState>;
   getSearchContext(): Promise<MarketplaceSearchContext>;
-  advanceDay(): Promise<AdvanceDayResult>;
+  advanceDay(options?: AdvanceDayOptions): Promise<AdvanceDayResult>;
   resetWorld(): Promise<StoredWorldState>;
 }
 
@@ -71,9 +75,9 @@ export class WorldSimulation implements SimulationModule {
     };
   }
 
-  async advanceDay(): Promise<AdvanceDayResult> {
+  async advanceDay(options: AdvanceDayOptions = {}): Promise<AdvanceDayResult> {
     const world = await this.getWorldState();
-    const result = resolveAdvanceDay(world);
+    const result = resolveAdvanceDay(world, options);
     const persistedWorld = await this.store.replaceWorldState(result.world);
 
     return {

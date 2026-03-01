@@ -120,3 +120,7 @@ export const advanceDayResultSchema = z.object({
   current_day: simulationDaySchema,
   steps: z.array(advanceDayStepSchema)
 });
+
+export const advanceDayRequestSchema = z.object({
+  controlled_shop_ids: z.array(z.number().int().positive()).optional()
+});

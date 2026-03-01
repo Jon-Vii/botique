@@ -27,6 +27,10 @@ import type {
   TrendState
 } from "./state-types";
 
+export interface DayResolutionOptions {
+  controlled_shop_ids?: readonly number[];
+}
+
 const BUYER_NAMES = [
   "Ava Chen",
   "Leo Ramirez",
@@ -284,10 +288,19 @@ function settleDelayedEvents(
   return remainingReviews;
 }
 
-function ensureStockJobs(world: StoredWorldState, currentDate: string, trendState: TrendState) {
+function ensureStockJobs(
+  world: StoredWorldState,
+  currentDate: string,
+  trendState: TrendState,
+  controlledShopIds: ReadonlySet<number>
+) {
   let sequence = world.marketplace.shops.reduce((sum, shop) => sum + shop.production_queue.length, 0);
 
   for (const shop of world.marketplace.shops) {
+    if (controlledShopIds.has(shop.shop_id)) {
+      continue;
+    }
+
     for (const listing of world.marketplace.listings) {
       if (listing.shop_id !== shop.shop_id || !isStockedListing(listing) || listing.state !== "active") {
         continue;
@@ -498,18 +511,24 @@ function buildStepResult(world: StoredWorldState, previousDayDate: string, nextD
   ];
 }
 
-export function resolveAdvanceDay(world: StoredWorldState): AdvanceDayResult {
+export function resolveAdvanceDay(
+  world: StoredWorldState,
+  options: DayResolutionOptions = {}
+): AdvanceDayResult {
   const currentWorld = normalizeWorldState(world);
   const advancedAt = new Date().toISOString();
   const nextDay = nextSimulationDay(currentWorld.simulation.current_day, advancedAt);
   const nextTrendState = buildTrendState(currentWorld.marketplace, nextDay, advancedAt);
   const resolutions = createResolutionMap(currentWorld.marketplace.shops);
   const pendingReviews = clone(currentWorld.simulation.pending_reviews ?? []);
+  const controlledShopIds = new Set(
+    (options.controlled_shop_ids ?? []).map((shopId) => Number(shopId))
+  );
 
   releaseCompletedProduction(currentWorld, nextDay.date, resolutions, pendingReviews);
   const unsettledReviews = settleDelayedEvents(currentWorld, nextDay.date, resolutions, pendingReviews);
   resolveMarketSales(currentWorld, nextDay.date, nextTrendState, resolutions, unsettledReviews);
-  ensureStockJobs(currentWorld, nextDay.date, nextTrendState);
+  ensureStockJobs(currentWorld, nextDay.date, nextTrendState, controlledShopIds);
   allocateProduction(currentWorld, nextDay.date, resolutions);
   finalizeShopMetrics(currentWorld, resolutions);
 

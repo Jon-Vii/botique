@@ -5,7 +5,7 @@ import type {
   StoredWorldState,
   TrendState
 } from "../simulation/state-types";
-import type { SimulationModule } from "../simulation/world-simulation";
+import type { AdvanceDayOptions, SimulationModule } from "../simulation/world-simulation";
 
 export class RuntimeControlService {
   constructor(private readonly simulation: SimulationModule) {}
@@ -26,8 +26,8 @@ export class RuntimeControlService {
     return this.simulation.getTrendState();
   }
 
-  async advanceDay(): Promise<AdvanceDayResult> {
-    return this.simulation.advanceDay();
+  async advanceDay(options: AdvanceDayOptions = {}): Promise<AdvanceDayResult> {
+    return this.simulation.advanceDay(options);
   }
 
   async getWorldState(): Promise<StoredWorldState> {

@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ZodTypeAny } from "zod";
 
 import {
+  advanceDayRequestSchema,
   advanceDayResultSchema,
   marketSnapshotSchema,
   simulationDaySchema,
@@ -34,8 +35,12 @@ export async function registerControlRoutes(app: FastifyInstance, service: Runti
     sendValidated(reply, trendStateSchema, await service.getTrendState())
   );
 
-  app.post("/simulation/advance-day", async (_request, reply) =>
-    sendValidated(reply, advanceDayResultSchema, await service.advanceDay())
+  app.post("/simulation/advance-day", async (request, reply) =>
+    sendValidated(
+      reply,
+      advanceDayResultSchema,
+      await service.advanceDay(advanceDayRequestSchema.parse(request.body ?? {}))
+    )
   );
 
   app.post("/world/reset", async (_request, reply) =>
