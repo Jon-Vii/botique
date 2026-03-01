@@ -26,7 +26,7 @@ export function RunLaunchPanel({
   const { data: world } = useWorldState();
   const launchRun = useLaunchRun();
   const shops = world?.marketplace.shops ?? [];
-  const canLaunchFromUi = frontendFeatures.enablePendingControlActions;
+  const canLaunchFromUi = frontendFeatures.enableRunLaunchControls;
 
   const [shopId, setShopId] = useState("");
   const [days, setDays] = useState(5);

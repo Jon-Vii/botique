@@ -44,11 +44,10 @@ export function Operator() {
       <SimStatusBar />
 
       <BackendNotice
-        title="Operator launch actions are not wired to the backend yet"
-        description="World inspection and reset are live, but the UI launch controls still target control-plane endpoints that are not implemented in the current repo. Keep using the CLI for single runs and tournaments until those POST routes land."
+        title="Single-run launch is still blocked on a backend endpoint"
+        description="World inspection, reset, and tournament launch are wired locally. The remaining operator blocker is browser-triggered single-run launch, which still needs a control-plane route."
         endpoints={[
           "POST /control/runs/launch",
-          "POST /control/tournaments/launch",
         ]}
         compact
       />

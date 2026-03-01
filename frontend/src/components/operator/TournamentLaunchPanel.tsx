@@ -1,11 +1,7 @@
 import { useState } from "react";
-import { Trophy, Plus, Trash, Warning } from "@phosphor-icons/react";
+import { Trophy, Plus, Trash } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
-import { BackendNotice } from "../BackendNotice";
 import { LoadingDots } from "../LoadingDots";
-import { Badge } from "../Badge";
-import { Snippet } from "../Snippet";
-import { frontendFeatures } from "../../config/features";
 import { useLaunchTournament, useWorldState } from "../../hooks/useApi";
 
 const PRESET_ENTRANTS = [
@@ -33,7 +29,6 @@ export function TournamentLaunchPanel({
   const { data: world } = useWorldState();
   const launchTournament = useLaunchTournament();
   const shops = world?.marketplace.shops ?? [];
-  const canLaunchFromUi = frontendFeatures.enablePendingControlActions;
 
   const [entrants, setEntrants] = useState<Entrant[]>([
     PRESET_ENTRANTS[0],
@@ -70,10 +65,6 @@ export function TournamentLaunchPanel({
       onError("Need at least 2 entrants");
       return;
     }
-    if (!canLaunchFromUi) {
-      onError("Tournament launch is not wired to the backend yet");
-      return;
-    }
     const sids = selectedShopIds.length > 0
       ? selectedShopIds
       : shops.map((s) => s.shop_id);
@@ -106,10 +97,6 @@ export function TournamentLaunchPanel({
             Tournament
           </span>
         </div>
-        <Badge variant="amber" subtle>
-          <Warning size={10} weight="fill" />
-          Backend endpoint pending
-        </Badge>
       </div>
 
       {/* Entrants */}
@@ -256,8 +243,8 @@ export function TournamentLaunchPanel({
         <button
           type="button"
           onClick={handleLaunch}
-          disabled={!canLaunchFromUi || launchTournament.isPending || entrants.length < 2}
-          aria-disabled={!canLaunchFromUi || launchTournament.isPending || entrants.length < 2}
+          disabled={launchTournament.isPending || entrants.length < 2}
+          aria-disabled={launchTournament.isPending || entrants.length < 2}
           className="flex cursor-pointer items-center gap-2 bg-violet px-5 py-2.5 text-sm font-semibold text-white transition-[box-shadow,transform,opacity] hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(139,92,246,0.3)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {launchTournament.isPending ? (
@@ -279,29 +266,6 @@ export function TournamentLaunchPanel({
           </Link>
         )}
       </div>
-
-      {!canLaunchFromUi ? (
-        <div className="mt-5">
-          <BackendNotice
-            title="Use the CLI for tournaments"
-            description="Tournament orchestration already exists in System 3, but the browser launch action still points at a control endpoint that is not implemented in the current server."
-            endpoints={["POST /control/tournaments/launch"]}
-            compact
-          >
-            <Snippet
-              dark={false}
-              text={[
-                "botique-agent-runtime run-tournament \\",
-                "  --entrants-file entrants.json \\",
-                `  --shop-ids ${(selectedShopIds.length > 0 ? selectedShopIds : shops.map((shop) => shop.shop_id)).join(",") || "1001,1002"} \\`,
-                `  --days ${daysPerRound} \\`,
-                `  --rounds ${rounds} \\`,
-                `  --turns-per-day ${turnsPerDay}`,
-              ]}
-            />
-          </BackendNotice>
-        </div>
-      ) : null}
     </div>
   );
 }

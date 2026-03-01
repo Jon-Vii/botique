@@ -124,3 +124,107 @@ export const advanceDayResultSchema = z.object({
 export const advanceDayRequestSchema = z.object({
   controlled_shop_ids: z.array(z.number().int().positive()).optional()
 });
+
+export const tournamentEntrantSchema = z.object({
+  entrant_id: z.string().min(1),
+  display_name: z.string().min(1),
+  provider: z.string().min(1),
+  model: z.string().min(1)
+});
+
+export const tournamentLaunchRequestSchema = z.object({
+  entrants: z.array(tournamentEntrantSchema).min(2),
+  shop_ids: z.array(z.number().int().positive()).min(2),
+  days_per_round: z.number().int().positive(),
+  rounds: z.number().int().positive(),
+  turns_per_day: z.number().int().positive(),
+  run_id: z.string().min(1).optional()
+});
+
+export const tournamentLaunchResponseSchema = z.object({
+  tournament_id: z.string().min(1)
+});
+
+export const tournamentScorecardSchema = z.object({
+  primary_score_name: z.string(),
+  primary_score: z.number(),
+  available_cash: z.number(),
+  pending_cash: z.number(),
+  total_sales_count: z.number().int().nonnegative(),
+  review_average: z.number().nullable(),
+  review_count: z.number().int().nonnegative(),
+  active_listing_count: z.number().int().nonnegative(),
+  draft_listing_count: z.number().int().nonnegative(),
+  workspace_entries_written: z.number().int().nonnegative(),
+  open_reminders: z.number().int().nonnegative(),
+  final_day: z.number().int().positive(),
+  final_simulation_date: z.string()
+});
+
+export const tournamentStandingSchema = z.object({
+  rank: z.number().int().positive(),
+  entrant: tournamentEntrantSchema,
+  shop_id: z.number().int().positive(),
+  shop_name: z.string(),
+  round_index: z.number().int().nonnegative(),
+  scorecard: tournamentScorecardSchema
+});
+
+export const tournamentShopAssignmentSchema = z.object({
+  entrant_id: z.string().min(1),
+  shop_id: z.number().int().positive()
+});
+
+export const tournamentEntrantDayResultSchema = z.object({
+  entrant_id: z.string().min(1),
+  live_day: z.number().int().positive()
+});
+
+export const tournamentRoundDayResultSchema = z.object({
+  day: z.number().int().positive(),
+  simulation_date: z.string(),
+  turn_order: z.array(z.string()),
+  entrant_results: z.array(tournamentEntrantDayResultSchema)
+});
+
+export const tournamentRoundResultSchema = z.object({
+  round_index: z.number().int().nonnegative(),
+  run_id: z.string().min(1),
+  shop_assignments: z.array(tournamentShopAssignmentSchema),
+  days: z.array(tournamentRoundDayResultSchema),
+  standings: z.array(tournamentStandingSchema)
+});
+
+export const tournamentAggregateStandingSchema = z.object({
+  rank: z.number().int().positive(),
+  entrant: tournamentEntrantSchema,
+  rounds_played: z.number().int().positive(),
+  primary_score_name: z.string(),
+  average_primary_score: z.number(),
+  round_scores: z.array(z.number()),
+  round_wins: z.number().int().nonnegative(),
+  average_total_sales_count: z.number(),
+  average_review_average: z.number().nullable()
+});
+
+export const tournamentResultSchema = z.object({
+  run_id: z.string().min(1),
+  days_per_round: z.number().int().positive(),
+  round_count: z.number().int().positive(),
+  entrants: z.array(tournamentEntrantSchema),
+  shop_ids: z.array(z.number().int().positive()),
+  rounds: z.array(tournamentRoundResultSchema),
+  standings: z.array(tournamentAggregateStandingSchema)
+});
+
+export const tournamentListItemSchema = z.object({
+  run_id: z.string().min(1),
+  entrant_count: z.number().int().nonnegative(),
+  round_count: z.number().int().positive(),
+  days_per_round: z.number().int().positive(),
+  created_at: z.string(),
+  status: z.enum(["running", "completed", "failed"]),
+  winner: tournamentEntrantSchema.optional()
+});
+
+export const tournamentListSchema = z.array(tournamentListItemSchema);

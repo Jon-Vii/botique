@@ -463,8 +463,8 @@ export function TournamentDetail() {
           description="This tournament may not exist or the backend endpoint is not available."
         />
         <BackendNotice
-          title="Tournament detail endpoint is missing"
-          description="Tournament mode is implemented in the runtime, but the current server does not yet publish tournament results through the control API."
+          title="Tournament result is unavailable"
+          description="The tournament detail request failed or the requested artifact was not found."
           endpoints={["GET /control/tournaments/:tournamentId"]}
         />
       </div>

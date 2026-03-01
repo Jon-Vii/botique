@@ -6,7 +6,6 @@ import {
   Trophy,
 } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
-import { BackendNotice } from "../components/BackendNotice";
 import { Badge } from "../components/Badge";
 import { EmptyState } from "../components/EmptyState";
 import { Skeleton } from "../components/Skeleton";
@@ -186,13 +185,10 @@ export function TournamentList() {
             <TournamentCardSkeleton />
           </div>
         ) : error ? (
-          <BackendNotice
-            title="Tournament results are not exposed through the server yet"
-            description="Tournament orchestration exists in the runtime, but the current server does not implement the control-plane list/detail endpoints for this screen."
-            endpoints={[
-              "GET /control/tournaments",
-              "GET /control/tournaments/:tournamentId",
-            ]}
+          <EmptyState
+            icon={<Sword size={48} weight="duotone" />}
+            title="Could not load tournaments"
+            description="The tournament list could not be loaded right now."
           />
         ) : tournaments && tournaments.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 stagger">

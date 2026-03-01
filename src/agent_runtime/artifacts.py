@@ -21,9 +21,10 @@ from .memory import (
 )
 from .runner import LiveDayRunResult, MultiDayRunResult
 from .serialization import jsonify
+from .tournament import TournamentResult
 
 
-ArtifactResult = DayRunResult | LiveDayRunResult | MultiDayRunResult
+ArtifactResult = DayRunResult | LiveDayRunResult | MultiDayRunResult | TournamentResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,10 +76,11 @@ class _NormalizedRunArtifact:
     workspace: WorkspaceRecord | None
     workspace_revisions: tuple[WorkspaceRecord, ...]
     is_live: bool
+    tournament_result: TournamentResult | None = None
 
 
 def supports_run_artifacts(result: object) -> bool:
-    return isinstance(result, (DayRunResult, LiveDayRunResult, MultiDayRunResult))
+    return isinstance(result, (DayRunResult, LiveDayRunResult, MultiDayRunResult, TournamentResult))
 
 
 def persist_run_artifacts(
@@ -137,10 +139,11 @@ def persist_run_artifacts(
         [entry.to_payload() for entry in normalized.workspace_revisions],
     )
 
-    days_dir = root_dir / "days"
-    days_dir.mkdir(parents=True, exist_ok=True)
-    for day in normalized.days:
-        _write_day_artifacts(days_dir, day)
+    if normalized.days:
+        days_dir = root_dir / "days"
+        days_dir.mkdir(parents=True, exist_ok=True)
+        for day in normalized.days:
+            _write_day_artifacts(days_dir, day)
 
     return RunArtifactBundle(
         output_dir=str(root_dir),
@@ -154,6 +157,20 @@ def persist_run_artifacts(
 
 
 def _normalize_result(result: ArtifactResult) -> _NormalizedRunArtifact:
+    if isinstance(result, TournamentResult):
+        return _NormalizedRunArtifact(
+            run_id=result.run_id,
+            shop_id="tournament",
+            days=(),
+            events=(),
+            workspace_entries=(),
+            reminders=(),
+            workspace=None,
+            workspace_revisions=(),
+            is_live=False,
+            tournament_result=result,
+        )
+
     if isinstance(result, MultiDayRunResult):
         days_list = list(result.days)
         days = tuple(
@@ -284,7 +301,11 @@ def _build_manifest(
         "run_id": normalized.run_id,
         "shop_id": jsonify(normalized.shop_id),
         "day_count": len(normalized.days),
-        "mode": "live" if normalized.is_live else "briefing_only",
+        "mode": (
+            "tournament"
+            if normalized.tournament_result is not None
+            else ("live" if normalized.is_live else "briefing_only")
+        ),
         "invocation": jsonify(dict(invocation or {})),
         "layout": {
             "summary_markdown": "summary.md",
@@ -295,7 +316,9 @@ def _build_manifest(
             "memory_reminders": "memory/reminders.json",
             "memory_workspace": "memory/workspace.json",
             "memory_workspace_revisions": "memory/workspace_revisions.json",
-            "day_directories": "days/day-####/",
+            "day_directories": (
+                None if normalized.tournament_result is not None else "days/day-####/"
+            ),
         },
         "summary": summary_payload,
     }
@@ -306,6 +329,21 @@ def _build_run_summary(
     *,
     created_at: datetime,
 ) -> dict[str, JSONValue]:
+    if normalized.tournament_result is not None:
+        tournament = normalized.tournament_result
+        winner = tournament.standings[0].entrant if tournament.standings else None
+        return {
+            "generated_at": created_at.isoformat(),
+            "run_id": tournament.run_id,
+            "mode": "tournament",
+            "entrant_count": len(tournament.entrants),
+            "round_count": tournament.round_count,
+            "days_per_round": tournament.days_per_round,
+            "shop_ids": [jsonify(shop_id) for shop_id in tournament.shop_ids],
+            "winner": None if winner is None else jsonify(winner),
+            "standings": [jsonify(standing) for standing in tournament.standings],
+        }
+
     tool_counter: Counter[str] = Counter()
     surface_counter: Counter[str] = Counter()
     total_turns = 0
@@ -417,6 +455,18 @@ def _write_day_artifacts(days_dir: Path, day: _NormalizedDayArtifact) -> None:
 
 
 def _render_readme(normalized: _NormalizedRunArtifact) -> str:
+    if normalized.tournament_result is not None:
+        return "\n".join(
+            [
+                "# Botique Tournament Artifacts",
+                "",
+                f"- `summary.md`: human-readable tournament summary for `{normalized.run_id}`.",
+                "- `summary.json`: comparison-friendly aggregate metrics for the tournament.",
+                "- `result.json`: full serialized tournament result payload.",
+                "- `events.jsonl`: reserved for future tournament-level event streams.",
+            ]
+        ) + "\n"
+
     return "\n".join(
         [
             "# Botique Runtime Artifacts",
@@ -445,6 +495,38 @@ def _render_run_summary(
     normalized: _NormalizedRunArtifact,
     summary_payload: Mapping[str, JSONValue],
 ) -> str:
+    if normalized.tournament_result is not None:
+        tournament = normalized.tournament_result
+        lines = [
+            "# Tournament Summary",
+            "",
+            f"- Tournament ID: `{tournament.run_id}`",
+            f"- Entrants: {len(tournament.entrants)}",
+            f"- Rounds: {tournament.round_count}",
+            f"- Days per round: {tournament.days_per_round}",
+            "",
+            "## Final Standings",
+            "",
+        ]
+        if tournament.standings:
+            for standing in tournament.standings:
+                lines.append(
+                    "- "
+                    f"#{standing.rank} `{standing.entrant.display_name}` "
+                    f"({standing.entrant.model}) avg {standing.primary_score_name} "
+                    f"{standing.average_primary_score:.2f}"
+                )
+        else:
+            lines.append("- No standings available.")
+
+        lines.extend(["", "## Rounds", ""])
+        for round_result in tournament.rounds:
+            lines.append(
+                f"- Round {round_result.round_index}: `{round_result.run_id}` "
+                f"with {len(round_result.days)} days"
+            )
+        return "\n".join(lines).rstrip() + "\n"
+
     lines = [
         "# Reference Run Summary",
         "",

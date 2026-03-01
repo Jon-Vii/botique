@@ -146,6 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_tournament.add_argument("--mistral-temperature", type=float)
     run_tournament.add_argument("--mistral-top-p", type=float)
     run_tournament.add_argument("--turns-per-day", type=int, default=5)
+    run_tournament.add_argument("--output-dir")
     run_tournament.add_argument("--pretty", action="store_true")
     return parser
 

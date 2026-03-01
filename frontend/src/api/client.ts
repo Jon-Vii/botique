@@ -248,12 +248,7 @@ export const api = {
     );
   },
 
-  /* ── Tournaments ──
-   * NOTE: Backend endpoints under /control/tournaments/... do not exist yet.
-   * These methods define the expected contract. The backend needs to:
-   *   GET /control/tournaments                    -> TournamentListItem[]
-   *   GET /control/tournaments/:tournamentId      -> TournamentResult
-   */
+  /* ── Tournaments ── */
 
   getTournamentList(): Promise<TournamentListItem[]> {
     return requestJSON<TournamentListItem[]>("/tournaments", { base: CONTROL });
@@ -294,7 +289,6 @@ export const api = {
     });
   },
 
-  /** NOTE: POST /control/tournaments/launch does NOT exist yet on the backend */
   async launchTournament(payload: {
     entrants: {
       entrant_id: string;
