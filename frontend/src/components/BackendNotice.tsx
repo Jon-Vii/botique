@@ -8,12 +8,14 @@ export function BackendNotice({
   endpoints,
   children,
   compact = false,
+  badgeLabel = "Backend Blocker",
 }: {
   title: string;
   description: string;
   endpoints?: string[];
   children?: ReactNode;
   compact?: boolean;
+  badgeLabel?: string;
 }) {
   return (
     <section
@@ -31,7 +33,7 @@ export function BackendNotice({
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-sm font-semibold text-ink">{title}</h2>
             <Badge variant="amber" subtle>
-              Backend Blocker
+              {badgeLabel}
             </Badge>
           </div>
           <p className="max-w-3xl text-sm leading-relaxed text-secondary">

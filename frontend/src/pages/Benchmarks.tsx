@@ -380,6 +380,7 @@ export function Benchmarks() {
   }
 
   const isLoading = listLoading || summaryResults.some((r) => r.isLoading);
+  const listErrorMessage = listError instanceof Error ? listError.message : null;
 
   return (
     <div className="space-y-8">
@@ -463,11 +464,16 @@ export function Benchmarks() {
       {listError ? (
         <BackendNotice
           title="Benchmark data could not be loaded"
-          description="This comparison view depends on run artifact endpoints. The request failed or the returned data was invalid."
+          description={
+            listErrorMessage
+              ? `The benchmark console could not read run artifacts from the control surface. ${listErrorMessage}`
+              : "The benchmark console could not read run artifacts from the control surface. The request failed or the returned data was invalid."
+          }
           endpoints={[
             "GET /control/runs",
             "GET /control/runs/:runId/summary",
           ]}
+          badgeLabel="Load Failure"
         />
       ) : isLoading && summaries.length === 0 ? (
         <div className="tech-card overflow-hidden">
@@ -627,18 +633,34 @@ export function Benchmarks() {
         </section>
       )}
 
-      {/* Backend contract note */}
-      <BackendNotice
-        title="Backend contract"
-        description="Benchmarks aggregate run summaries from the control surface and remain read-only by design."
-        endpoints={[
-          "GET /control/runs",
-          "GET /control/runs/:runId/summary",
-          "GET /control/runs/:runId/manifest",
-          "GET /control/runs/:runId/days",
-        ]}
-        compact
-      />
+      <section className="tech-card px-5 py-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-sm font-semibold text-ink">Benchmark data sources</h2>
+          <Badge variant="gray" subtle>
+            Read Only
+          </Badge>
+        </div>
+        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-secondary">
+          Benchmarks read persisted run artifacts from the control surface. The
+          page does not mutate runs; it only aggregates summaries, manifests,
+          and per-day snapshots for comparison.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {[
+            "GET /control/runs",
+            "GET /control/runs/:runId/summary",
+            "GET /control/runs/:runId/manifest",
+            "GET /control/runs/:runId/days",
+          ].map((endpoint) => (
+            <code
+              key={endpoint}
+              className="rounded-[var(--radius-sm)] bg-gray-2 px-2 py-1 font-mono text-[11px] text-secondary"
+            >
+              {endpoint}
+            </code>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
