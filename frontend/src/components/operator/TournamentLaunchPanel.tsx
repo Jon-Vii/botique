@@ -76,6 +76,11 @@ export function TournamentLaunchPanel({
       ? selectedShopIds
       : shops.map((s) => s.shop_id);
 
+    if (sids.length < entrants.length) {
+      onError(`Need at least ${entrants.length} shops for ${entrants.length} entrants (only ${sids.length} available). Remove entrants or add shops.`);
+      return;
+    }
+
     if (!apiKey) {
       onError("Mistral API key is required — set it above");
       return;

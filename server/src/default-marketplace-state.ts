@@ -200,6 +200,24 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       ],
       created_at: "2026-02-08T11:00:00.000Z",
       updated_at: "2026-02-27T06:50:00.000Z"
+    },
+    // ── NPC shop: desk accessories and organizers ──
+    {
+      shop_id: 1005,
+      shop_name: "desk-and-bloom",
+      title: "Desk & Bloom",
+      announcement: "Minimal desk accessories and small planters — all 3D printed in plant-based PLA.",
+      sale_message: "Monitor riser kits and cable clips back in stock.",
+      currency_code: "USD",
+      digital_product_policy:
+        "Most items stocked and ship next day. Custom colours require 2-3 day production.",
+      production_capacity_per_day: 7,
+      backlog_units: 0,
+      material_costs_paid_total: 42,
+      seed_capital: 0,
+      production_queue: [],
+      created_at: "2026-02-15T08:00:00.000Z",
+      updated_at: "2026-02-27T10:30:00.000Z"
     }
   ];
 
@@ -447,6 +465,69 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       created_at: "2026-02-22T09:00:00.000Z",
       updated_at: "2026-02-27T07:00:00.000Z",
       inventory: buildInventory(2008, "NW-LID-002", 16, 999)
+    },
+    // ── Shop 1005: Desk & Bloom ──
+    {
+      listing_id: 2009,
+      shop_id: 1005,
+      shop_name: "desk-and-bloom",
+      title: "Minimal Monitor Riser Kit",
+      description: "Snap-together modular monitor stand printed in matte white PLA. Fits monitors up to 27 inches.",
+      state: "active",
+      type: "physical",
+      quantity: 5,
+      fulfillment_mode: "stocked",
+      quantity_on_hand: 5,
+      backlog_units: 0,
+      price: 34,
+      currency_code: "USD",
+      who_made: "i_did",
+      when_made: "2020_2025",
+      taxonomy_id: TAXONOMY,
+      tags: ["monitor stand", "desk organizer", "minimal", "3d printed", "pla"],
+      materials: ["pla"],
+      material_cost_per_unit: 6.5,
+      capacity_units_per_item: 4,
+      lead_time_days: 1,
+      image_ids: [3501],
+      views: 210,
+      favorites: 45,
+      url: "https://botique.example/listings/2009",
+      ranking_score: undefined,
+      created_at: "2026-02-18T10:00:00.000Z",
+      updated_at: "2026-02-27T10:30:00.000Z",
+      inventory: buildInventory(2009, "DB-RISER-001", 34, 5)
+    },
+    {
+      listing_id: 2010,
+      shop_id: 1005,
+      shop_name: "desk-and-bloom",
+      title: "Geometric Desk Planter",
+      description: "Low-poly succulent planter with hidden drainage tray. Fits standard 2-inch nursery pots.",
+      state: "active",
+      type: "physical",
+      quantity: 8,
+      fulfillment_mode: "stocked",
+      quantity_on_hand: 8,
+      backlog_units: 0,
+      price: 18,
+      currency_code: "USD",
+      who_made: "i_did",
+      when_made: "2020_2025",
+      taxonomy_id: TAXONOMY,
+      tags: ["planter", "succulent", "geometric", "desk", "3d printed"],
+      materials: ["pla"],
+      material_cost_per_unit: 2.2,
+      capacity_units_per_item: 2,
+      lead_time_days: 1,
+      image_ids: [3502],
+      views: 178,
+      favorites: 52,
+      url: "https://botique.example/listings/2010",
+      ranking_score: undefined,
+      created_at: "2026-02-20T14:00:00.000Z",
+      updated_at: "2026-02-27T10:35:00.000Z",
+      inventory: buildInventory(2010, "DB-PLNTR-001", 18, 8)
     }
   ];
 
@@ -562,6 +643,22 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       ],
       created_at: "2026-02-22T10:10:00.000Z",
       updated_at: "2026-02-24T14:00:00.000Z"
+    },
+    {
+      receipt_id: 5008,
+      shop_id: 1005,
+      buyer_name: "Riley Park",
+      status: "fulfilled",
+      was_paid: true,
+      was_shipped: true,
+      was_delivered: true,
+      total_price: 18,
+      currency_code: "USD",
+      line_items: [
+        { listing_id: 2010, title: "Geometric Desk Planter", quantity: 1, price: 18 }
+      ],
+      created_at: "2026-02-24T16:00:00.000Z",
+      updated_at: "2026-02-25T12:00:00.000Z"
     }
   ];
 
@@ -619,6 +716,15 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       review: "Fits my drawer perfectly. The angled slots are a nice touch.",
       buyer_name: "Jordan Bell",
       created_at: "2026-02-25T14:00:00.000Z"
+    },
+    {
+      review_id: 7007,
+      shop_id: 1005,
+      listing_id: 2010,
+      rating: 5,
+      review: "Perfect size for my tiny succulent. Love the geometric shape.",
+      buyer_name: "Riley Park",
+      created_at: "2026-02-26T09:00:00.000Z"
     }
   ];
 
@@ -692,6 +798,16 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       status: "posted",
       available_at: "2026-02-24T14:01:00.000Z",
       posted_at: "2026-02-24T14:01:00.000Z"
+    },
+    {
+      payment_id: 8008,
+      shop_id: 1005,
+      receipt_id: 5008,
+      amount: 18,
+      currency_code: "USD",
+      status: "posted",
+      available_at: "2026-02-25T12:01:00.000Z",
+      posted_at: "2026-02-25T12:01:00.000Z"
     }
   ];
 
