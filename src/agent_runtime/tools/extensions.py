@@ -256,6 +256,11 @@ def register_memory_tools(
                         "type": "integer",
                         "description": "Simulation day when the reminder becomes due.",
                     },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional tags for your own organization and later filtering.",
+                    },
                     "workspace_entry_id": {
                         "type": "string",
                         "description": "Optional related journal entry id.",
@@ -274,6 +279,7 @@ def register_memory_tools(
                 shop_id=_bound_shop_id(arguments, shop_id),
                 content=_require_str(arguments, "content"),
                 due_day=_require_day(arguments, "due_day"),
+                tags=tuple(arguments.get("tags", ())),
                 workspace_entry_id=arguments.get("workspace_entry_id"),
                 day=arguments.get("day"),
             ).to_payload()

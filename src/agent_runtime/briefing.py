@@ -172,10 +172,13 @@ class MorningBriefing:
 
         if self.due_reminders:
             lines.append("- Reminders due:")
-            lines.extend(
-                f"  - [{reminder.reminder_id}] {reminder.content} (due day {reminder.due_day})"
-                for reminder in self.due_reminders
-            )
+            for reminder in self.due_reminders:
+                details = [f"due day {reminder.due_day}"]
+                if reminder.tags:
+                    details.append(f"tags: {', '.join(reminder.tags)}")
+                lines.append(
+                    f"  - [{reminder.reminder_id}] {reminder.content} ({'; '.join(details)})"
+                )
 
         if self.market_movements:
             lines.append("- Market watch:")
@@ -743,6 +746,7 @@ def _parse_reminder(payload: Any) -> ReminderRecord:
         shop_id=_parse_shop_id(value["shop_id"]),
         content=str(value["content"]),
         due_day=int(value["due_day"]),
+        tags=tuple(str(item) for item in value.get("tags", [])),
         status=ReminderStatus(status),
         workspace_entry_id=(
             None if workspace_entry_id is None else str(workspace_entry_id)

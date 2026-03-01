@@ -41,6 +41,7 @@ class ReminderRecord:
     shop_id: ShopId
     content: str
     due_day: int
+    tags: tuple[str, ...] = ()
     status: ReminderStatus = ReminderStatus.PENDING
     workspace_entry_id: str | None = None
     created_day: int | None = None
@@ -96,6 +97,7 @@ class ReminderBackend(Protocol):
         shop_id: ShopId,
         content: str,
         due_day: int,
+        tags: Iterable[str] = (),
         workspace_entry_id: str | None = None,
         day: int | None = None,
     ) -> ReminderRecord: ...
@@ -210,6 +212,7 @@ class InMemoryAgentMemory(AgentMemoryStore):
         shop_id: ShopId,
         content: str,
         due_day: int,
+        tags: Iterable[str] = (),
         workspace_entry_id: str | None = None,
         day: int | None = None,
     ) -> ReminderRecord:
@@ -218,6 +221,7 @@ class InMemoryAgentMemory(AgentMemoryStore):
             shop_id=shop_id,
             content=content,
             due_day=due_day,
+            tags=tuple(tags),
             workspace_entry_id=workspace_entry_id,
             created_day=day,
         )
