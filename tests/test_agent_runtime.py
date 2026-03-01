@@ -4,6 +4,8 @@ import json
 import unittest
 from datetime import datetime, timezone
 from io import StringIO
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import _bootstrap
@@ -32,20 +34,15 @@ from agent_runtime import (
     ShopStateSnapshot,
     ToolCallingAgentPolicy,
     ToolCall,
-    ToolExecutionResult,
-    TurnRecord,
-    WorkSessionState,
+    TurnPhase,
     build_default_owner_agent_runner,
     build_owner_agent_tool_registry,
     morning_briefing_from_payload,
+    persist_run_artifacts,
 )
 from agent_runtime.cli import main as runtime_cli_main
-from agent_runtime.providers.policy import END_DAY_TOOL_NAME
-from agent_runtime.tools import (
-    DEFAULT_OWNER_AGENT_CORE_TOOLS,
-    DEFAULT_OWNER_AGENT_EXTENSION_TOOLS,
-    DEFAULT_OWNER_AGENT_SELLER_TOOLS,
-)
+from agent_runtime.providers.policy import NO_ACTION_TOOL_NAME
+from agent_runtime.tools import DEFAULT_OWNER_AGENT_CORE_TOOLS
 from control_api import (
     AdvanceDayResult,
     AdvanceDayStep,
@@ -286,6 +283,102 @@ def build_market_state(day: int, date: str, *, label: str, taxonomy_id: int) -> 
             ),
         ),
     )
+
+
+def build_reference_multiday_result():
+    seller_client = FakeLiveSellerCoreClient(
+        shop={
+            "shop_id": 1001,
+            "shop_name": "northwind-printables",
+            "currency_code": "USD",
+            "listing_active_count": 1,
+            "total_sales_count": 5,
+            "review_average": 4.8,
+            "review_count": 3,
+        },
+        listings=[
+            {
+                "listing_id": 2001,
+                "title": "Mushroom Cottage Printable Wall Art",
+                "state": "active",
+                "price": 14.0,
+                "quantity": 999,
+                "views": 140,
+                "favorites": 36,
+                "updated_at": "2026-02-28T08:00:00Z",
+            }
+        ],
+        orders=[],
+        reviews=[],
+        payments=[],
+    )
+    control_client = FakeControlApiClient(
+        [
+            build_market_state(3, "2026-02-28T00:00:00Z", label="Wall Art", taxonomy_id=9101),
+            build_market_state(4, "2026-03-01T00:00:00Z", label="Planner", taxonomy_id=9102),
+            build_market_state(5, "2026-03-02T00:00:00Z", label="Stickers", taxonomy_id=9103),
+        ]
+    )
+    provider = RecordingProvider(
+        [
+            ProviderResponse(
+                content="Check the shop info first.",
+                tool_calls=(
+                    ProviderToolCall(
+                        name="get_shop_info",
+                        arguments={},
+                    ),
+                ),
+            ),
+            ProviderResponse(
+                content="Refresh the shop announcement to match the active trend.",
+                tool_calls=(
+                    ProviderToolCall(
+                        name="update_shop",
+                        arguments={
+                            "announcement": "Fresh cottagecore and planner-inspired downloads this week.",
+                        },
+                    ),
+                ),
+            ),
+            ProviderResponse(
+                content="Check the planner niche before making a new listing.",
+                tool_calls=(
+                    ProviderToolCall(
+                        name="search_marketplace",
+                        arguments={"keywords": "digital planner", "limit": 5},
+                    ),
+                ),
+            ),
+            ProviderResponse(
+                content="Create a draft to test the planner trend.",
+                tool_calls=(
+                    ProviderToolCall(
+                        name="create_draft_listing",
+                        arguments={
+                            "title": "Celestial Mushroom Planner",
+                            "description": "Test draft for planner demand.",
+                        },
+                    ),
+                ),
+            ),
+        ]
+    )
+    runner = build_default_owner_agent_runner(
+        max_turns=4,
+        memory=InMemoryAgentMemory(),
+        event_log=InMemoryEventLog(),
+        policy_config=ProviderPolicyConfig(),
+        mistral_api_key="unused",
+    )
+    runner = type(runner)(
+        provider=provider,
+        seller_client=seller_client,
+        control_client=control_client,
+        memory=InMemoryAgentMemory(),
+        event_log=InMemoryEventLog(),
+    )
+    return runner.run_live_days(shop_id=1001, days=2, run_id="run_multi_day")
 
 
 class MorningBriefingTests(unittest.TestCase):
@@ -689,7 +782,7 @@ class ToolRegistryTests(unittest.TestCase):
 
 
 class DailyLoopTests(unittest.TestCase):
-    def test_single_shop_loop_runs_one_tool_per_turn_and_logs_note_writes(self) -> None:
+    def test_single_shop_loop_auto_settles_after_primary_action(self) -> None:
         client = FakeSellerCoreClient()
         memory = InMemoryAgentMemory()
         registry = build_owner_agent_tool_registry(client, memory=memory, shop_id=7)
@@ -717,45 +810,46 @@ class DailyLoopTests(unittest.TestCase):
                     tool_call=ToolCall("search_marketplace", {"keywords": "mushroom planner"}),
                 ),
                 AgentTurnDecision(
-                    summary="Capture the pricing hypothesis for tomorrow.",
+                    summary="Adjust the shop copy to match the niche.",
                     tool_call=ToolCall(
-                        "write_note",
+                        "update_shop",
                         {
-                            "title": "Pricing follow-up",
-                            "body": "If the retro planner stalls again, test a lower price.",
-                            "day": 3,
+                            "announcement": "New mushroom-themed planner and wall art drops this week.",
                         },
                     ),
-                ),
-                AgentTurnDecision(
-                    summary="The main priorities are complete for today.",
-                    end_day=True,
                 ),
             ]
         )
         loop = SingleShopDailyLoop(
             tool_registry=registry,
             event_log=event_log,
-            config=DailyLoopConfig(turns_per_day=5),
+            config=DailyLoopConfig(max_turns=3, max_inspect_turns=2),
         )
 
         result = loop.run_day(briefing=briefing, policy=policy)
 
-        self.assertEqual(result.end_reason, DayEndReason.AGENT_ENDED_DAY)
+        self.assertEqual(result.end_reason, DayEndReason.ACTION_COMPLETED)
         self.assertEqual(len(result.turns), 2)
         self.assertEqual(result.work_budget, 5)
         self.assertEqual(result.work_budget_spent, 2)
         self.assertEqual(result.work_budget_remaining, 3)
         self.assertEqual(policy.contexts[1].prior_turns[0].tool_call.name, "search_marketplace")
-        self.assertEqual(policy.contexts[1].work_budget_remaining, 4)
-        self.assertEqual(client.calls, [("search_marketplace", {"keywords": "mushroom planner"})])
-        self.assertIn("write_note", [turn.tool_result.tool_name for turn in result.turns if turn.tool_result])
+        self.assertEqual(
+            client.calls,
+            [
+                ("search_marketplace", {"keywords": "mushroom planner"}),
+                (
+                    "update_shop",
+                    {"announcement": "New mushroom-themed planner and wall art drops this week."},
+                ),
+            ],
+        )
+        self.assertEqual(result.turns[-1].tool_result.tool_name, "update_shop")
         event_kinds = [event.kind.value for event in result.events]
         self.assertIn("briefing_generated", event_kinds)
-        self.assertIn("note_written", event_kinds)
         self.assertEqual(event_kinds[-1], "day_ended")
 
-    def test_daily_loop_stops_when_turns_are_exhausted(self) -> None:
+    def test_daily_loop_requires_no_action_after_inspection_budget(self) -> None:
         client = FakeSellerCoreClient()
         registry = build_owner_agent_tool_registry(client, memory=InMemoryAgentMemory(), shop_id=7)
         briefing = MorningBriefingBuilder(InMemoryAgentMemory()).build(
@@ -778,18 +872,33 @@ class DailyLoopTests(unittest.TestCase):
                 AgentTurnDecision(
                     summary="Check the marketplace once.",
                     tool_call=ToolCall("search_marketplace", {"keywords": "planner"}),
+                ),
+                AgentTurnDecision(
+                    summary="Double-check planner demand.",
+                    tool_call=ToolCall("search_marketplace", {"keywords": "digital planner"}),
+                ),
+                AgentTurnDecision(
+                    summary="Hold steady for now.",
+                    tool_call=ToolCall(
+                        NO_ACTION_TOOL_NAME,
+                        {
+                            "summary": "Hold steady for now.",
+                            "reason": "Current evidence does not justify a listing or shop change.",
+                        },
+                    ),
                 )
             ]
         )
         loop = SingleShopDailyLoop(
             tool_registry=registry,
-            config=DailyLoopConfig(turns_per_day=1),
+            config=DailyLoopConfig(max_turns=3, max_inspect_turns=2),
         )
 
         result = loop.run_day(briefing=briefing, policy=policy)
 
-        self.assertEqual(result.end_reason, DayEndReason.TURNS_EXHAUSTED)
-        self.assertEqual(len(result.turns), 1)
+        self.assertEqual(result.end_reason, DayEndReason.NO_ACTION)
+        self.assertEqual(len(result.turns), 3)
+        self.assertEqual(result.turns[-1].tool_call.name, NO_ACTION_TOOL_NAME)
 
 
 class ProviderPolicyTests(unittest.TestCase):
@@ -828,6 +937,9 @@ class ProviderPolicyTests(unittest.TestCase):
                 turns_remaining=5,
             ),
             available_tools=tuple(registry.manifest()),
+            turn_phase=TurnPhase.INSPECT_OR_ACT,
+            remaining_inspect_turns=2,
+            remaining_action_turns=1,
             prior_turns=(),
         )
 
@@ -851,37 +963,66 @@ class ProviderPolicyTests(unittest.TestCase):
 
         self.assertEqual(decision.tool_call.name, "search_marketplace")
         self.assertEqual(decision.tool_call.arguments["keywords"], "planner")
+        self.assertEqual(decision.assistant_text, "Search the market before editing listings.")
+        self.assertEqual(decision.provider_tool_calls[0]["name"], "search_marketplace")
+        self.assertEqual(decision.provider_tool_calls[0]["arguments"]["keywords"], "planner")
         self.assertEqual(provider.calls[0]["tool_choice"], "any")
         self.assertFalse(provider.calls[0]["allow_parallel_tool_calls"])
         tool_names = [tool.name for tool in provider.calls[0]["tools"]]
         self.assertIn("search_marketplace", tool_names)
-        self.assertIn(END_DAY_TOOL_NAME, tool_names)
+        self.assertNotIn(NO_ACTION_TOOL_NAME, tool_names)
         self.assertEqual(provider.calls[0]["messages"][0].role, ProviderMessageRole.SYSTEM)
         user_prompt = provider.calls[0]["messages"][1].content
         self.assertIn("# Studio North workday", user_prompt)
         self.assertIn("Work slots: 5 left / 5 total", user_prompt)
         self.assertIn("write_note", user_prompt)
 
-    def test_tool_calling_policy_maps_end_day_tool(self) -> None:
+    def test_tool_calling_policy_maps_no_action_tool(self) -> None:
         registry, briefing = self._make_context()
+        context = AgentTurnContext(
+            run_id=briefing.run_id,
+            briefing=briefing,
+            turn_index=3,
+            max_turns=3,
+            remaining_turns=1,
+            available_tools=tuple(
+                tool for tool in registry.manifest() if tool.name in {"update_listing", "update_shop"}
+            ),
+            turn_phase=TurnPhase.ACT_OR_NO_ACTION,
+            remaining_inspect_turns=0,
+            remaining_action_turns=1,
+            allow_no_action=True,
+            phase_instructions=(
+                "Return exactly one tool call for this turn.",
+                "Inspection is done for today. Choose one primary business-changing action, or call no_action if no change is justified.",
+            ),
+            prior_turns=(),
+        )
         provider = RecordingProvider(
             [
                 ProviderResponse(
                     content="",
                     tool_calls=(
                         ProviderToolCall(
-                            name=END_DAY_TOOL_NAME,
-                            arguments={"summary": "Priority work is complete for today."},
+                            name=NO_ACTION_TOOL_NAME,
+                            arguments={
+                                "summary": "Hold steady today.",
+                                "reason": "Current evidence does not justify a listing or shop change.",
+                            },
                         ),
                     ),
                 )
             ]
         )
         policy = ToolCallingAgentPolicy(provider, config=ProviderPolicyConfig())
-        decision = policy.next_turn(context=self._turn_context(registry, briefing))
+        decision = policy.next_turn(context=context)
 
-        self.assertTrue(decision.end_day)
-        self.assertEqual(decision.summary, "Priority work is complete for today.")
+        self.assertEqual(decision.tool_call.name, NO_ACTION_TOOL_NAME)
+        self.assertEqual(decision.summary, "Hold steady today.")
+        self.assertEqual(decision.assistant_text, "")
+        self.assertEqual(decision.provider_tool_calls[0]["name"], NO_ACTION_TOOL_NAME)
+        tool_names = [tool.name for tool in provider.calls[0]["tools"]]
+        self.assertIn(NO_ACTION_TOOL_NAME, tool_names)
 
     def test_tool_calling_policy_preserves_exact_same_day_tool_results_in_prompt(self) -> None:
         registry, briefing = self._make_context()
@@ -1014,11 +1155,14 @@ class OwnerAgentRunnerTests(unittest.TestCase):
                     ),
                 ),
                 ProviderResponse(
-                    content="",
+                    content="Create a draft to test a planner angle.",
                     tool_calls=(
                         ProviderToolCall(
-                            name=END_DAY_TOOL_NAME,
-                            arguments={"summary": "That is enough for today."},
+                            name="create_draft_listing",
+                            arguments={
+                                "title": "Celestial Planner Draft",
+                                "description": "Test draft for a planner niche.",
+                            },
                         ),
                     ),
                 ),
@@ -1065,23 +1209,24 @@ class OwnerAgentRunnerTests(unittest.TestCase):
 
         result = runner.run_day(briefing)
 
-        self.assertEqual(result.end_reason, DayEndReason.AGENT_ENDED_DAY)
-        self.assertEqual(len(result.turns), 1)
-        self.assertIsNotNone(result.day_note)
-        self.assertEqual(result.day_note.title, "Day 5 note")
-        self.assertIn("future self", provider.calls[2]["messages"][0].content)
-        self.assertEqual(len(memory.list_notes(shop_id=7)), 1)
-        self.assertEqual(memory.list_notes(shop_id=7)[0].title, "Day 5 note")
-        self.assertIn("note_written", [event.kind.value for event in result.events])
+        self.assertEqual(result.end_reason, DayEndReason.ACTION_COMPLETED)
+        self.assertEqual(len(result.turns), 2)
+        self.assertEqual(
+            result.turns[0].assistant_text,
+            "Check the shop health before browsing the market.",
+        )
+        self.assertEqual(result.turns[0].provider_tool_calls[0]["name"], "get_shop_info")
         self.assertEqual(
             seller_client.calls,
             [
                 ("get_shop_info", {"shop_id": 7}),
-                ("get_shop_listings", {"shop_id": 7, "limit": 100, "offset": 0}),
-                ("get_orders", {"shop_id": 7, "limit": 5, "offset": 0}),
-                ("get_reviews", {"shop_id": 7, "limit": 3, "offset": 0}),
-                ("get_payments", {"shop_id": 7}),
-                ("get_capacity_status", {"shop_id": 7}),
+                (
+                    "create_draft_listing",
+                    {
+                        "title": "Celestial Planner Draft",
+                        "description": "Test draft for a planner niche.",
+                    },
+                ),
             ],
         )
 
@@ -1116,6 +1261,7 @@ class OwnerAgentRunnerTests(unittest.TestCase):
             [
                 build_market_state(3, "2026-02-28T00:00:00Z", label="Wall Art", taxonomy_id=9101),
                 build_market_state(4, "2026-03-01T00:00:00Z", label="Planner", taxonomy_id=9102),
+                build_market_state(5, "2026-03-02T00:00:00Z", label="Stickers", taxonomy_id=9103),
             ]
         )
         provider = RecordingProvider(
@@ -1130,45 +1276,34 @@ class OwnerAgentRunnerTests(unittest.TestCase):
                     ),
                 ),
                 ProviderResponse(
-                    content="",
+                    content="Refresh the shop announcement to match the active trend.",
                     tool_calls=(
                         ProviderToolCall(
-                            name=END_DAY_TOOL_NAME,
-                            arguments={"summary": "Day three is complete."},
-                        ),
-                    ),
-                ),
-                ProviderResponse(
-                    content="",
-                    tool_calls=(
-                        ProviderToolCall(
-                            name="save_end_of_day_note",
+                            name="update_shop",
                             arguments={
-                                "title": "Day three note",
-                                "body": "Woodwork is worth checking if current listings stall.",
+                                "announcement": "New planner-inspired digital downloads this week.",
                             },
                         ),
                     ),
                 ),
                 ProviderResponse(
-                    content="Capture the trend note for tomorrow.",
+                    content="Inspect the planner niche before acting.",
                     tool_calls=(
                         ProviderToolCall(
-                            name="write_note",
-                            arguments={
-                                "title": "Trend watch",
-                                "body": "Planner demand is rotating up.",
-                                "day": 4,
-                            },
+                            name="search_marketplace",
+                            arguments={"keywords": "digital planner", "limit": 5},
                         ),
                     ),
                 ),
                 ProviderResponse(
-                    content="",
+                    content="Create a planner draft to test the trend.",
                     tool_calls=(
                         ProviderToolCall(
-                            name=END_DAY_TOOL_NAME,
-                            arguments={"summary": "Day four is complete."},
+                            name="create_draft_listing",
+                            arguments={
+                                "title": "Mushroom Planner Draft",
+                                "description": "Test planner listing for the current trend.",
+                            },
                         ),
                     ),
                 ),
@@ -1206,26 +1341,30 @@ class OwnerAgentRunnerTests(unittest.TestCase):
         self.assertEqual(result.days[0].day, 3)
         self.assertEqual(result.days[1].day, 4)
         self.assertIsNotNone(result.days[0].advancement)
-        self.assertIsNone(result.days[1].advancement)
-        self.assertEqual(control_client.advance_calls, 1)
+        self.assertIsNotNone(result.days[1].advancement)
+        self.assertIsNotNone(result.days[1].state_next_day)
+        self.assertEqual(result.days[1].state_next_day.day, 5)
+        self.assertEqual(control_client.advance_calls, 2)
         self.assertEqual(result.days[1].market_state_before.current_day.day, 4)
-        self.assertEqual(result.days[0].day_result.day_note.title, "Day three note")
-        self.assertEqual(result.days[1].day_result.day_note.title, "Day 4 note")
         self.assertEqual(
             seller_client.calls,
             [
                 ("get_shop_info", {"shop_id": 1001}),
-                ("get_shop_listings", {"shop_id": 1001, "limit": 100, "offset": 0}),
-                ("get_orders", {"shop_id": 1001, "limit": 5, "offset": 0}),
-                ("get_reviews", {"shop_id": 1001, "limit": 3, "offset": 0}),
-                ("get_payments", {"shop_id": 1001}),
-                ("get_capacity_status", {"shop_id": 1001}),
+                (
+                    "update_shop",
+                    {"announcement": "New planner-inspired digital downloads this week."},
+                ),
+                ("search_marketplace", {"keywords": "digital planner", "limit": 5}),
+                (
+                    "create_draft_listing",
+                    {
+                        "title": "Mushroom Planner Draft",
+                        "description": "Test planner listing for the current trend.",
+                    },
+                ),
             ],
         )
-        self.assertEqual(len(result.notes), 3)
-        self.assertEqual(result.notes[0].title, "Day three note")
-        self.assertEqual(result.notes[1].title, "Trend watch")
-        self.assertEqual(result.notes[2].title, "Day 4 note")
+        self.assertEqual(len(result.notes), 0)
         self.assertIn(
             "simulation_advanced",
             [event.kind.value for event in result.events],
@@ -1314,7 +1453,7 @@ class RuntimeCliTests(unittest.TestCase):
         fake_runner = FakeRunner(
             {
                 "run_id": "run_cli",
-                "end_reason": "agent_ended_day",
+                "end_reason": "action_completed",
             }
         )
         stdout = StringIO()
@@ -1370,36 +1509,107 @@ class RuntimeCliTests(unittest.TestCase):
         self.assertEqual(fake_runner.live_days_calls[0]["shop_id"], 1001)
         self.assertEqual(fake_runner.live_days_calls[0]["days"], 2)
 
-    def test_run_days_command_can_request_world_reset(self) -> None:
-        fake_runner = FakeRunner(
-            {
-                "run_id": "run_reset_cli",
-                "days": [{"day": 1}],
-            }
-        )
+    def test_run_days_command_persists_artifacts_for_runtime_results(self) -> None:
+        fake_runner = FakeRunner(build_reference_multiday_result())
         stdout = StringIO()
 
-        with patch("agent_runtime.cli.build_default_owner_agent_runner", return_value=fake_runner):
-            with patch("sys.stdout", stdout):
-                exit_code = runtime_cli_main(
-                    ["run-days", "--shop-id", "1001", "--days", "1", "--reset-world"]
-                )
+        with TemporaryDirectory() as tmpdir:
+            with patch(
+                "agent_runtime.cli.build_default_owner_agent_runner",
+                return_value=fake_runner,
+            ):
+                with patch("sys.stdout", stdout):
+                    exit_code = runtime_cli_main(
+                        [
+                            "run-days",
+                            "--shop-id",
+                            "1001",
+                            "--days",
+                            "2",
+                            "--run-id",
+                            "run_multi_day",
+                            "--output-dir",
+                            tmpdir,
+                        ]
+                    )
 
-        self.assertEqual(exit_code, 0)
-        self.assertTrue(json.loads(stdout.getvalue())["ok"])
-        self.assertTrue(fake_runner.live_days_calls[0]["reset_world"])
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["ok"])
+            self.assertEqual(
+                payload["artifacts"]["output_dir"],
+                str(Path(tmpdir).resolve()),
+            )
+            self.assertTrue((Path(tmpdir) / "summary.md").exists())
+            self.assertTrue((Path(tmpdir) / "days" / "day-0003" / "summary.md").exists())
+
+
+class RunArtifactTests(unittest.TestCase):
+    def test_persist_run_artifacts_writes_reference_run_layout(self) -> None:
+        result = build_reference_multiday_result()
+
+        with TemporaryDirectory() as tmpdir:
+            bundle = persist_run_artifacts(
+                result,
+                output_dir=tmpdir,
+                invocation={"command": "run-days", "shop_id": 1001, "days": 2},
+            )
+
+            root = Path(bundle.output_dir)
+            summary_payload = json.loads((root / "summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary_payload["run_id"], "run_multi_day")
+            self.assertEqual(summary_payload["totals"]["tool_calls_by_name"]["get_shop_info"], 1)
+            self.assertEqual(summary_payload["totals"]["tool_calls_by_name"]["update_shop"], 1)
+            self.assertEqual(
+                summary_payload["totals"]["tool_calls_by_name"]["create_draft_listing"],
+                1,
+            )
+
+            self.assertIn(
+                "human-readable run summary",
+                (root / "README.md").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "Day 3 Summary",
+                (root / "days" / "day-0003" / "summary.md").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "get_shop_info",
+                (root / "days" / "day-0003" / "summary.md").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "Assistant output:",
+                (root / "days" / "day-0003" / "summary.md").read_text(encoding="utf-8"),
+            )
+            turns_payload = json.loads(
+                (root / "days" / "day-0003" / "turns.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                turns_payload[0]["assistant_text"],
+                "Check the shop info first.",
+            )
+            self.assertEqual(
+                turns_payload[0]["provider_tool_calls"][0]["name"],
+                "get_shop_info",
+            )
+            self.assertTrue((root / "events.jsonl").exists())
+            self.assertTrue((root / "memory" / "notes.json").exists())
+            self.assertTrue((root / "days" / "day-0003" / "briefing.md").exists())
+            self.assertTrue((root / "days" / "day-0003" / "advancement.json").exists())
+            self.assertTrue((root / "days" / "day-0004" / "state_after.json").exists())
+            self.assertTrue((root / "days" / "day-0004" / "state_next_day.json").exists())
+            self.assertTrue((root / "days" / "day-0004" / "advancement.json").exists())
 
 
 class TurnDecisionValidationTests(unittest.TestCase):
-    def test_turn_decision_requires_exactly_one_action(self) -> None:
-        with self.assertRaisesRegex(ValueError, "exactly one tool or end the day"):
+    def test_turn_decision_requires_a_tool_call_and_non_empty_name(self) -> None:
+        with self.assertRaises(TypeError):
             AgentTurnDecision(summary="Do something later.")
 
-        with self.assertRaisesRegex(ValueError, "exactly one tool or end the day"):
+        with self.assertRaisesRegex(ValueError, "tool_call.name must be non-empty"):
             AgentTurnDecision(
                 summary="This is invalid.",
-                tool_call=ToolCall("search_marketplace", {}),
-                end_day=True,
+                tool_call=ToolCall("", {}),
             )
 
 

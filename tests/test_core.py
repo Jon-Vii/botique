@@ -131,6 +131,29 @@ class CoreToolsClientTests(unittest.TestCase):
             {"keywords": "laser cut sign", "limit": 10, "offset": 20},
         )
 
+    def test_prepare_normalizes_common_query_param_variants(self) -> None:
+        client = SellerCoreClient(config=ClientConfig(base_url="https://api.example.test"))
+
+        plan = client.prepare(
+            "search_marketplace",
+            {
+                "keywords": "digital planner",
+                "limit": "1",
+                "sort_on": "price",
+                "sort_order": "ascending",
+            },
+        )
+
+        self.assertEqual(
+            plan.query,
+            {
+                "keywords": "digital planner",
+                "limit": 1,
+                "sort_on": "price",
+                "sort_order": "asc",
+            },
+        )
+
     def test_prepare_requires_minimum_create_draft_listing_fields(self) -> None:
         client = SellerCoreClient(config=ClientConfig(base_url="https://api.example.test"))
         with self.assertRaisesRegex(ValueError, "missing required body fields"):

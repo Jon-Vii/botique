@@ -52,6 +52,8 @@ describe("Botique server control endpoints", () => {
     assert.equal(worldState.marketplace.shops[0].shop_id, 1001);
     assert.equal("listing_active_count" in worldState.marketplace.shops[0], false);
     assert.equal(worldState.simulation.current_day.day, 3);
+    assert.equal(worldState.simulation.pending_events.length, 2);
+    assert.equal(worldState.simulation.last_day_resolution, null);
   });
 
   test("advances the simulation day through /control and persists the updated state", async () => {
@@ -68,15 +70,17 @@ describe("Botique server control endpoints", () => {
     assert.deepEqual(
       advancePayload.steps.map((step: { name: string }) => step.name),
       [
+        "resolve_listing_activity",
+        "settle_pending_events",
         "advance_clock",
         "refresh_trends",
-        "release_completed_production",
-        "settle_delayed_events",
-        "resolve_market_sales",
-        "allocate_production",
         "refresh_market_snapshot"
       ]
     );
+    assert.equal(advancePayload.world.simulation.last_day_resolution.totals.orders_created, 1);
+    assert.equal(advancePayload.world.simulation.last_day_resolution.processed_events.post_payment, 2);
+    assert.equal(advancePayload.world.simulation.pending_events.length, 1);
+    assert.equal(advancePayload.world.marketplace.orders.length, 3);
 
     const [dayResponse, trendResponse, worldStateResponse] = await Promise.all([
       app.inject({ method: "GET", url: "/control/simulation/day" }),
@@ -95,6 +99,10 @@ describe("Botique server control endpoints", () => {
     assert.equal(
       worldStateResponse.json().simulation.market_snapshot.generated_at,
       advancePayload.current_day.advanced_at
+    );
+    assert.equal(
+      worldStateResponse.json().simulation.last_day_resolution.listing_metrics[0].listing_id,
+      2003
     );
   });
 

@@ -22,9 +22,9 @@ def _utcnow() -> datetime:
 
 
 DEFAULT_PRIORITIES_PROMPT = (
-    "Set the highest-leverage priorities for this workday, use today's limited work slots "
-    "carefully, use notes or reminders when they genuinely help, and stop once the "
-    "important work is done."
+    "Choose the highest-leverage priorities for today. Use a small amount of "
+    "inspection to gather evidence, then make one concrete business change if warranted. "
+    "Repeated searching without deciding what to change is low value."
 )
 
 

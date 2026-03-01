@@ -33,8 +33,11 @@ Before making architectural changes, read:
 3. `docs/agent-tools.md`
 4. `docs/simulation-model.md`
 5. `docs/agent-loop.md`
+6. `docs/status.md`
 
 The original concept document is `botique-initial-concept-draft.md`.
+
+When orienting to the repo or starting a new work session, check `docs/status.md` first for the current build state, active focus, and open questions.
 
 ## Decision Status
 
@@ -232,14 +235,21 @@ Status: `Recommended default`
 
 ## Product Scope Guidance
 
-Default to digital-first products:
+Default to creative-goods-first businesses with real production constraints:
 
-- sticker packs
-- printable wall art
-- phone wallpapers
-- digital planners
+- 3D-printed decor and organizers
+- laser-cut decor and accessories
+- ceramics
+- woodwork
 
-This keeps the simulation Etsy-like without pulling in shipping complexity too early.
+Keep the business physics legible:
+
+- production capacity should be scarce
+- stock or backlog should matter
+- material cost should matter
+- shipping-heavy realism can stay abstracted behind lead time and fulfillment delay
+
+The goal is not full Etsy realism. The goal is an environment where organizational capability, resource allocation, and gradual strategy shifts become measurable.
 
 ## Agent Loop Guidance
 
@@ -269,6 +279,7 @@ Use:
 - `docs/simulation-model.md` for market logic
 - `docs/agent-loop.md` for prompt/turn/briefing changes
 - `docs/mvp-scope.md` for initial-scope changes
+- `docs/status.md` for what currently works, what is in motion, what is next, and what remains open
 
 ## Parallel Work Guidance
 

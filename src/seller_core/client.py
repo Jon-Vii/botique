@@ -246,7 +246,10 @@ class SellerCoreClient:
             query.update(arguments)
             arguments.clear()
 
-        return query
+        return {
+            key: _normalize_query_value(key, value)
+            for key, value in query.items()
+        }
 
     @staticmethod
     def _extract_body(spec: EndpointSpec, arguments: dict[str, Any]) -> Any:
@@ -284,3 +287,45 @@ class SellerCoreClient:
 
 
 CoreToolsClient = SellerCoreClient
+
+
+def _normalize_query_value(name: str, value: Any) -> Any:
+    if name in {"limit", "offset", "taxonomy_id", "listing_id", "receipt_id"}:
+        return _coerce_int_like(name, value)
+
+    if name == "sort_order" and isinstance(value, str):
+        normalized = value.strip().lower()
+        aliases = {
+            "ascending": "asc",
+            "descending": "desc",
+        }
+        return aliases.get(normalized, normalized)
+
+    if name in {"was_paid", "was_shipped", "was_delivered"}:
+        return _coerce_bool_like(name, value)
+
+    return value
+
+
+def _coerce_int_like(name: str, value: Any) -> Any:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.isdigit():
+            return int(stripped)
+    return value
+
+
+def _coerce_bool_like(name: str, value: Any) -> Any:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized == "true":
+            return True
+        if normalized == "false":
+            return False
+    return value

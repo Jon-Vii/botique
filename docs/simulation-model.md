@@ -6,24 +6,51 @@ Create a marketplace that is structured enough to evaluate strategy, but open-en
 
 Status: `Recommended default`
 
+## Capability Framing
+
+Botique should evaluate autonomous-organization capability under scarce resources, not just tool use or seller roleplay.
+
+The initial simulation should be strong enough to reveal:
+
+- operational capability
+- strategic capability
+- organizational memory
+- adaptive capability
+- resource governance
+
+Recommended evaluation layers:
+
+1. in-lane optimization
+2. adjacent expansion
+3. gradual strategic pivot
+
+Research-informed notes:
+
+- [EcoGym](https://arxiv.org/abs/2602.09514) supports long-horizon economic environments with explicit resource budgets instead of brittle one-step tasks
+- [AMA-Bench](https://arxiv.org/abs/2602.22769) reinforces that stateful memory should stay explicit, causal, and inspectable rather than fuzzy
+- [PhysicsAgentABM](https://arxiv.org/abs/2602.06030) supports structured cohort-level world simulation instead of expensive freeform per-agent roleplay
+
+Status: `Current decision`
+
 ## Product Space
 
-Use a semi-structured creative-goods product model.
+Use a semi-structured creative-goods model with explicit production constraints.
 
 Recommended product schema:
 
-- production method / business physics
-- fulfillment mode
-- quantity on hand
-- backlog units
-- material cost per unit
-- capacity units per item
-- lead time days
+- product family
+- style
+- subject
 - title
 - description
 - tags
 - materials
 - price
+- production_mode
+- quantity_on_hand
+- material_cost_per_unit
+- production_units_required
+- lead_time_days
 
 Operational note:
 
@@ -33,23 +60,64 @@ Operational note:
 
 Example combinatorial space:
 
-- production methods: 3D printing, laser cutting, ceramics, woodwork
-- product families: planters, wall signs, mugs, desk goods
-- styles: minimal utility, heirloom, art deco, earth-tone studio
-- personalization: stocked batch, custom engraving, made-to-order variation
+- product families: planters, organizers, wall decor, mugs, trays, ornaments, small storage, desk accessories
+- styles: minimalist, retro, kawaii, cottagecore
+- subjects: cats, mushrooms, mountains, florals, celestial
 
-Status: `Recommended default`
+Recommended initial production modes:
+
+- `stocked`: units are produced ahead of time and depleted by sales
+- `made_to_order`: sales create backlog that consumes future production capacity
+
+Current implementation note:
+
+- the current server and seed data still use a digital-first catalog
+- this section defines the next intended product-space migration, not a completed implementation
+
+Status: `Current decision`
 
 ## Shops
 
 Each shop has:
 
 - identity and description
+- an archetype that defines production physics
 - active/draft listings
 - balance and revenue history
+- production capacity and backlog
 - reviews
 - strategy notes and reminders
 - optional hired specialists later
+
+## Archetypes And Pivots
+
+Use archetypes as business physics, not as destiny.
+
+Recommended initial archetypes:
+
+- `3d_print_shop`
+- `laser_cut_decor_shop`
+- `ceramics_shop`
+- `woodwork_shop`
+
+Archetypes should define:
+
+- plausible product families
+- rough price bands
+- material-cost patterns
+- production speed and lead time
+- whether the shop is more naturally `stocked` or `made_to_order`
+
+The agent should still be free to:
+
+- change pricing and positioning
+- explore adjacent product ideas
+- run experiments within the archetype
+- gradually pivot the shop toward a new niche or mix over multiple days
+
+The first build should not support instantaneous cross-archetype pivots. A ceramics shop should not become a woodwork shop overnight just because the prompt says so.
+
+Status: `Current decision`
 
 ## Starting State
 
@@ -68,6 +136,7 @@ Current implementation note:
 - the current server seeds a small creative-goods market with four shops, production queues, listings, orders, reviews, payments, and taxonomy nodes
 - the in-memory repository starts with that default seed, and the Postgres bootstrap uses the same seed when the database is empty or partially seeded
 - the current simulation day is inferred from the latest seeded marketplace timestamp unless a world state provides an explicit day
+- the next scope migration should replace those digital-first seeds with creative-goods shops that have finite stock, backlog, and production capacity
 
 This gives the agent a business to run and a world to react to without making the orchestrator responsible for world setup.
 
@@ -83,21 +152,127 @@ Recommended initial world-state shape:
 - current day: explicit day index and canonical simulation date
 - market snapshot: inspectable aggregate counts and demand context
 - trend state: active trend labels, taxonomy focus, and simple demand multipliers
+- pending events: delayed world-owned outcomes such as payment posting and review delivery
+- last day resolution: compact per-listing and per-day consequences from the most recent `advanceDay`
 
 The important boundary is that System 1 can read from this state, but System 2 owns how it is created and advanced.
 
 ## Customers
 
-Use structured personas instead of generic random users.
+Use cohort-weighted buyer sessions instead of generic random users or fully freeform customer agents.
 
-Suggested persona attributes:
+Why this shape:
 
-- style affinity
-- price sensitivity
-- quality sensitivity
-- review tendency
-- message tendency
-- browsing pattern
+- [VendingBench](https://arxiv.org/abs/2410.11623) and [Vending-Bench 2](https://arxiv.org/abs/2509.14629) are worth borrowing from at the environment level: explicit business goals, world-owned outcomes, and delayed consequences that the agent must react to
+- [PAARS](https://arxiv.org/abs/2502.11127) and [OPeRA](https://arxiv.org/abs/2502.17908) support using structured personas with preferences and observable history instead of unconstrained roleplay
+- [BehaviorChain](https://arxiv.org/abs/2501.04587) and [ECom-Bench](https://arxiv.org/abs/2505.21119) reinforce that long-horizon user simulation is still brittle enough that Botique should keep discoverability, conversion, and reviews formula-driven in System 2
+
+Status: `Current decision` for hackathon scope
+
+### Scope Decision
+
+For the first Botique customer model:
+
+- do not create persistent freeform customer agents
+- do not let sellers see raw cohort labels or hidden intent state
+- do create a small, static set of customer cohorts that System 2 uses to generate daily buyer sessions
+- do keep customer behavior inspectable enough that a control/debug surface can explain why listings got views, favorites, orders, or reviews
+
+This is intentionally narrower than a benchmark with fully autonomous shoppers. The goal is better demand resolution, not a second agent society.
+
+### Cohort Schema
+
+Recommended hidden cohort fields:
+
+- `cohort_id`: stable internal identifier
+- `label`: human-readable internal name for debugging and docs
+- `base_share`: default fraction of daily buyer sessions allocated to the cohort
+- `preferred_product_families`: supported listing families this cohort tends to buy
+- `preferred_taxonomy_ids`: optional taxonomy bias if stronger than base type bias
+- `preferred_styles`: favored style tags or descriptors
+- `preferred_subjects`: favored subject tags or descriptors
+- `target_price`: comfortable expected price point for a good fit listing
+- `price_ceiling`: soft upper limit before conversion drops sharply
+- `price_sensitivity`: how strongly over-budget pricing hurts conversion
+- `quality_sensitivity`: how strongly listing quality and description completeness matter
+- `review_reliance`: how strongly shop reputation and existing reviews matter
+- `trend_response`: how strongly active trend multipliers affect interest
+- `browse_depth`: how many search results this cohort is likely to consider before dropping off
+- `favorite_rate`: how likely the cohort is to favorite a listing that fits but does not yet convert
+- `review_rate`: baseline chance of leaving a review after purchase
+- `negative_review_bias`: how likely disappointment is to produce a review compared with satisfaction
+- `repeat_purchase_affinity`: how willing the cohort is to buy again from a shop or niche it already trusts
+
+Recommended hidden per-session fields:
+
+- `session_id`
+- `day`
+- `cohort_id`
+- `intent_product_family`
+- `intent_taxonomy_id`
+- `intent_tags`
+- `budget`
+- `results_considered`
+- `purchase_threshold`
+- `purchased_listing_id`
+- `satisfaction_score`
+- `pending_review_due_day`
+
+Hackathon constraint:
+
+- `message_rate` can stay `0` in the first cohort implementation and be introduced only when delayed customer messages are actually added
+
+### Initial Cohort Set
+
+Use eight cohorts for the first build. This is enough variety to create meaningful pricing, positioning, and quality tradeoffs without overdesigning the world.
+
+- `budget_home_decor_browsers` (`base_share: 0.16`): low-price decor and accessories; prefers minimalist and floral looks; `price_sensitivity: 0.90`; `quality_sensitivity: 0.45`; `review_reliance: 0.60`; `trend_response: 0.25`; `browse_depth: 4`; `favorite_rate: 0.18`; `review_rate: 0.15`
+- `trend_aesthetic_shoppers` (`base_share: 0.14`): decor and giftable goods tied to active trend tags; likes retro, kawaii, celestial, and cottagecore looks; `price_sensitivity: 0.55`; `quality_sensitivity: 0.40`; `review_reliance: 0.35`; `trend_response: 1.00`; `browse_depth: 8`; `favorite_rate: 0.34`; `review_rate: 0.10`
+- `practical_organizer_buyers` (`base_share: 0.13`): organizers, desk accessories, hooks, trays, and functional small goods; prefers clean, useful, work-adjacent descriptors; `price_sensitivity: 0.45`; `quality_sensitivity: 0.85`; `review_reliance: 0.80`; `trend_response: 0.15`; `browse_depth: 5`; `favorite_rate: 0.10`; `review_rate: 0.28`
+- `quality_first_collectors` (`base_share: 0.12`): ceramics, woodwork, and other higher-touch goods where finish and craftsmanship matter; `price_sensitivity: 0.30`; `quality_sensitivity: 0.90`; `review_reliance: 0.75`; `trend_response: 0.30`; `browse_depth: 6`; `favorite_rate: 0.16`; `review_rate: 0.32`
+- `set_value_seekers` (`base_share: 0.12`): buyers who over-index on matching sets, bundles, and coordinated decor collections; `price_sensitivity: 0.75`; `quality_sensitivity: 0.55`; `review_reliance: 0.55`; `trend_response: 0.45`; `browse_depth: 7`; `favorite_rate: 0.30`; `review_rate: 0.18`
+- `niche_fandom_collectors` (`base_share: 0.11`): narrow-subject buyers for themes like cats, mushrooms, fantasy, or celestial niches; `price_sensitivity: 0.25`; `quality_sensitivity: 0.75`; `review_reliance: 0.50`; `trend_response: 0.40`; `browse_depth: 9`; `favorite_rate: 0.38`; `review_rate: 0.30`; `repeat_purchase_affinity: 0.70`
+- `impulse_gift_buyers` (`base_share: 0.12`): lower-price giftable items purchased when fit is instantly obvious; `price_sensitivity: 0.85`; `quality_sensitivity: 0.25`; `review_reliance: 0.20`; `trend_response: 0.65`; `browse_depth: 3`; `favorite_rate: 0.06`; `review_rate: 0.05`
+- `reliability_seekers` (`base_share: 0.10`): buyers across all creative-goods categories who filter hard on shop trust, lead-time confidence, and review quality; `price_sensitivity: 0.40`; `quality_sensitivity: 0.70`; `review_reliance: 0.95`; `trend_response: 0.10`; `browse_depth: 4`; `favorite_rate: 0.12`; `review_rate: 0.22`; `negative_review_bias: 0.70`
+
+### Hidden vs Seller-Visible State
+
+Hidden System 2 state:
+
+- the cohort definitions above
+- daily buyer-session allocation by cohort
+- session budgets, intent tags, and purchase thresholds
+- per-listing cohort compatibility scores
+- pending review and message queues
+- satisfaction values used to determine whether a post-purchase review is positive, neutral, or negative
+
+Seller-visible state:
+
+- search ranking outcomes and listing placement
+- listing-level views and favorites once those metrics exist
+- stock, backlog, and lead-time state once production constraints are live
+- orders, payments, and reviews after the world resolves them
+- aggregate market snapshot and trend signals
+- occasional customer-facing text only after the world has already decided that a review or message exists
+
+Control/operator-visible only:
+
+- cohort mix for the day
+- per-cohort demand totals
+- hidden attribution for why a listing won or lost demand
+
+Raw cohort IDs should stay out of the seller-facing API. They belong in System 2 and any operator/debug views, not `seller_core`.
+
+### Recommended First Implementation Shape
+
+Keep the first implementation small:
+
+- define the cohort catalog as static System 2 config, not as seller-editable state
+- generate buyer sessions inside `advanceDay` and treat them as ephemeral unless a debug trace needs them
+- persist only the delayed outcome queues that must survive across days, starting with pending payments and reviews and leaving a clear hook for later buyer-message delivery
+- add seller-visible listing metrics only where they support the loop directly, starting with views and favorites
+- expose any cohort breakdown only through control/operator surfaces, not seller-facing endpoints
+- do not add a standalone customer database table for hackathon scope unless delayed outcomes become hard to inspect without it
 
 ## Demand Model
 
@@ -110,10 +285,209 @@ Factors:
 - tag/title relevance
 - price competitiveness
 - listing quality score
+- stock availability and backlog pressure
 - shop reputation score
-- backlog and lead-time drag can be layered in as fulfillment friction without changing the seller-facing contract
+- cohort-to-listing fit
+- lead-time tolerance
+- browse depth and drop-off
 
 Purchase outcomes should be probabilistic, but based on deterministic features.
+
+### Serious Sales Model Default
+
+Botique should use a small staged sales model, not a monolithic sales guess.
+
+The right level of seriousness for hackathon scope is:
+
+- hidden but inspectable demand parameters
+- explicit price-response logic
+- marketplace-relative discoverability rather than absolute unit demand per listing
+- delayed consequences after purchase
+- no LLM involvement in sales outcomes
+
+This borrows the strongest discipline from VendingBench without pretending Botique is a vending-machine benchmark.
+
+### Sales Resolution Stages
+
+Use four explicit stages inside System 2:
+
+1. resolve taxonomy-level daily traffic
+2. allocate views across active listings
+3. convert a subset of views into favorites and orders
+4. decrement stock or grow backlog and queue fulfillment consequences
+5. queue delayed payments, reviews, and later optional messages
+
+This keeps the simulation legible and makes tuning easier than a single opaque score.
+
+### Core Equations
+
+Recommended first-pass equations:
+
+`taxonomy_traffic(t, d) = round(base_traffic(t) * trend_multiplier(t, d) * calendar_multiplier(d) * noise(d, t))`
+
+`discoverability_score(l, d) = exposure(l, d) * price_click_fit(l, d)`
+
+`view_share(l, t, d) = discoverability_score(l, d) / sum(discoverability_score(*, t, d))`
+
+`views(l, d) = stochastic_round(taxonomy_traffic(t, d) * view_share(l, t, d))`
+
+`favorite_prob(l, d) = clamp(favorite_base + favorite_quality + favorite_trend + favorite_reputation, min, max)`
+
+`order_prob(l, d) = clamp(conversion_base + conversion_quality + conversion_reputation + conversion_price + conversion_trend, min, max)`
+
+`orders(l, d) = stochastic_round((views(l, d) * order_prob(l, d)) + (favorites(l, d) * revisit_bonus))`
+
+`review_prob(o) = clamp(review_base + review_satisfaction_term + review_disappointment_term, min, max)`
+
+Where:
+
+- `t` is taxonomy
+- `l` is listing
+- `d` is simulation day
+- `o` is a completed order
+
+### Hidden Parameters That Matter
+
+To stay relevant without overengineering, keep only these hidden business parameters:
+
+- `base_traffic(t)`: baseline shopper volume by taxonomy
+- `calendar_multiplier(d)`: optional low-cardinality time effects such as weekday or weekend
+- `reference_price(t)` or later `reference_price(c, t)`: expected “normal” price anchor for a taxonomy, and later for a cohort-taxonomy pair
+- `price_elasticity(t)` or later `price_elasticity(c)`: how sharply overpricing hurts clicks and orders
+- `review_baseline`: default review likelihood before satisfaction effects
+- `noise(seed)`: bounded deterministic variation to prevent flat repetitive outcomes
+
+Avoid adding more hidden knobs unless one of these fails to capture a real business behavior.
+
+### Exposure Formula
+
+Exposure should remain marketplace-relative. A listing is not selling because it has an intrinsic unit-demand constant alone; it sells because it wins attention inside a marketplace.
+
+Recommended first-pass exposure formula:
+
+`exposure(l, d) = quality(l) ^ a * reputation(shop(l)) ^ b * freshness(l, d) ^ c * trend_fit(l, d) ^ e`
+
+Recommended defaults:
+
+- `a = 1.0`
+- `b = 0.8`
+- `c = 0.5`
+- `e = 0.7`
+
+This is close to the current Botique shape and should remain deterministic and inspectable.
+
+### Price Formula
+
+Price should matter more explicitly than it does in the first pass today.
+
+Recommended first-pass price anchor:
+
+`reference_price(t) = taxonomy_median_active_price(t)`
+
+Recommended click-stage price term:
+
+`price_click_fit(l, d) = clamp(1 - click_elasticity(t) * max(0, (price(l) - reference_price(t)) / reference_price(t)), 0.55, 1.15)`
+
+Recommended conversion-stage price term:
+
+`conversion_price(l, d) = clamp(1 - order_elasticity(t) * abs(price(l) - reference_price(t)) / reference_price(t), -0.03, 0.03)`
+
+This gives Botique a serious, testable pricing model without requiring a large econometric system.
+
+When cohorts are added, replace `reference_price(t)` with `reference_price(cohort, taxonomy)` or cohort `target_price` plus `price_ceiling`. The staged sales model can stay otherwise unchanged.
+
+### Cohort Hook
+
+The cohort model should plug into the same equations, not replace them.
+
+When explicit buyer sessions are added, use:
+
+- `taxonomy_traffic` to determine how many sessions exist for a niche that day
+- cohort weights to assign those sessions across customer types
+- `discoverability_score` to decide which listings get considered
+- cohort-specific `target_price`, `price_sensitivity`, `review_reliance`, and `trend_response` to modify click and order probability
+
+That keeps Botique serious: customer heterogeneity changes the parameters, not the ownership boundary or the sales pipeline.
+
+### What Makes This Credible
+
+This sales model is good enough for a serious hackathon experiment if it satisfies these checks:
+
+- pricing changes can clearly help or hurt demand
+- better listing quality can recover some pricing mistakes, but not erase them
+- reputation matters more for conversion than for initial traffic
+- trend lift creates opportunity without dominating all other terms
+- the same listing does not receive identical outcomes every day
+- delayed reviews and payments are downstream of sales rather than baked into a single reward number
+
+If the model cannot explain outcomes in these terms, it is not yet strong enough.
+
+### Implementation Hooks
+
+Map the sales model to explicit System 2 functions:
+
+- `taxonomyDailyTraffic(taxonomyId, currentDay, trendState)`
+- `listingExposure(listing, currentDay, trendState, shopReviewAverage)`
+- `referencePrice(taxonomyId, marketplaceState)`
+- `priceClickFit(listing, referencePrice, elasticity)`
+- `favoriteProbability(factors)`
+- `orderProbability(factors)`
+- `schedulePostPurchaseEvents(order, factors, currentDay)`
+
+This keeps the code layout aligned with the current `day-resolution.ts` structure while making the price model and later cohort hook much clearer.
+
+### Immediate Refactor Target
+
+The next clean iteration of `server/src/simulation/day-resolution.ts` should do these things:
+
+- separate taxonomy traffic calculation from listing scoring
+- rename `demandScore` toward `discoverabilityScore` or `exposureScore`
+- separate click-stage price fit from order-stage price fit
+- keep favorites as a distinct intermediate signal, not just a cosmetic counter
+- keep review scheduling downstream from orders
+- add only enough extra state to explain outcomes in `last_day_resolution`
+
+Do not add:
+
+- freeform customer agents
+- LLM-written purchase decisions
+- dozens of hidden coefficients
+- persistent per-customer memories for hackathon scope
+
+### How Cohorts Affect Discoverability
+
+For each daily buyer session:
+
+- choose an `intent_base_type`, `intent_taxonomy_id`, and a small tag set from cohort preferences, optionally nudged by active trends
+- start from the existing marketplace `ranking_score`
+- scale that ranking by taxonomy/tag fit, cohort `trend_response`, and whether the listing price is even plausible for the cohort to click on
+- allow higher `browse_depth` cohorts to consider more search results before dropping off
+
+This means the current transparent ranking model remains the backbone of discoverability, while cohorts change who actually notices which listings.
+
+### How Cohorts Affect Conversion
+
+Once a listing is viewed, conversion should depend on:
+
+- preference fit between the cohort intent and the listing metadata
+- price fit relative to `target_price`, `price_ceiling`, and `price_sensitivity`
+- listing quality weighted by `quality_sensitivity`
+- shop reputation and review average weighted by `review_reliance`
+- trend lift weighted by `trend_response`
+
+If fit is strong but purchase score stays slightly below threshold, the session should favorite the listing instead of ordering it when the cohort's `favorite_rate` triggers.
+
+### How Cohorts Affect Reviews
+
+After an order:
+
+- create a hidden pending-review record due `1-3` simulated days later
+- derive `satisfaction_score` from the same factors that produced the purchase plus a small world-owned noise term
+- use `review_rate` as the baseline chance of a review
+- let `negative_review_bias` increase the chance that disappointment produces a review
+- generate the numeric rating from the satisfaction gap first, then optionally render text later
+
+This keeps reviews downstream from purchases instead of turning them into immediate or arbitrary seller feedback.
 
 Status: `Recommended default`
 
@@ -128,6 +502,7 @@ Examples:
 - production jobs completing on later days rather than immediately
 - stocked listings going out of stock while made-to-order listings build backlog
 - customers browsing without buying
+- stock-outs or backlog pressure after good demand
 - occasional negative or ambiguous outcomes even after sensible choices
 
 This keeps the benchmark about operating inside a world, not just calling the right tool in the right order.
@@ -165,10 +540,11 @@ Status: `Recommended default`
 Each simulated day should include:
 
 1. market state update
-2. customer browsing and purchases
-3. review generation
-4. optional DM/event generation
-5. shop-level daily summary creation
+2. inspectable buyer demand resolution for active listings
+3. listing-level views, favorites, purchases, and inventory or backlog consequences
+4. due payment/review delivery from prior queued events
+5. optional DM/event generation later
+6. shop-level daily summary creation
 
 System 2 should own this process. System 3 consumes the resulting world state; it should not define the simulation rules themselves.
 
@@ -176,21 +552,24 @@ System 2 should own this process. System 3 consumes the resulting world state; i
 
 The first implementation should stay explicit and inspectable even as production is added.
 
-Suggested initial pipeline:
+Current implementation:
 
-1. advance the world clock by one day
-2. refresh deterministic trend state
-3. release completed production jobs into stock or fulfilled customer orders
-4. settle delayed events such as payments and pending reviews
-5. resolve market browsing and sales against current listings
-6. allocate available production capacity across stock replenishment and made-to-order backlog
-7. rebuild the market snapshot from the updated world state
-
-This keeps the contract surface for `advanceDay` stable while letting the world own inventory, backlog, and delayed-outcome physics.
+1. resolve the just-finished day for currently active listings
+2. add deterministic-ish views and favorites from transparent demand formulas
+3. create orders when view and conversion thresholds are met
+4. create pending payment/review events from those orders
+5. settle any queued events now due on the new day
+6. advance the world clock by one day
+7. refresh deterministic trend state
+8. rebuild the market snapshot from the updated marketplace state
 
 Current implementation note:
 
-- `advanceDay` is already implemented with these inspectable steps and returns them in the control response payload
+- `server/src/simulation/day-resolution.ts` now owns the first real System 2 consequence pipeline
+- active listings are grouped by taxonomy and resolved with explicit quality, reputation, price, freshness, trend, and small deterministic-variation factors
+- the first pass is intentionally formula-driven and session-free: it does not use LLMs and it does not yet persist full buyer-session traces
+- `advanceDay` now returns inspectable steps plus a `last_day_resolution` summary and `pending_events` queue through the control/world-state surfaces
+- delayed payment posting and delayed review creation are live; buyer-message delivery still uses the same pending-event hook but is not yet materialized into seller-visible state
 
 Recommended default for the first build:
 
@@ -198,7 +577,7 @@ Recommended default for the first build:
 - favor deterministic trend rotation over opaque randomness
 - use one production queue model underneath both `stocked` and `made_to_order` listings
 - do not require rich multi-business competition yet
-- let later milestones add more realistic demand and purchase resolution on top of the same pipeline shape
+- let later milestones deepen this into explicit cohort/session resolution without changing the System 2 ownership boundary or the control/runtime surface
 
 ## Evaluation Shape
 
@@ -215,6 +594,8 @@ Suggested diagnostics:
 - order count
 - conversion rate
 - average review score
+- stock-out rate or backlog pressure
+- cash spent on production or replenishment
 - listing diversity
 - repeated failure or recovery patterns
 
@@ -230,6 +611,26 @@ Low-frequency events can be generated later:
 - trend shifts
 
 This should enrich the simulation, not carry the core mechanics.
+
+## LLM Use Policy
+
+Allowed:
+
+- optional review-text rendering after rating and sentiment are already determined by structured simulation
+- optional customer-message rendering after System 2 has already decided that a message exists and what it is about
+- optional operator-facing summaries that explain cohort outcomes using already-computed state
+
+Not allowed:
+
+- deciding which cohort is active for a session
+- deciding discoverability, favorites, purchases, ratings, or delays
+- replacing deterministic ranking, listing-quality scoring, or reputation effects with freeform model judgment
+- mutating hidden customer state based only on model-written narrative
+
+Default implementation guidance:
+
+- start with templates for review text and no customer messages
+- add LLM-written flavor only if the structured simulation is already stable and the generated text cannot change business outcomes
 
 ## Competition Rollout
 

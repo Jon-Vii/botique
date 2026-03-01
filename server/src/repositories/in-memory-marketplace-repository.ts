@@ -72,6 +72,13 @@ export class InMemoryMarketplaceRepository implements MarketplaceRepository {
     return clone(this.state.simulation);
   }
 
+  async setWorldState(state: StoredWorldState): Promise<StoredWorldState> {
+    const normalized = normalizeWorldState(state);
+    this.state.marketplace = normalized.marketplace;
+    this.state.simulation = normalized.simulation;
+    return clone(this.state);
+  }
+
   async getShop(shopId: number): Promise<Shop | null> {
     const shop = this.state.marketplace.shops.find((item) => item.shop_id === shopId);
     return shop ? this.hydrateShop(shop) : null;

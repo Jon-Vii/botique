@@ -1,77 +1,89 @@
-# Status
+# Botique Status
 
-## Current Build State
+Last updated: `2026-02-28`
 
-The repo currently has three implemented code areas:
+## Purpose
 
-- `server/`: TypeScript Fastify/Bun seller-facing API, control routes, seeded marketplace state, and simulation logic
-- `src/seller_core/`: Python portability-aware seller tool client/CLI
-- `src/agent_runtime/`: Python owner-agent runtime, provider wiring, tool registry, and simple note/reminder memory
+This file is the lightweight build-status view for the project.
 
-System 4 remains unimplemented in this repo.
-## Current Default World
+Use it to answer four questions quickly:
 
-The default seeded world is now creative-goods-first rather than digital-first.
+- what already works end to end
+- what is actively being deepened now
+- what likely comes next
+- which important decisions are still open
 
-Current behavior:
+This doc should stay short and operational. Detailed reasoning belongs in the topic docs.
 
-- four small creative-goods shops seed the default market
-- listings use `stocked` and `made_to_order` fulfillment modes on the same production model
-- shops begin with asymmetric stock, backlog, review history, cash timing, and production capacity
-- the default taxonomy now centers 3D printed goods, laser-cut decor, ceramics, and woodwork
+## Current
 
-This is a `Current decision` for the default benchmark direction.
-## Current Runtime Contract
+These pieces already exist in the repo and are safe to build on.
 
-The owner-agent loop now runs as a turn-slotted seller workday.
+- System 1 seller-facing API service in `server/`
+- separate `/control` surface for simulation/runtime inspection and day advancement
+- seeded digital-first marketplace state with shops, listings, orders, reviews, payments, and taxonomy
+- System 2 simulation `v1` with current day, trend state, market snapshot, search context, pending-event hooks, and consequence-producing `advanceDay`
+- inspectable day resolution for active listings with formula-driven views, favorites, orders, delayed payment posting, and delayed review creation
+- transparent marketplace ranking based on relevance, listing quality, reviews, price fit, recency, and trend bonus
+- Python `seller_core` client/CLI for the portable seller-facing tool surface
+- Python single-shop agent runtime with live morning briefing generation
+- one-tool-per-turn agent loop with bounded inspection, a forced act-or-`no_action` decision, and automatic day settlement
+- phase-aware prompt/tool exposure that summarizes prior tool results in-model while keeping full raw payloads in artifacts
+- simple Botique memory tools for notes and reminders
+- Mistral provider wiring for tool-calling runs
+- multi-day runtime path that can build briefings from live Botique state, advance the simulation between days, and persist artifact-rich reference-run bundles for inspection
 
-Current behavior:
+## In Motion
 
-- each day starts with a visible number of work slots
-- each tool call uses one slot
-- the agent still gets one tool call per turn
-- notes and reminders stay visible as ordinary support tools
-- after the day ends, the runtime writes one model-generated note for later days outside the slot budget
-- the runtime still owns day-end accounting and simulation advancement
-- the provider-facing payload is now a natural morning brief plus compact work-session state instead of a raw orchestration JSON envelope
+These are the current product and architecture priorities.
 
-This is a `Current decision`.
+- get to a first believable reference run as quickly as possible
+- redesign the agent loop so it behaves like a seller workflow instead of an open-ended search loop
+- pivot the intended product scope from digital-first toward creative-goods businesses with production constraints
+- tune the new System 2 consequence pipeline so the world feels believable across multiple days
+- preserve the clean boundary between seller-facing tools and control/runtime surfaces
+- keep the Etsy-compatible `seller_core` story honest without letting portability concerns slow the core demo
+- use the new reference-run bundle as the baseline artifact for loop and simulation tuning
 
-## What Works Now
+## Next
 
-- live morning brief generation from seller-facing and control-plane state
-- a narrower owner-agent tool surface with runtime-composed shop and listing summaries
-- shop-scoped core and extension tool exposure behind that narrower runtime surface
-- turn-slotted single-day loop execution
-- multi-day runs with runtime-owned simulation advancement between days
-- inspectable in-memory notes and reminders
-- automatic end-of-day note carry-forward between days
-- structured runtime event logs
-- production-aware seeded world state with delayed payments, pending reviews, and shop queues
+Near-term work that should most improve the first end-to-end run.
 
-## Active Focus
+- tune `agent-loop v1` against live traces so the inspect/act contract feels natural across scenarios
+- decide the first production/capacity abstraction and which shop archetypes belong in the seeded world
+- migrate the seed taxonomy and marketplace examples away from digital-first products if the scope pivot holds
+- improve the morning briefing so it highlights opportunities, risks, and strongest/weakest listing signals
+- decide whether and how simple note/reminder reflection should fit back into the v1 runtime without becoming the main action
+- tune the first consequence-producing day pipeline against multi-day traces
+- decide whether the next demand step should be explicit cohort sessions or a richer aggregate demand model
+- add delayed customer-message delivery on top of the existing pending-event queue if it materially improves the demo
+- review and tune against the first persisted reference-run bundle instead of ad hoc terminal output
 
-Current focus is making one believable single-shop run feel like a constrained creative-goods business day rather than a hidden cost-shaping puzzle.
+## Later
 
-That means:
+Likely expansions once the first believable run is working.
 
-- keeping the loop legible
-- keeping the tool surface explicit but narrower than raw `seller_core`
-- improving prompt framing without adding hidden reasoning dependencies
-- keeping production constraints visible without turning the benchmark into warehouse software
-
-## Next Likely Improvements
-
-- tune turns-per-day sizing against observed behavior
-- enrich morning brief quality as more simulation outcomes exist
-- tune how much production detail is surfaced to the owner agent without hiding important world state
-- validate whether the new shop dashboard and listing drill-down reduce low-value bookkeeping in live runs
-- add more outcome-rich day settlement in System 2 while keeping the same System 3 loop contract
-- decide how much operator-facing replay/debug UI is needed for demos
+- persistent customer identities or cohort drift beyond the initial static cohort set
+- scripted competitor archetypes with distinct marketplace strategies
+- richer operator/debug traces explaining why listings did or did not perform
+- stronger evaluation metrics and scenario seeds
+- frontend/operator dashboard polish
+- optional deeper portability work around real Etsy-compatible integration
 
 ## Open Questions
 
-- whether the default `5` turns per day should stay or be tuned after more end-to-end runs
-- whether reminder usage needs stronger guardrails if agents overuse support tools
-- how rich post-tool state summaries should become before they feel noisy again
-- how much direct production control should eventually be exposed versus staying world-owned
+- what the primary business score should be for evaluation
+- how explicit production should be in the first build: stock only, backlog only, or both
+- whether hackathon scope needs persistent repeat customers beyond cohort-level repeat affinity
+- when to add stronger inter-shop competition
+- when, if ever during the hackathon, optional LLM-written review or message text should be added on top of structured outcomes
+- how much demo value there is in the Etsy-hookup story relative to core Botique simulation quality
+
+## Updating Rule
+
+When the project state changes, update this file first if the answer to any of these changes:
+
+- what works now
+- what is actively being built now
+- what is clearly next
+- what remains unresolved
