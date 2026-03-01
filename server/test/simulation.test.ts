@@ -149,6 +149,42 @@ describe("System 2 simulation module", () => {
     );
   });
 
+  test("controlled shops do not receive automatic stocked replenishment, while background shops still can", async () => {
+    const defaultRepository = createInMemoryMarketplaceRepository(createSampleState());
+    const controlledRepository = createInMemoryMarketplaceRepository(createSampleState());
+    const defaultSimulation = createWorldSimulation(defaultRepository);
+    const controlledSimulation = createWorldSimulation(controlledRepository);
+
+    for (let index = 0; index < 30; index += 1) {
+      await defaultSimulation.advanceDay();
+      await controlledSimulation.advanceDay({ controlled_shop_ids: [1001] });
+    }
+
+    const defaultWorld = await defaultSimulation.getWorldState();
+    const controlledWorld = await controlledSimulation.getWorldState();
+
+    const defaultLayercake = defaultWorld.marketplace.shops.find((shop) => shop.shop_id === 1001);
+    const controlledLayercake = controlledWorld.marketplace.shops.find((shop) => shop.shop_id === 1001);
+    const defaultTray = defaultWorld.marketplace.listings.find((listing) => listing.listing_id === 2001);
+    const controlledTray = controlledWorld.marketplace.listings.find((listing) => listing.listing_id === 2001);
+    const defaultCeramic = defaultWorld.marketplace.listings.find((listing) => listing.listing_id === 2005);
+    const controlledCeramic = controlledWorld.marketplace.listings.find((listing) => listing.listing_id === 2005);
+
+    assert.ok(defaultLayercake);
+    assert.ok(controlledLayercake);
+    assert.ok(defaultTray);
+    assert.ok(controlledTray);
+    assert.ok(defaultCeramic);
+    assert.ok(controlledCeramic);
+
+    assert.equal(defaultTray.quantity_on_hand, 2);
+    assert.equal(controlledTray.quantity_on_hand, 0);
+    assert.ok(defaultLayercake.production_queue.some((job) => job.kind === "stock"));
+    assert.equal(controlledLayercake.production_queue.some((job) => job.kind === "stock"), false);
+
+    assert.equal(defaultCeramic.quantity_on_hand, controlledCeramic.quantity_on_hand);
+  });
+
   test("delayed payments and reviews remain inspectable until their release day", async () => {
     const repository = createInMemoryMarketplaceRepository(createSampleState());
     const simulation = createWorldSimulation(repository);

@@ -69,6 +69,12 @@ Recommended initial production modes:
 - `stocked`: units are produced ahead of time and depleted by sales
 - `made_to_order`: sales create backlog that consumes future production capacity
 
+Operational replenishment rule:
+
+- agent-managed shops must explicitly queue future stocked production themselves
+- background NPC shops may still use a baseline stocking policy so the surrounding market stays active without a full second agent layer
+- made-to-order sales continue to create customer-order jobs automatically because that is fulfillment of an accepted order, not speculative restocking
+
 Current implementation note:
 
 - the current server and seed data now use a small creative-goods catalog with production-aware listings

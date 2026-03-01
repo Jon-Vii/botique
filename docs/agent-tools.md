@@ -90,6 +90,11 @@ Operational interpretation:
 - `queue_production(listing_id, units)` adds future stock work for a stocked listing
 - made-to-order listings do not need a manual "restock" action; sales automatically create customer-order production jobs in the shared queue
 
+Important simulation split:
+
+- for agent-managed shops, stocked replenishment is an explicit seller decision through `queue_production`
+- background NPC shops may still use a baseline stocking policy so the surrounding market does not go inert when no agent controls them
+
 This is the core semantic shift for v1:
 
 - do not describe the system as "restocking"

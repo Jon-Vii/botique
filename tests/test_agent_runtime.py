@@ -281,13 +281,15 @@ class FakeControlApiClient:
         self.index = 0
         self.advance_calls = 0
         self.reset_calls = 0
+        self.controlled_shop_ids_calls: list[tuple[int | str, ...]] = []
 
     def get_global_market_state(self) -> GlobalMarketState:
         return self.market_states[self.index]
 
-    def advance_day(self) -> AdvanceDayResult:
+    def advance_day(self, *, controlled_shop_ids=()) -> AdvanceDayResult:
         previous = self.market_states[self.index]
         self.advance_calls += 1
+        self.controlled_shop_ids_calls.append(tuple(controlled_shop_ids))
         if self.index < len(self.market_states) - 1:
             self.index += 1
         current = self.market_states[self.index]
@@ -315,13 +317,15 @@ class FakeTournamentControlApiClient:
         self.index = 0
         self.advance_calls = 0
         self.replace_calls = 0
+        self.controlled_shop_ids_calls: list[tuple[int | str, ...]] = []
 
     def get_global_market_state(self) -> GlobalMarketState:
         return self.market_states[self.index]
 
-    def advance_day(self) -> AdvanceDayResult:
+    def advance_day(self, *, controlled_shop_ids=()) -> AdvanceDayResult:
         previous = self.market_states[self.index]
         self.advance_calls += 1
+        self.controlled_shop_ids_calls.append(tuple(controlled_shop_ids))
         if self.index < len(self.market_states) - 1:
             self.index += 1
         current = self.market_states[self.index]
@@ -1522,6 +1526,7 @@ class OwnerAgentRunnerTests(unittest.TestCase):
         self.assertIsNotNone(result.days[0].advancement)
         self.assertIsNone(result.days[1].advancement)
         self.assertEqual(control_client.advance_calls, 1)
+        self.assertEqual(control_client.controlled_shop_ids_calls, [(1001,)])
         self.assertEqual(result.days[1].market_state_before.current_day.day, 4)
         self.assertEqual(
             result.days[0].day_result.day_scratchpad.content,
@@ -1764,6 +1769,10 @@ class TournamentModeTests(unittest.TestCase):
         self.assertEqual(result.rounds[0].days[0].turn_order, ("mistral-medium", "mistral-small"))
         self.assertEqual(result.rounds[0].days[1].turn_order, ("mistral-small", "mistral-medium"))
         self.assertEqual(control_client.advance_calls, 2)
+        self.assertEqual(
+            control_client.controlled_shop_ids_calls,
+            [(1001, 1002), (1002, 1001)],
+        )
         self.assertEqual(control_client.replace_calls, 1)
         self.assertEqual(result.rounds[0].standings[0].entrant.entrant_id, "mistral-medium")
         self.assertEqual(result.rounds[1].standings[0].entrant.entrant_id, "mistral-small")

@@ -23,6 +23,7 @@ These pieces already exist in the repo and are safe to build on.
 - separate `/control` surface for runtime resets, world-state inspection, tournament orchestration, and day advancement
 - seeded creative-goods marketplace with production-aware listings, orders, reviews, payments, taxonomy, and trend state
 - System 2 simulation with inspectable day resolution for views, favorites, orders, delayed payments, delayed reviews, and production queue release
+- controlled-shop day advancement that disables free stocked auto-replenishment for agent-managed shops while leaving baseline NPC stocking behavior available for background market shops
 - transparent marketplace ranking based on relevance, listing quality, reviews, price fit, recency, and trend bonus
 - Python `seller_core` client/CLI for the portability-aware seller surface
 - Python single-shop owner-agent runtime with live morning briefing generation from seller-visible state

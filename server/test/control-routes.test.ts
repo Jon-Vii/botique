@@ -98,6 +98,21 @@ describe("Botique server control endpoints", () => {
     );
   });
 
+  test("accepts controlled shop ids when advancing the simulation day", async () => {
+    const advanceResponse = await app.inject({
+      method: "POST",
+      url: "/control/simulation/advance-day",
+      payload: {
+        controlled_shop_ids: [1001]
+      }
+    });
+
+    assert.equal(advanceResponse.statusCode, 200);
+    const payload = advanceResponse.json();
+    assert.equal(payload.previous_day.day, 3);
+    assert.equal(payload.current_day.day, 4);
+  });
+
   test("resets the world state through /control back to the initial seeded snapshot", async () => {
     const advanceResponse = await app.inject({
       method: "POST",
