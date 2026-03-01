@@ -1,5 +1,7 @@
 import { Cpu, Heart } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
+import { Badge } from "./Badge";
+import { StatusDot } from "./StatusDot";
 import { getProductEmoji, getProductGradient } from "../lib/product-visual";
 import type { Listing } from "../types/api";
 
@@ -10,7 +12,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
   return (
     <Link
       to={`/listing/${listing.listing_id}`}
-      className="group block animate-card-in"
+      className="group block animate-card-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange focus-visible:ring-offset-2 focus-visible:ring-offset-cream"
     >
       <div className="tech-card card-lift overflow-hidden">
         {/* Product visual */}
@@ -41,17 +43,17 @@ export function ListingCard({ listing }: { listing: Listing }) {
           {/* State badge — non-active listings */}
           {listing.state !== "active" && (
             <div className="absolute top-2.5 left-2.5">
-              <span
-                className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 ${
+              <Badge
+                variant={
                   listing.state === "draft"
-                    ? "bg-teal-dim text-teal border border-teal/20"
+                    ? "teal"
                     : listing.state === "sold_out"
-                      ? "bg-rose-dim text-rose border border-rose/20"
-                      : "bg-warm-100 text-muted border border-rule"
-                }`}
+                      ? "rose"
+                      : "gray"
+                }
               >
                 {listing.state.replace("_", " ")}
-              </span>
+              </Badge>
             </div>
           )}
 
@@ -90,9 +92,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
           <div className="mt-2 flex items-center justify-between">
             <span className="num text-lg font-bold text-orange flex items-center gap-1.5">
               ${listing.price.toFixed(2)}
-              {listing.state === "active" && (
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald dot-pulse" />
-              )}
+              {listing.state === "active" && <StatusDot state="active" />}
             </span>
             {listing.favorites > 0 && (
               <span className="text-[10px] text-muted flex items-center gap-0.5 font-mono">

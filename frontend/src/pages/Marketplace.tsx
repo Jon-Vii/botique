@@ -2,7 +2,7 @@ import { MagnifyingGlass, Package, SlidersHorizontal } from "@phosphor-icons/rea
 import { useMemo, useState } from "react";
 import { EmptyState } from "../components/EmptyState";
 import { ListingCard } from "../components/ListingCard";
-import { Spinner } from "../components/Spinner";
+import { ListingCardSkeleton } from "../components/Skeleton";
 import { useActiveListings } from "../hooks/useApi";
 
 type SortOption = "relevance" | "price_asc" | "price_desc" | "newest";
@@ -82,7 +82,7 @@ export function Marketplace() {
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
             placeholder="Search for anything..."
-            className="w-full bg-white border-2 border-rule pl-11 pr-5 py-2.5 text-sm text-ink font-body placeholder:text-muted focus:outline-none focus:border-orange focus:shadow-[0_0_0_3px_rgba(255,112,0,0.08)] transition-all"
+            className="w-full bg-white border-2 border-rule pl-11 pr-5 py-2.5 text-sm text-ink font-body placeholder:text-muted focus:outline-none focus:border-orange focus:shadow-[0_0_0_2px_var(--color-cream),0_0_0_4px_var(--color-orange)] transition-[border-color,box-shadow] duration-150"
           />
         </div>
 
@@ -147,7 +147,11 @@ export function Marketplace() {
 
       {/* Listing grid */}
       {isLoading ? (
-        <Spinner />
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 stagger">
+          {Array.from({ length: 10 }, (_, i) => (
+            <ListingCardSkeleton key={i} />
+          ))}
+        </div>
       ) : listings.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 stagger">
           {listings.map((listing) => (

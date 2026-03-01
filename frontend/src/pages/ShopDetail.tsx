@@ -8,9 +8,11 @@ import {
 } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { Badge } from "../components/Badge";
 import { ListingCard } from "../components/ListingCard";
-import { Spinner } from "../components/Spinner";
+import { Skeleton } from "../components/Skeleton";
 import { Stars } from "../components/Stars";
+import { StatusDot } from "../components/StatusDot";
 import {
   useShop,
   useShopListings,
@@ -47,7 +49,31 @@ export function ShopDetail() {
     [orders]
   );
 
-  if (shopLoading) return <Spinner />;
+  if (shopLoading) {
+    return (
+      <div className="max-w-5xl mx-auto space-y-6">
+        <Skeleton width="100px" height="14px" />
+        <div className="tech-card overflow-hidden">
+          <div className="h-32 skeleton-shimmer" />
+          <div className="p-6 space-y-4">
+            <div className="flex items-center gap-4">
+              <Skeleton circle height="56px" />
+              <div className="space-y-2 flex-1">
+                <Skeleton width="180px" height="20px" />
+                <Skeleton width="120px" height="12px" />
+              </div>
+            </div>
+            <div className="grid grid-cols-4 gap-3">
+              <Skeleton height="48px" />
+              <Skeleton height="48px" />
+              <Skeleton height="48px" />
+              <Skeleton height="48px" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (!shop) {
     return (
       <div className="text-center py-20 text-muted text-lg">
@@ -86,7 +112,7 @@ export function ShopDetail() {
             <span className="text-[10px] font-pixel-grid font-bold text-secondary">
               AI Agent
             </span>
-            <div className="w-2 h-2 rounded-full bg-emerald dot-pulse" />
+            <StatusDot state="active" />
           </div>
         </div>
 
@@ -131,7 +157,7 @@ export function ShopDetail() {
 
           {/* Announcement */}
           {shop.announcement && (
-            <div className="mt-4 bg-warm-50 px-5 py-3 border border-rule">
+            <div className="mt-4 bg-gray-2 px-5 py-3 border border-rule">
               <p className="text-sm text-secondary leading-relaxed italic">
                 "{shop.announcement}"
               </p>
@@ -171,7 +197,7 @@ export function ShopDetail() {
             ].map((stat) => (
               <div
                 key={stat.label}
-                className="bg-warm-50 border border-rule px-4 py-3 text-center"
+                className="bg-white border border-rule px-4 py-3 text-center"
               >
                 <div className="flex items-center justify-center gap-1 text-muted text-[10px] font-mono font-semibold uppercase tracking-wider mb-1">
                   <stat.icon size={11} weight="duotone" />
@@ -232,48 +258,45 @@ export function ShopDetail() {
         {tab === "orders" && (
           <div className="bg-white border border-rule shadow-[var(--shadow-card)] overflow-hidden">
             {orders.length > 0 ? (
-              <table className="w-full text-sm">
+              <table className="geist-table geist-table-striped">
                 <thead>
-                  <tr className="border-b border-rule bg-warm-50/60 text-muted text-[10px] font-mono uppercase tracking-wider">
-                    <th className="text-left px-4 py-3 font-semibold">Order</th>
-                    <th className="text-left px-4 py-3 font-semibold">Buyer</th>
-                    <th className="text-left px-4 py-3 font-semibold">Items</th>
-                    <th className="text-right px-4 py-3 font-semibold">Total</th>
-                    <th className="text-right px-4 py-3 font-semibold">Status</th>
+                  <tr>
+                    <th>Order</th>
+                    <th>Buyer</th>
+                    <th>Items</th>
+                    <th align="right">Total</th>
+                    <th align="right">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {orders.map((order) => (
-                    <tr
-                      key={order.receipt_id}
-                      className="border-b border-rule/50 hover:bg-orange-50/30 transition-colors"
-                    >
-                      <td className="px-4 py-3 font-mono text-xs text-muted">
+                    <tr key={order.receipt_id}>
+                      <td className="font-mono text-xs text-muted">
                         #{order.receipt_id}
                       </td>
-                      <td className="px-4 py-3 text-ink font-semibold">
+                      <td className="text-ink font-semibold">
                         {order.buyer_name}
                       </td>
-                      <td className="px-4 py-3 text-secondary text-xs">
+                      <td className="text-secondary text-xs">
                         {order.line_items
                           .map((li) => `${li.title} x${li.quantity}`)
                           .join(", ")}
                       </td>
-                      <td className="px-4 py-3 text-right num font-bold text-orange">
+                      <td className="text-right num font-bold text-orange">
                         ${order.total_price.toFixed(2)}
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 text-[10px] font-mono font-bold uppercase tracking-wider ${
+                      <td className="text-right">
+                        <Badge
+                          variant={
                             order.status === "paid"
-                              ? "bg-emerald-dim text-emerald border border-emerald/15"
+                              ? "emerald"
                               : order.status === "fulfilled"
-                                ? "bg-teal-dim text-teal border border-teal/15"
-                                : "bg-rose-dim text-rose border border-rose/15"
-                          }`}
+                                ? "teal"
+                                : "rose"
+                          }
                         >
                           {order.status}
-                        </span>
+                        </Badge>
                       </td>
                     </tr>
                   ))}

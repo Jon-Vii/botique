@@ -10,10 +10,14 @@ import {
   TrendUp,
 } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
+import { Badge } from "../components/Badge";
 import { EmptyState } from "../components/EmptyState";
+import { Gauge } from "../components/Gauge";
+import { LoadingDots } from "../components/LoadingDots";
 import { ShopCard } from "../components/ShopCard";
-import { Spinner } from "../components/Spinner";
+import { ShopCardSkeleton, StatSkeleton } from "../components/Skeleton";
 import { Stat } from "../components/Stat";
+import { useToast } from "../components/Toast";
 import { TrendTag } from "../components/TrendTag";
 import {
   useAdvanceDay,
@@ -29,8 +33,9 @@ export function Dashboard() {
   const { data: trends } = useTrendState();
   const { data: world, isLoading: worldLoading } = useWorldState();
   const advanceDay = useAdvanceDay();
+  const { toast } = useToast();
 
-  if (dayLoading || worldLoading) return <Spinner />;
+  const isLoading = dayLoading || worldLoading;
 
   const shops = world?.marketplace.shops ?? [];
   const orders = world?.marketplace.orders ?? [];
@@ -65,7 +70,7 @@ export function Dashboard() {
             {snapshot && (
               <div className="mt-6 flex items-center gap-6 text-sm">
                 <span className="flex items-center gap-2 text-secondary">
-                  <span className="w-7 h-7 bg-orange-50 flex items-center justify-center border border-orange/15">
+                  <span className="w-7 h-7 bg-orange-1 flex items-center justify-center border border-orange-4">
                     <Storefront size={14} weight="duotone" className="text-orange" />
                   </span>
                   <strong className="num text-ink">
@@ -112,44 +117,119 @@ export function Dashboard() {
               </div>
             )}
             <button
-              onClick={() => advanceDay.mutate()}
+              onClick={() =>
+                advanceDay.mutate(undefined, {
+                  onSuccess: () =>
+                    toast({
+                      message: `Day ${(simDay?.day ?? 0) + 1} simulation complete`,
+                      variant: "success",
+                    }),
+                  onError: () =>
+                    toast({
+                      message: "Day advance failed",
+                      variant: "error",
+                    }),
+                })
+              }
               disabled={advanceDay.isPending}
               className="flex items-center gap-2 px-6 py-3 bg-orange text-white text-sm font-semibold hover:shadow-[0_0_24px_rgba(255,112,0,0.3)] hover:scale-105 active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
             >
-              <Play size={14} weight="fill" />
-              {advanceDay.isPending ? "Running..." : "Advance Day"}
+              {advanceDay.isPending ? (
+                <LoadingDots size={5} color="bg-white" />
+              ) : (
+                <>
+                  <Play size={14} weight="fill" />
+                  Advance Day
+                </>
+              )}
             </button>
           </div>
         </div>
       </section>
 
       {/* Stats grid */}
-      {snapshot && (
-        <section className="grid grid-cols-4 gap-3 stagger">
-          <Stat
-            label="Active Listings"
-            value={snapshot.active_listing_count}
-            icon={<Package size={12} weight="duotone" />}
-            accent="emerald"
-          />
-          <Stat
-            label="Shops Running"
-            value={snapshot.active_shop_count}
-            icon={<Storefront size={12} weight="duotone" />}
-            accent="orange"
-          />
-          <Stat
-            label="Avg Price"
-            value={`$${snapshot.average_active_price.toFixed(2)}`}
-            icon={<ChartBar size={12} weight="duotone" />}
-            accent="teal"
-          />
-          <Stat
-            label="Total Reviews"
-            value={reviews.length}
-            icon={<TrendUp size={12} weight="duotone" />}
-            accent="violet"
-          />
+      <section className="grid grid-cols-4 gap-3 stagger">
+        {snapshot ? (
+          <>
+            <Stat
+              label="Active Listings"
+              value={snapshot.active_listing_count}
+              icon={<Package size={12} weight="duotone" />}
+              accent="emerald"
+            />
+            <Stat
+              label="Shops Running"
+              value={snapshot.active_shop_count}
+              icon={<Storefront size={12} weight="duotone" />}
+              accent="orange"
+            />
+            <Stat
+              label="Avg Price"
+              value={`$${snapshot.average_active_price.toFixed(2)}`}
+              icon={<ChartBar size={12} weight="duotone" />}
+              accent="teal"
+            />
+            <Stat
+              label="Total Reviews"
+              value={reviews.length}
+              icon={<TrendUp size={12} weight="duotone" />}
+              accent="violet"
+            />
+          </>
+        ) : (
+          <>
+            <StatSkeleton />
+            <StatSkeleton />
+            <StatSkeleton />
+            <StatSkeleton />
+          </>
+        )}
+      </section>
+
+      {/* Simulation health gauges */}
+      {snapshot && shops.length > 0 && (
+        <section className="tech-card p-6">
+          <div className="flex items-center gap-1.5 mb-5">
+            <Cpu size={12} weight="duotone" className="text-orange" />
+            <span className="font-pixel-grid text-[10px] text-orange uppercase tracking-widest">
+              System Health
+            </span>
+          </div>
+          <div className="flex items-center justify-around">
+            <Gauge
+              value={Math.min(100, snapshot.active_listing_count * 5)}
+              color="emerald"
+              size="lg"
+              label="Stock"
+            />
+            <Gauge
+              value={Math.min(100, shops.length * 20)}
+              color="orange"
+              size="lg"
+              label="Agents"
+            />
+            <Gauge
+              value={Math.min(100, orders.length * 4)}
+              color="violet"
+              size="lg"
+              label="Orders"
+            />
+            <Gauge
+              value={
+                reviews.length > 0
+                  ? Math.round(
+                      (reviews.reduce((s, r) => s + r.rating, 0) /
+                        reviews.length /
+                        5) *
+                        100
+                    )
+                  : 0
+              }
+              color="amber"
+              size="lg"
+              label="Rating"
+            />
+          </div>
         </section>
       )}
 
@@ -160,9 +240,9 @@ export function Dashboard() {
             <h2 className="text-lg font-semibold text-ink">
               Market Trends
             </h2>
-            <span className="text-[10px] font-mono text-muted border border-rule bg-warm-50 px-2 py-0.5">
+            <Badge variant="gray" subtle>
               baseline {trends.baseline_multiplier.toFixed(1)}x
-            </span>
+            </Badge>
           </div>
           <div className="flex flex-wrap gap-2 stagger">
             {trends.active_trends.map((trend) => (
@@ -186,7 +266,13 @@ export function Dashboard() {
           </Link>
         </div>
 
-        {shops.length > 0 ? (
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 stagger">
+            <ShopCardSkeleton />
+            <ShopCardSkeleton />
+            <ShopCardSkeleton />
+          </div>
+        ) : shops.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 stagger">
             {shops.map((shop) => (
               <ShopCard
@@ -233,46 +319,43 @@ export function Dashboard() {
             Recent Orders
           </h2>
           <div className="bg-white border border-rule overflow-hidden shadow-[var(--shadow-card)]">
-            <table className="w-full text-sm">
+            <table className="geist-table geist-table-striped">
               <thead>
-                <tr className="border-b border-rule bg-warm-50/60 text-muted text-[10px] font-mono uppercase tracking-wider">
-                  <th className="text-left px-4 py-3 font-medium">Order</th>
-                  <th className="text-left px-4 py-3 font-medium">Buyer</th>
-                  <th className="text-left px-4 py-3 font-medium">Items</th>
-                  <th className="text-right px-4 py-3 font-medium">Total</th>
-                  <th className="text-right px-4 py-3 font-medium">Status</th>
+                <tr>
+                  <th>Order</th>
+                  <th>Buyer</th>
+                  <th>Items</th>
+                  <th align="right">Total</th>
+                  <th align="right">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {recentOrders.map((order) => (
-                  <tr
-                    key={order.receipt_id}
-                    className="border-b border-rule/50 hover:bg-orange-50/30 transition-colors"
-                  >
-                    <td className="px-4 py-3 font-mono text-xs text-muted">
+                  <tr key={order.receipt_id}>
+                    <td className="font-mono text-xs text-muted">
                       #{order.receipt_id}
                     </td>
-                    <td className="px-4 py-3 text-ink font-medium">
+                    <td className="text-ink font-medium">
                       {order.buyer_name}
                     </td>
-                    <td className="px-4 py-3 text-secondary text-xs">
+                    <td className="text-secondary text-xs">
                       {order.line_items.map((li) => li.title).join(", ")}
                     </td>
-                    <td className="px-4 py-3 text-right num font-semibold text-orange">
+                    <td className="text-right num font-semibold text-orange">
                       ${order.total_price.toFixed(2)}
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-wider ${
+                    <td className="text-right">
+                      <Badge
+                        variant={
                           order.status === "paid"
-                            ? "bg-emerald-dim text-emerald border border-emerald/15"
+                            ? "emerald"
                             : order.status === "fulfilled"
-                              ? "bg-teal-dim text-teal border border-teal/15"
-                              : "bg-rose-dim text-rose border border-rose/15"
-                        }`}
+                              ? "teal"
+                              : "rose"
+                        }
                       >
                         {order.status}
-                      </span>
+                      </Badge>
                     </td>
                   </tr>
                 ))}

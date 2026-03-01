@@ -1,5 +1,6 @@
 import { Package, ShoppingCart, Star } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
+import { StatusDot } from "./StatusDot";
 import type { Shop } from "../types/api";
 
 function shopHue(name: string): number {
@@ -16,7 +17,7 @@ export function ShopCard({ shop }: { shop: Shop }) {
   return (
     <Link
       to={`/shop/${shop.shop_id}`}
-      className="group block animate-card-in"
+      className="group block animate-card-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange focus-visible:ring-offset-2 focus-visible:ring-offset-cream"
     >
       <div className="card-lift h-full bg-white border border-rule overflow-hidden">
         {/* Colorful banner */}
@@ -27,8 +28,8 @@ export function ShopCard({ shop }: { shop: Shop }) {
           }}
         >
           {/* Agent indicator */}
-          <div className="absolute top-2 right-2 flex items-center gap-1 bg-white/80 backdrop-blur-sm px-2 py-0.5 border border-rule">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald dot-pulse" />
+          <div className="absolute top-2 right-2 flex items-center gap-1.5 bg-white/80 backdrop-blur-sm px-2 py-0.5 border border-rule">
+            <StatusDot state="active" />
             <span className="text-[9px] font-pixel-grid font-semibold text-secondary">
               AI agent
             </span>

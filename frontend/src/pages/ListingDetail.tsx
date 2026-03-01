@@ -1,7 +1,6 @@
 import {
   ArrowLeft,
   Calendar,
-  Cpu,
   Eye,
   Heart,
   Lightning,
@@ -10,8 +9,11 @@ import {
 } from "@phosphor-icons/react";
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Spinner } from "../components/Spinner";
+import { Badge } from "../components/Badge";
+import { Skeleton } from "../components/Skeleton";
+import { Snippet } from "../components/Snippet";
 import { Stars } from "../components/Stars";
+import { StatusDot } from "../components/StatusDot";
 import {
   getProductEmoji,
   getProductGradient,
@@ -34,7 +36,35 @@ export function ListingDetail() {
     [reviewsData, id]
   );
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) {
+    return (
+      <div className="max-w-5xl mx-auto space-y-6">
+        <Skeleton width="100px" height="14px" />
+        <div className="tech-card p-6 lg:p-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div>
+              <div className="aspect-square bg-gray-2 skeleton-shimmer" />
+              <div className="grid grid-cols-3 gap-2 mt-3">
+                <Skeleton height="52px" />
+                <Skeleton height="52px" />
+                <Skeleton height="52px" />
+              </div>
+            </div>
+            <div className="space-y-5">
+              <Skeleton width="140px" height="11px" />
+              <Skeleton width="80%" height="24px" />
+              <div className="flex items-center justify-between">
+                <Skeleton width="64px" height="20px" />
+                <Skeleton width="100px" height="32px" />
+              </div>
+              <Skeleton height="64px" />
+              <Skeleton lines={4} />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (!listing) {
     return (
       <div className="text-center py-20 text-muted text-lg">
@@ -128,7 +158,7 @@ export function ListingDetail() {
               AI-Generated Listing
             </span>
             {listing.state === "active" && (
-              <div className="w-2 h-2 rounded-full bg-emerald dot-pulse" />
+              <StatusDot state="active" />
             )}
           </div>
 
@@ -139,19 +169,19 @@ export function ListingDetail() {
 
           {/* Status + Price row */}
           <div className="flex items-center justify-between">
-            <span
-              className={`inline-flex items-center px-3 py-1 text-xs font-mono font-bold uppercase tracking-wider ${
+            <Badge
+              variant={
                 listing.state === "active"
-                  ? "bg-emerald-dim text-emerald border border-emerald/15"
+                  ? "emerald"
                   : listing.state === "draft"
-                    ? "bg-teal-dim text-teal border border-teal/15"
+                    ? "teal"
                     : listing.state === "sold_out"
-                      ? "bg-rose-dim text-rose border border-rose/15"
-                      : "bg-warm-100 text-muted border border-rule"
-              }`}
+                      ? "rose"
+                      : "gray"
+              }
             >
               {listing.state.replace("_", " ")}
-            </span>
+            </Badge>
             <div className="flex items-baseline gap-2">
               <span className="num text-4xl font-bold text-orange">
                 ${listing.price.toFixed(2)}
@@ -166,9 +196,9 @@ export function ListingDetail() {
           {shop && (
             <Link
               to={`/shop/${shop.shop_id}`}
-              className="flex items-center gap-3 p-4 bg-white border border-rule hover:border-orange/25 hover:shadow-[var(--shadow-card-hover)] transition-all group"
+              className="flex items-center gap-3 p-4 bg-white border border-rule hover:border-orange-5 hover:shadow-[var(--shadow-card-hover)] transition-all group"
             >
-              <div className="w-10 h-10 bg-orange-50 flex items-center justify-center border border-orange/15">
+              <div className="w-10 h-10 bg-orange-1 flex items-center justify-center border border-orange-4">
                 <Storefront
                   size={18}
                   weight="duotone"
@@ -259,27 +289,16 @@ export function ListingDetail() {
           </div>
 
           {/* Simulation Data panel */}
-          <div className="tech-card animate-pulse-glow !shadow-none hover:!border-rule hover:!shadow-none p-5 space-y-3">
-            <div className="flex items-center gap-1.5 mb-1">
-              <Cpu size={12} weight="duotone" className="text-orange" />
-              <span className="font-pixel-grid text-[10px] text-orange uppercase tracking-widest">
-                Simulation Data
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              {[
-                ["listing_id", String(listing.listing_id)],
-                ["shop_id", String(listing.shop_id)],
-                ["created_at", new Date(listing.created_at).toISOString().slice(0, 10)],
-                ["ranking_score", listing.views + listing.favorites * 3],
-              ].map(([label, value]) => (
-                <div key={label} className="flex justify-between items-center font-mono">
-                  <span className="text-[10px] text-muted">{label}</span>
-                  <span className="text-[11px] text-ink font-semibold">{String(value)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <Snippet
+            label="Simulation Data"
+            text={[
+              `listing_id  ${listing.listing_id}`,
+              `shop_id     ${listing.shop_id}`,
+              `created_at  ${new Date(listing.created_at).toISOString().slice(0, 10)}`,
+              `rank_score  ${listing.views + listing.favorites * 3}`,
+            ]}
+            prompt={false}
+          />
         </div>
         </div>
       </div>
