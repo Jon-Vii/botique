@@ -22,9 +22,10 @@ def _utcnow() -> datetime:
 
 
 DEFAULT_PRIORITIES_PROMPT = (
-    "Choose the highest-leverage priorities for today. Use a small amount of "
-    "inspection to gather evidence, then make one concrete business change if warranted. "
-    "Repeated searching without deciding what to change is low value."
+    "Set the highest-leverage priorities for this workday, use today's limited work slots "
+    "carefully, act on inventory, backlog, production, and market signals when they "
+    "matter, use notes or reminders when they genuinely help, and stop once the "
+    "important work is done."
 )
 
 
@@ -94,6 +95,7 @@ class MorningBriefing:
     shop_id: ShopId
     shop_name: str
     day: int
+    simulation_date: str | None = None
     generated_at: datetime = field(default_factory=_utcnow)
     balance_summary: BalanceSummary = field(default_factory=lambda: BalanceSummary(None))
     yesterday_orders: OrderSummary = field(default_factory=lambda: OrderSummary(0, 0.0))
@@ -102,6 +104,8 @@ class MorningBriefing:
     new_customer_messages: tuple[CustomerMessageSummary, ...] = ()
     due_reminders: tuple[ReminderRecord, ...] = ()
     market_movements: tuple[MarketMovement, ...] = ()
+    production_focus: tuple[str, ...] = ()
+    saved_note_count: int = 0
     objective_progress: ObjectiveProgress = field(
         default_factory=lambda: ObjectiveProgress(
             primary_objective="Grow the shop sustainably.",
@@ -122,6 +126,7 @@ class MorningBriefing:
     def render_for_agent(self) -> str:
         lines = [
             f"# {self.shop_name} workday",
+            f"- Date: {self.simulation_date or 'unknown'}",
             f"- Day: {self.day}",
             f"- Objective: {self.objective_progress.primary_objective}",
             f"- Current status: {self.objective_progress.status_summary or 'No objective update provided.'}",
@@ -134,6 +139,15 @@ class MorningBriefing:
         if self.objective_progress.supporting_diagnostics:
             lines.append(
                 f"- Key diagnostics: {', '.join(self.objective_progress.supporting_diagnostics)}"
+            )
+
+        if self.production_focus:
+            lines.append("- Production watch:")
+            lines.extend(f"  - {item}" for item in self.production_focus)
+
+        if self.saved_note_count:
+            lines.append(
+                f"- Saved notes: {self.saved_note_count} available via read_notes if useful today."
             )
 
         if self.listing_changes:
@@ -232,6 +246,7 @@ class MorningBriefingBuilder:
         shop_id: ShopId,
         shop_name: str,
         day: int,
+        simulation_date: str | None = None,
         balance_summary: BalanceSummary,
         yesterday_orders: OrderSummary,
         objective_progress: ObjectiveProgress,
@@ -239,6 +254,8 @@ class MorningBriefingBuilder:
         new_reviews: Iterable[ReviewSummary] = (),
         new_customer_messages: Iterable[CustomerMessageSummary] = (),
         market_movements: Iterable[MarketMovement] = (),
+        production_focus: Iterable[str] = (),
+        saved_note_count: int = 0,
         due_reminders: Iterable[ReminderRecord] | None = None,
         notes: Iterable[str] = (),
         priorities_prompt: str = DEFAULT_PRIORITIES_PROMPT,
@@ -255,6 +272,7 @@ class MorningBriefingBuilder:
             shop_id=shop_id,
             shop_name=shop_name,
             day=day,
+            simulation_date=simulation_date,
             balance_summary=balance_summary,
             yesterday_orders=yesterday_orders,
             listing_changes=tuple(listing_changes),
@@ -262,6 +280,8 @@ class MorningBriefingBuilder:
             new_customer_messages=tuple(new_customer_messages),
             due_reminders=reminders,
             market_movements=tuple(market_movements),
+            production_focus=tuple(production_focus),
+            saved_note_count=max(saved_note_count, 0),
             objective_progress=objective_progress,
             notes=tuple(notes),
             priorities_prompt=priorities_prompt,
@@ -321,6 +341,10 @@ class LiveMorningBriefingBuilder:
                 shop_id=shop_id,
             )
         )
+        capacity_status = _mapping(
+            self._seller_client.get_capacity_status(shop_id=shop_id),
+            "get_capacity_status",
+        )
         payments = tuple(
             _items_from_page(
                 self._seller_client.get_payments(shop_id=shop_id),
@@ -369,18 +393,26 @@ class LiveMorningBriefingBuilder:
             shop_state=shop_state,
             yesterday_orders=yesterday_orders,
             market_state=market_state,
+            capacity_status=capacity_status,
+            listings=listings,
         )
         briefing = self._briefing_builder.build(
             run_id=run_id,
             shop_id=shop_id,
             shop_name=shop_state.shop_name,
             day=current_day.day,
+            simulation_date=current_day.date,
             balance_summary=balance_summary,
             yesterday_orders=yesterday_orders,
             objective_progress=objective_progress,
             listing_changes=listing_changes,
             new_reviews=new_reviews,
             market_movements=_build_market_movements(market_state),
+            production_focus=_build_production_focus(
+                listings=listings,
+                capacity_status=capacity_status,
+            ),
+            saved_note_count=len(self._memory.list_notes(shop_id=shop_id)),
         )
         return LiveBriefingBuildResult(
             briefing=briefing,
@@ -459,6 +491,11 @@ def morning_briefing_from_payload(payload: Mapping[str, Any]) -> MorningBriefing
         shop_id=_parse_shop_id(payload["shop_id"]),
         shop_name=str(payload["shop_name"]),
         day=int(payload["day"]),
+        simulation_date=(
+            None
+            if payload.get("simulation_date") is None
+            else str(payload.get("simulation_date"))
+        ),
         generated_at=_parse_datetime(payload.get("generated_at")),
         balance_summary=_parse_balance_summary(payload.get("balance_summary", {})),
         yesterday_orders=_parse_order_summary(payload.get("yesterday_orders", {})),
@@ -479,6 +516,10 @@ def morning_briefing_from_payload(payload: Mapping[str, Any]) -> MorningBriefing
             _parse_market_movement(item)
             for item in payload.get("market_movements", [])
         ),
+        production_focus=tuple(
+            str(item) for item in payload.get("production_focus", [])
+        ),
+        saved_note_count=int(payload.get("saved_note_count", 0)),
         objective_progress=_parse_objective_progress(payload.get("objective_progress", {})),
         notes=tuple(str(item) for item in payload.get("notes", [])),
         priorities_prompt=str(
@@ -777,11 +818,31 @@ def _build_objective_progress(
     shop_state: ShopStateSnapshot,
     yesterday_orders: OrderSummary,
     market_state: GlobalMarketState,
+    capacity_status: Mapping[str, Any],
+    listings: tuple[Any, ...],
 ) -> ObjectiveProgress:
     balance = 0.0 if shop_state.balance_summary.available is None else shop_state.balance_summary.available
+    backlog_units = int(capacity_status.get("backlog_units", 0))
+    queue_depth = int(capacity_status.get("queue_depth", 0))
+    low_stock_active_listings = sum(
+        1
+        for item in listings
+        if _mapping(item, "listing").get("state") == "active"
+        and _mapping(item, "listing").get("fulfillment_mode") == "stocked"
+        and int(
+            _mapping(item, "listing").get(
+                "quantity_on_hand",
+                _mapping(item, "listing").get("quantity", 0),
+            )
+        )
+        <= 2
+    )
     diagnostics = [
         f"active_listings={shop_state.active_listing_count}",
         f"draft_listings={shop_state.draft_listing_count}",
+        f"backlog_units={backlog_units}",
+        f"queue_depth={queue_depth}",
+        f"low_stock_active_listings={low_stock_active_listings}",
         (
             "review_average=n/a"
             if shop_state.review_average is None
@@ -794,6 +855,10 @@ def _build_objective_progress(
         f"Available balance is ${balance:.2f}; "
         f"{yesterday_orders.order_count} orders brought in ${yesterday_orders.revenue:.2f} yesterday."
     )
+    if backlog_units:
+        status_summary = f"{status_summary} Backlog is at {backlog_units} unit(s)."
+    elif queue_depth:
+        status_summary = f"{status_summary} Production queue depth is {queue_depth}."
     if top_trend:
         status_summary = f"{status_summary} Top market watch: {top_trend}."
     return ObjectiveProgress(
@@ -803,6 +868,59 @@ def _build_objective_progress(
         supporting_diagnostics=tuple(diagnostics),
         status_summary=status_summary,
     )
+
+
+def _build_production_focus(
+    *,
+    listings: tuple[Any, ...],
+    capacity_status: Mapping[str, Any],
+) -> tuple[str, ...]:
+    listing_queue = {
+        int(_mapping(item, "capacity_listing").get("listing_id", 0)): _mapping(item, "capacity_listing")
+        for item in _items_from_page({"results": capacity_status.get("listings", ())}, "capacity_status")
+    }
+    low_stock_titles: list[str] = []
+    backlog_titles: list[str] = []
+    for item in listings:
+        listing = _mapping(item, "listing")
+        if listing.get("state") != "active":
+            continue
+        listing_id = int(listing.get("listing_id", 0))
+        fulfillment_mode = str(listing.get("fulfillment_mode", "stocked"))
+        quantity_on_hand = int(listing.get("quantity_on_hand", listing.get("quantity", 0)))
+        backlog_units = int(listing.get("backlog_units", 0))
+        queue_state = listing_queue.get(listing_id, {})
+        queued_stock_units = int(queue_state.get("queued_stock_units", 0))
+        if fulfillment_mode == "stocked" and quantity_on_hand <= 2 and queued_stock_units == 0:
+            low_stock_titles.append(str(listing.get("title", "")))
+        if fulfillment_mode == "made_to_order" and backlog_units > 0:
+            backlog_titles.append(str(listing.get("title", "")))
+
+    backlog_units = int(capacity_status.get("backlog_units", 0))
+    queue_depth = int(capacity_status.get("queue_depth", 0))
+    queued_stock_units = int(capacity_status.get("queued_stock_units", 0))
+    queued_customer_units = int(capacity_status.get("queued_customer_order_units", 0))
+
+    focus: list[str] = []
+    if low_stock_titles:
+        focus.append("Low-stock active listings: " + ", ".join(low_stock_titles[:3]) + ".")
+    if backlog_units:
+        focus.append(
+            f"Backlog is {backlog_units} unit(s); made-to-order demand is consuming future capacity."
+        )
+    if backlog_titles:
+        focus.append(
+            "Made-to-order listings carrying backlog: "
+            + ", ".join(backlog_titles[:3])
+            + "."
+        )
+    if queue_depth:
+        focus.append(
+            f"{queue_depth} production job(s) are queued ({queued_customer_units} customer-order unit(s), {queued_stock_units} stock unit(s))."
+        )
+    if not focus:
+        focus.append("No backlog or queued production is blocking today's capacity.")
+    return tuple(focus)
 
 
 def _format_balance_summary(summary: BalanceSummary) -> str:

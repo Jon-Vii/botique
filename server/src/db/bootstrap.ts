@@ -188,7 +188,6 @@ export async function seedMarketplaceStateIfEmpty(
           review_id,
           shop_id,
           listing_id,
-          receipt_id,
           rating,
           review,
           buyer_name,
@@ -198,7 +197,6 @@ export async function seedMarketplaceStateIfEmpty(
           ${review.review_id},
           ${review.shop_id},
           ${review.listing_id},
-          ${review.receipt_id ?? null},
           ${review.rating},
           ${review.review},
           ${review.buyer_name},
@@ -350,17 +348,11 @@ export async function bootstrapDatabase(
       review_id integer primary key,
       shop_id integer not null references shops(shop_id) on delete cascade,
       listing_id integer not null references listings(listing_id) on delete cascade,
-      receipt_id integer references orders(receipt_id) on delete set null,
       rating integer not null,
       review text not null,
       buyer_name text not null,
       created_at timestamptz not null
     )
-  `;
-
-  await client`
-    alter table reviews
-    add column if not exists receipt_id integer references orders(receipt_id) on delete set null
   `;
 
   await client`
@@ -397,8 +389,8 @@ export async function bootstrapDatabase(
       advanced_at timestamptz,
       market_snapshot jsonb not null,
       trend_state jsonb not null,
-      pending_events jsonb not null default '[]'::jsonb,
-      last_day_resolution jsonb,
+      pending_reviews jsonb not null,
+      last_resolution jsonb,
       updated_at timestamptz not null
     )
   `;
@@ -406,22 +398,6 @@ export async function bootstrapDatabase(
   await client`alter table simulation_state add column if not exists last_resolution jsonb`;
   await client`update simulation_state set pending_reviews = coalesce(pending_reviews, '[]'::jsonb)`;
   await client`alter table simulation_state alter column pending_reviews set not null`;
-
-  await client`
-    alter table simulation_state
-    add column if not exists pending_events jsonb not null default '[]'::jsonb
-  `;
-
-  await client`
-    alter table simulation_state
-    add column if not exists last_day_resolution jsonb
-  `;
-
-  await client`
-    update simulation_state
-    set pending_events = '[]'::jsonb
-    where pending_events is null
-  `;
 
   await db.execute(sql`create index if not exists listings_shop_id_idx on listings (shop_id)`);
   await db.execute(sql`create index if not exists listings_state_idx on listings (state)`);

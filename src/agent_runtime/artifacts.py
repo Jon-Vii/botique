@@ -137,6 +137,7 @@ def persist_run_artifacts(
 
 def _normalize_result(result: ArtifactResult) -> _NormalizedRunArtifact:
     if isinstance(result, MultiDayRunResult):
+        days_list = list(result.days)
         days = tuple(
             _NormalizedDayArtifact(
                 day=live_day.day,
@@ -145,14 +146,21 @@ def _normalize_result(result: ArtifactResult) -> _NormalizedRunArtifact:
                 briefing=live_day.day_result.briefing,
                 day_result=live_day.day_result,
                 raw_result=live_day,
-                events=live_day.events or live_day.day_result.events,
+                events=getattr(live_day, "events", ()) or live_day.day_result.events,
                 state_before=live_day.state_before,
                 state_after=live_day.state_after,
-                state_next_day=live_day.state_next_day,
+                state_next_day=(
+                    getattr(live_day, "state_next_day", None)
+                    or (
+                        days_list[index + 1].state_before
+                        if index + 1 < len(days_list)
+                        else None
+                    )
+                ),
                 market_state_before=live_day.market_state_before,
                 advancement=live_day.advancement,
             )
-            for live_day in result.days
+            for index, live_day in enumerate(days_list)
         )
         return _NormalizedRunArtifact(
             run_id=result.run_id,
@@ -172,10 +180,10 @@ def _normalize_result(result: ArtifactResult) -> _NormalizedRunArtifact:
             briefing=result.day_result.briefing,
             day_result=result.day_result,
             raw_result=result,
-            events=result.events or result.day_result.events,
+            events=getattr(result, "events", ()) or result.day_result.events,
             state_before=result.state_before,
             state_after=result.state_after,
-            state_next_day=result.state_next_day,
+            state_next_day=getattr(result, "state_next_day", None),
             market_state_before=result.market_state_before,
             advancement=result.advancement,
         )
@@ -184,8 +192,8 @@ def _normalize_result(result: ArtifactResult) -> _NormalizedRunArtifact:
             shop_id=result.shop_id,
             days=(day,),
             events=day.events,
-            notes=result.notes,
-            reminders=result.reminders,
+            notes=getattr(result, "notes", ()),
+            reminders=getattr(result, "reminders", ()),
             is_live=True,
         )
 
@@ -510,6 +518,7 @@ def _render_briefing(briefing: MorningBriefing) -> str:
         "",
         f"- Run ID: `{briefing.run_id}`",
         f"- Shop: `{briefing.shop_name}` (`{briefing.shop_id}`)",
+        f"- Simulation date: `{briefing.simulation_date or 'unknown'}`",
         f"- Generated at: `{briefing.generated_at.isoformat()}`",
         "",
         "## Balance",
@@ -538,6 +547,13 @@ def _render_briefing(briefing: MorningBriefing) -> str:
             lines.append(f"- `{movement.urgency}` {movement.headline}: {movement.summary}")
     else:
         lines.append("- No market movements captured.")
+
+    lines.extend(["", "## Production Focus", ""])
+    if briefing.production_focus:
+        for item in briefing.production_focus:
+            lines.append(f"- {item}")
+    else:
+        lines.append("- No production-specific focus captured.")
 
     lines.extend(["", "## Listing Changes", ""])
     if briefing.listing_changes:
@@ -574,11 +590,21 @@ def _render_briefing(briefing: MorningBriefing) -> str:
     else:
         lines.append("- No recent notes attached.")
 
+    lines.extend(["", "## Note Availability", ""])
+    if briefing.saved_note_count:
+        lines.append(
+            f"- {briefing.saved_note_count} saved note(s) available via `read_notes`."
+        )
+    else:
+        lines.append("- No saved notes currently available.")
+
     lines.extend(["", "## Priorities Prompt", "", briefing.priorities_prompt])
     return "\n".join(lines).rstrip() + "\n"
 
 
 def _render_turn(turn: TurnRecord) -> list[str]:
+    assistant_text = getattr(turn, "assistant_text", None)
+    provider_tool_calls = getattr(turn, "provider_tool_calls", None)
     lines = [
         f"### Turn {turn.turn_index}",
         "",
@@ -586,23 +612,23 @@ def _render_turn(turn: TurnRecord) -> list[str]:
         f"- Started: `{turn.started_at.isoformat()}`",
         f"- Completed: `{turn.completed_at.isoformat()}`",
     ]
-    if turn.assistant_text:
+    if assistant_text:
         lines.extend(
             [
                 "",
                 "Assistant output:",
                 "```text",
-                turn.assistant_text,
+                assistant_text,
                 "```",
             ]
         )
-    if turn.provider_tool_calls:
+    if provider_tool_calls:
         lines.extend(
             [
                 "",
                 "Provider tool calls:",
                 "```json",
-                _dump_json(jsonify(turn.provider_tool_calls)),
+                _dump_json(jsonify(provider_tool_calls)),
                 "```",
             ]
         )
@@ -642,8 +668,8 @@ def _turn_payload(turn: TurnRecord) -> dict[str, JSONValue]:
         "decision_summary": turn.decision_summary,
         "started_at": turn.started_at.isoformat(),
         "completed_at": turn.completed_at.isoformat(),
-        "assistant_text": turn.assistant_text,
-        "provider_tool_calls": jsonify(turn.provider_tool_calls),
+        "assistant_text": getattr(turn, "assistant_text", None),
+        "provider_tool_calls": jsonify(getattr(turn, "provider_tool_calls", None)),
         "tool_call": (
             None
             if turn.tool_call is None

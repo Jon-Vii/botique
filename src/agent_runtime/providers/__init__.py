@@ -12,14 +12,14 @@ from .base import (
 from .mistral import MistralProviderConfig, MistralToolCallingProvider
 from .policy import (
     DEFAULT_SYSTEM_PROMPT,
-    NO_ACTION_TOOL_NAME,
+    END_DAY_TOOL_NAME,
     ProviderPolicyConfig,
     ToolCallingAgentPolicy,
 )
 
 __all__ = [
     "DEFAULT_SYSTEM_PROMPT",
-    "NO_ACTION_TOOL_NAME",
+    "END_DAY_TOOL_NAME",
     "MistralProviderConfig",
     "MistralToolCallingProvider",
     "ProviderError",

@@ -47,61 +47,36 @@ export const marketSnapshotSchema = z.object({
   taxonomy: z.array(taxonomyMarketSnapshotSchema)
 });
 
-export const pendingEventSchema = z.object({
-  event_id: z.string(),
-  type: z.enum(["post_payment", "create_review", "buyer_message"]),
+export const pendingReviewSchema = z.object({
+  queue_id: z.string(),
+  review_id: z.number().int().positive(),
   shop_id: z.number().int().positive(),
-  listing_id: z.number().int().positive().nullable(),
-  receipt_id: z.number().int().positive().nullable(),
-  scheduled_for_day: z.number().int().positive(),
-  scheduled_for_date: z.string(),
-  created_at: z.string(),
-  payload: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()]))
-});
-
-export const listingDemandFactorsSchema = z.object({
-  quality: z.number().nonnegative(),
-  reputation: z.number().nonnegative(),
-  price: z.number().nonnegative(),
-  reference_price: z.number().nonnegative().optional(),
-  conversion_price: z.number().optional(),
-  freshness: z.number().nonnegative(),
-  trend: z.number().nonnegative(),
-  variation: z.number().nonnegative()
-});
-
-export const listingDayResolutionSchema = z.object({
+  receipt_id: z.number().int().positive(),
   listing_id: z.number().int().positive(),
-  shop_id: z.number().int().positive(),
-  views_gained: z.number().int().nonnegative(),
-  favorites_gained: z.number().int().nonnegative(),
-  orders_created: z.number().int().nonnegative(),
-  revenue: z.number().nonnegative(),
-  demand_score: z.number().nonnegative(),
-  conversion_rate: z.number().nonnegative(),
-  demand_factors: listingDemandFactorsSchema
+  buyer_name: z.string(),
+  release_at: z.string(),
+  rating: z.number().int().min(1).max(5),
+  review: z.string()
 });
 
-export const pendingEventCountsSchema = z.object({
-  post_payment: z.number().int().nonnegative(),
-  create_review: z.number().int().nonnegative(),
-  buyer_message: z.number().int().nonnegative()
+export const shopDayResolutionSchema = z.object({
+  shop_id: z.number().int().positive(),
+  orders_created: z.number().int().nonnegative(),
+  stocked_units_sold: z.number().int().nonnegative(),
+  made_to_order_units_sold: z.number().int().nonnegative(),
+  production_units_started: z.number().int().nonnegative(),
+  units_released: z.number().int().nonnegative(),
+  payments_posted: z.number().int().nonnegative(),
+  reviews_released: z.number().int().nonnegative(),
+  material_costs_incurred: z.number().nonnegative(),
+  backlog_units_end: z.number().int().nonnegative(),
+  queue_depth_end: z.number().int().nonnegative()
 });
 
 export const dayResolutionSummarySchema = z.object({
-  resolved_for_day: simulationDaySchema,
   resolved_at: z.string(),
-  totals: z.object({
-    active_listings: z.number().int().nonnegative(),
-    views_gained: z.number().int().nonnegative(),
-    favorites_gained: z.number().int().nonnegative(),
-    orders_created: z.number().int().nonnegative(),
-    revenue: z.number().nonnegative()
-  }),
-  listing_metrics: z.array(listingDayResolutionSchema),
-  scheduled_events: pendingEventCountsSchema,
-  processed_events: pendingEventCountsSchema,
-  pending_event_count: z.number().int().nonnegative()
+  pending_review_count: z.number().int().nonnegative(),
+  shops: z.array(shopDayResolutionSchema)
 });
 
 export const storedMarketplaceStateSchema = z.object({
@@ -117,8 +92,8 @@ export const simulationStateSchema = z.object({
   current_day: simulationDaySchema,
   market_snapshot: marketSnapshotSchema,
   trend_state: trendStateSchema,
-  pending_events: z.array(pendingEventSchema),
-  last_day_resolution: dayResolutionSummarySchema.nullable()
+  pending_reviews: z.array(pendingReviewSchema),
+  last_resolution: dayResolutionSummarySchema.nullable()
 });
 
 export const worldStateSchema = z.object({
@@ -128,10 +103,12 @@ export const worldStateSchema = z.object({
 
 export const advanceDayStepSchema = z.object({
   name: z.enum([
-    "resolve_listing_activity",
-    "settle_pending_events",
     "advance_clock",
     "refresh_trends",
+    "release_completed_production",
+    "settle_delayed_events",
+    "resolve_market_sales",
+    "allocate_production",
     "refresh_market_snapshot"
   ]),
   description: z.string()

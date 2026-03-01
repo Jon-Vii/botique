@@ -12,18 +12,12 @@ class ToolSurface(StrEnum):
     EXTENSION = "extension"
 
 
-class ToolBehavior(StrEnum):
-    INSPECT = "inspect"
-    ACT = "act"
-    MEMORY = "memory"
-
-
 @dataclass(frozen=True, slots=True)
 class ToolManifestEntry:
     name: str
     description: str
     surface: ToolSurface
-    behavior: ToolBehavior = ToolBehavior.INSPECT
+    work_cost: int = 1
     operation_id: str | None = None
     path_params: tuple[str, ...] = ()
     query_params: tuple[str, ...] = ()

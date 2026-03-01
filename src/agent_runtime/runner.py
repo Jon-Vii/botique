@@ -41,7 +41,7 @@ END_OF_DAY_NOTE_SYSTEM_PROMPT = (
 
 @dataclass(frozen=True, slots=True)
 class OwnerAgentRunnerConfig:
-    max_turns: int = 3
+    turns_per_day: int = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,11 +53,9 @@ class LiveDayRunResult:
     state_before: ShopStateSnapshot
     day_result: DayRunResult
     state_after: ShopStateSnapshot
-    advancement: AdvanceDayResult | None = None
     state_next_day: ShopStateSnapshot | None = None
+    advancement: AdvanceDayResult | None = None
     events: tuple[RuntimeEvent, ...] = ()
-    notes: tuple[NoteRecord, ...] = ()
-    reminders: tuple[ReminderRecord, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,14 +143,9 @@ class OwnerAgentRunner:
         ).shop_state
 
         advancement: AdvanceDayResult | None = None
-        state_next_day: ShopStateSnapshot | None = None
+        next_day_state: ShopStateSnapshot | None = None
         if advance_day:
             advancement = self._require_control_client().advance_day()
-            state_next_day = self.build_live_briefing(
-                shop_id=shop_id,
-                run_id=active_run_id,
-                previous_shop_state=post_day_state,
-            ).shop_state
             self.event_log.append(
                 kind=EventKind.SIMULATION_ADVANCED,
                 run_id=active_run_id,
@@ -178,14 +171,11 @@ class OwnerAgentRunner:
                     ],
                 },
             )
-
-        live_day_events = tuple(
-            self.event_log.list_events(
-                run_id=active_run_id,
+            next_day_state = self.build_live_briefing(
                 shop_id=shop_id,
-                day=day_result.day,
-            )
-        )
+                run_id=active_run_id,
+                previous_shop_state=post_day_state,
+            ).shop_state
 
         return LiveDayRunResult(
             run_id=active_run_id,
@@ -195,11 +185,15 @@ class OwnerAgentRunner:
             state_before=live_briefing.shop_state,
             day_result=day_result,
             state_after=post_day_state,
+            state_next_day=next_day_state,
             advancement=advancement,
-            state_next_day=state_next_day,
-            events=live_day_events,
-            notes=tuple(self.memory.list_notes(shop_id=shop_id)),
-            reminders=tuple(self.memory.list_reminders(shop_id=shop_id)),
+            events=tuple(
+                self.event_log.list_events(
+                    run_id=active_run_id,
+                    shop_id=shop_id,
+                    day=day_result.day,
+                )
+            ),
         )
 
     def run_live_days(
@@ -225,7 +219,8 @@ class OwnerAgentRunner:
                 shop_id=shop_id,
                 run_id=active_run_id,
                 previous_shop_state=previous_shop_state,
-                advance_day=True,
+                advance_day=index < days - 1,
+                reset_world=False,
             )
             live_days.append(live_day)
             previous_shop_state = live_day.state_after
@@ -383,7 +378,9 @@ class OwnerAgentRunner:
 
 def build_default_owner_agent_runner(
     *,
-    max_turns: int = 3,
+    turns_per_day: int = 5,
+    work_budget: int | None = None,
+    max_turns: int | None = None,
     base_url: str | None = None,
     control_base_url: str | None = None,
     api_key: str | None = None,

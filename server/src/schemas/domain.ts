@@ -118,7 +118,6 @@ export const reviewSchema = z.object({
   review_id: z.number().int().positive(),
   shop_id: z.number().int().positive(),
   listing_id: z.number().int().positive(),
-  receipt_id: z.number().int().positive().nullable().optional(),
   rating: z.number().int().min(1).max(5),
   review: z.string(),
   buyer_name: z.string(),

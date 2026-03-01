@@ -54,67 +54,44 @@ export type MarketSnapshot = {
   taxonomy: TaxonomyMarketSnapshot[];
 };
 
-export type PendingEventType = "post_payment" | "create_review" | "buyer_message";
-
-export type PendingEvent = {
-  event_id: string;
-  type: PendingEventType;
+export type PendingReview = {
+  queue_id: string;
+  review_id: number;
   shop_id: number;
-  listing_id: number | null;
-  receipt_id: number | null;
-  scheduled_for_day: number;
-  scheduled_for_date: string;
-  created_at: string;
-  payload: Record<string, string | number | boolean | null>;
-};
-
-export type ListingDemandFactors = {
-  quality: number;
-  reputation: number;
-  price: number;
-  reference_price?: number;
-  conversion_price?: number;
-  freshness: number;
-  trend: number;
-  variation: number;
-};
-
-export type ListingDayResolution = {
+  receipt_id: number;
   listing_id: number;
-  shop_id: number;
-  views_gained: number;
-  favorites_gained: number;
-  orders_created: number;
-  revenue: number;
-  demand_score: number;
-  conversion_rate: number;
-  demand_factors: ListingDemandFactors;
+  buyer_name: string;
+  release_at: string;
+  rating: number;
+  review: string;
 };
 
-export type PendingEventCounts = Record<PendingEventType, number>;
+export type ShopDayResolution = {
+  shop_id: number;
+  orders_created: number;
+  stocked_units_sold: number;
+  made_to_order_units_sold: number;
+  production_units_started: number;
+  units_released: number;
+  payments_posted: number;
+  reviews_released: number;
+  material_costs_incurred: number;
+  backlog_units_end: number;
+  queue_depth_end: number;
+};
 
 export type DayResolutionSummary = {
-  resolved_for_day: SimulationDay;
   resolved_at: string;
-  totals: {
-    active_listings: number;
-    views_gained: number;
-    favorites_gained: number;
-    orders_created: number;
-    revenue: number;
-  };
-  listing_metrics: ListingDayResolution[];
-  scheduled_events: PendingEventCounts;
-  processed_events: PendingEventCounts;
-  pending_event_count: number;
+  pending_review_count: number;
+  shops: ShopDayResolution[];
 };
 
 export type SimulationState = {
   current_day: SimulationDay;
   market_snapshot: MarketSnapshot;
   trend_state: TrendState;
-  pending_events: PendingEvent[];
-  last_day_resolution: DayResolutionSummary | null;
+  pending_reviews: PendingReview[];
+  last_resolution: DayResolutionSummary | null;
 };
 
 export type StoredWorldState = {
@@ -129,10 +106,12 @@ export type MarketplaceSearchContext = {
 };
 
 export type AdvanceDayStepName =
-  | "resolve_listing_activity"
-  | "settle_pending_events"
   | "advance_clock"
   | "refresh_trends"
+  | "release_completed_production"
+  | "settle_delayed_events"
+  | "resolve_market_sales"
+  | "allocate_production"
   | "refresh_market_snapshot";
 
 export type AdvanceDayStep = {

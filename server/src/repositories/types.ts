@@ -30,7 +30,6 @@ export interface MarketplaceRepository {
   resetWorldState?(): Promise<StoredWorldState>;
   getSimulationState(): Promise<SimulationState>;
   setSimulationState(state: SimulationState): Promise<SimulationState>;
-  setWorldState(state: StoredWorldState): Promise<StoredWorldState>;
   getShop(shopId: number): Promise<Shop | null>;
   listShops(): Promise<Shop[]>;
   updateShop(shopId: number, patch: UpdateShopData, metadata?: MutationMetadata): Promise<Shop | null>;

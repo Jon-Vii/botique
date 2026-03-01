@@ -9,8 +9,7 @@ import type {
   DayResolutionSummary,
   MarketSnapshot,
   MarketTrend,
-  PendingEvent,
-  PendingEventCounts,
+  PendingReview,
   SimulationDay,
   SimulationState,
   StoredMarketplaceState,
@@ -41,19 +40,51 @@ export function addUtcDays(value: string, days: number): string {
   return startOfUtcDay(date.toISOString());
 }
 
-export function withUtcTime(value: string, hour: number, minute = 0): string {
-  const date = new Date(value);
-  return new Date(
-    Date.UTC(
-      date.getUTCFullYear(),
-      date.getUTCMonth(),
-      date.getUTCDate(),
-      hour,
-      minute,
-      0,
-      0
-    )
-  ).toISOString();
+function normalizePaymentAvailability<T extends { available_at?: string; posted_at: string }>(value: T): T {
+  return {
+    ...value,
+    available_at: value.available_at ?? value.posted_at
+  };
+}
+
+function normalizePendingReview(review: PendingReview): PendingReview {
+  return {
+    ...review,
+    release_at: startOfUtcDay(review.release_at)
+  };
+}
+
+function normalizeLastResolution(summary?: DayResolutionSummary | null): DayResolutionSummary | null {
+  if (!summary) {
+    return null;
+  }
+
+  return clone(summary);
+}
+
+export function normalizeMarketplaceState(state: StoredMarketplaceState): StoredMarketplaceState {
+  const listings = state.listings.map(normalizeListingProduction);
+  const shopsById = new Map(
+    state.shops.map((shop) => {
+      const normalizedShop = normalizeShopProduction(shop);
+      return [
+        normalizedShop.shop_id,
+        recalculateShopBacklog(
+          normalizedShop,
+          listings.filter((listing) => listing.shop_id === normalizedShop.shop_id)
+        )
+      ];
+    })
+  );
+
+  return {
+    shops: state.shops.map((shop) => clone(shopsById.get(shop.shop_id)!)),
+    listings,
+    orders: state.orders.map((order) => clone(order)),
+    reviews: state.reviews.map((review) => clone(review)),
+    payments: state.payments.map((payment) => clone(normalizePaymentAvailability(payment))),
+    taxonomyNodes: state.taxonomyNodes.map((node) => clone(node))
+  };
 }
 
 function collectTimestamps(state: StoredMarketplaceState): string[] {
@@ -112,89 +143,6 @@ function pickTrendTags(listings: Listing[]): string[] {
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
     .slice(0, 3)
     .map(([tag]) => tag);
-}
-
-function hasReviewForOrder(
-  state: StoredMarketplaceState,
-  receiptId: number,
-  buyerName: string,
-  listingId: number
-): boolean {
-  return state.reviews.some(
-    (review) =>
-      review.receipt_id === receiptId ||
-      (review.receipt_id == null && review.buyer_name === buyerName && review.listing_id === listingId)
-  );
-}
-
-function collectPendingEventsFromMarketplace(
-  marketplaceState: StoredMarketplaceState,
-  currentDay: SimulationDay
-): PendingEvent[] {
-  const ordersByReceipt = new Map(
-    marketplaceState.orders.map((order) => [order.receipt_id, order])
-  );
-  const pendingEvents: PendingEvent[] = [];
-
-  for (const payment of marketplaceState.payments) {
-    if (payment.status !== "pending") {
-      continue;
-    }
-
-    const order = ordersByReceipt.get(payment.receipt_id);
-    pendingEvents.push({
-      event_id: `payment-${payment.payment_id}`,
-      type: "post_payment",
-      shop_id: payment.shop_id,
-      listing_id: order?.line_items[0]?.listing_id ?? null,
-      receipt_id: payment.receipt_id,
-      scheduled_for_day: currentDay.day + 1,
-      scheduled_for_date: withUtcTime(addUtcDays(currentDay.date, 1), 8, 0),
-      created_at: payment.posted_at,
-      payload: {
-        payment_id: payment.payment_id,
-        amount: payment.amount,
-        currency_code: payment.currency_code
-      }
-    });
-  }
-
-  for (const order of marketplaceState.orders) {
-    if (!order.was_paid || order.line_items.length === 0) {
-      continue;
-    }
-
-    const primaryListingId = order.line_items[0].listing_id;
-    if (hasReviewForOrder(marketplaceState, order.receipt_id, order.buyer_name, primaryListingId)) {
-      continue;
-    }
-
-    pendingEvents.push({
-      event_id: `review-${order.receipt_id}`,
-      type: "create_review",
-      shop_id: order.shop_id,
-      listing_id: primaryListingId,
-      receipt_id: order.receipt_id,
-      scheduled_for_day: currentDay.day + 2,
-      scheduled_for_date: withUtcTime(addUtcDays(currentDay.date, 2), 10, 30),
-      created_at: order.created_at,
-      payload: {
-        buyer_name: order.buyer_name,
-        rating: 4,
-        review: "Smooth digital delivery and a strong overall result."
-      }
-    });
-  }
-
-  return pendingEvents;
-}
-
-export function createPendingEventCounts(): PendingEventCounts {
-  return {
-    post_payment: 0,
-    create_review: 0,
-    buyer_message: 0
-  };
 }
 
 function isWorldState(input: StoredMarketplaceState | StoredWorldState): input is StoredWorldState {
@@ -297,8 +245,8 @@ export function createSimulationState(
   marketplaceState: StoredMarketplaceState,
   options: {
     currentDay?: SimulationDay;
-    pendingEvents?: PendingEvent[];
-    lastDayResolution?: DayResolutionSummary | null;
+    pendingReviews?: PendingReview[];
+    lastResolution?: DayResolutionSummary | null;
   } = {}
 ): SimulationState {
   const normalizedMarketplaceState = normalizeMarketplaceState(marketplaceState);
@@ -310,10 +258,8 @@ export function createSimulationState(
     current_day: currentDay,
     market_snapshot: marketSnapshot,
     trend_state: trendState,
-    pending_events: clone(
-      options.pendingEvents ?? collectPendingEventsFromMarketplace(marketplaceState, currentDay)
-    ),
-    last_day_resolution: options.lastDayResolution ?? null
+    pending_reviews: (options.pendingReviews ?? []).map(normalizePendingReview),
+    last_resolution: normalizeLastResolution(options.lastResolution)
   };
 }
 
@@ -342,13 +288,8 @@ export function normalizeWorldState(
       simulation: input.simulation
         ? {
             ...clone(input.simulation),
-            pending_events:
-              input.simulation.pending_events !== undefined
-                ? clone(input.simulation.pending_events)
-                : collectPendingEventsFromMarketplace(marketplace, input.simulation.current_day),
-            last_day_resolution: input.simulation.last_day_resolution
-              ? clone(input.simulation.last_day_resolution)
-              : null
+            pending_reviews: (input.simulation.pending_reviews ?? []).map(normalizePendingReview),
+            last_resolution: normalizeLastResolution(input.simulation.last_resolution)
           }
         : createSimulationState(marketplace)
     };

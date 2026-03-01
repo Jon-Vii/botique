@@ -4,7 +4,7 @@ from typing import Any, Mapping
 
 from agent_runtime.memory import AgentMemoryStore
 
-from .registry import AgentToolRegistry, ToolBehavior, ToolManifestEntry, ToolSurface
+from .registry import AgentToolRegistry, ToolManifestEntry, ToolSurface
 
 
 SHOP_ID_SCHEMA = {
@@ -74,7 +74,7 @@ def register_memory_tools(
             name="write_note",
             description="Persist a short inspectable strategy note for the current shop.",
             surface=ToolSurface.EXTENSION,
-            behavior=ToolBehavior.MEMORY,
+            work_cost=1,
             required_body_fields=("shop_id", "title", "body"),
             body_encoding="json",
             notes=(
@@ -121,7 +121,7 @@ def register_memory_tools(
             name="read_notes",
             description="Read a bounded set of recent notes for the current shop. Use this only when you want targeted recall.",
             surface=ToolSurface.EXTENSION,
-            behavior=ToolBehavior.MEMORY,
+            work_cost=1,
             required_body_fields=("shop_id",),
             body_encoding="json",
             parameters_schema=_memory_parameters_schema(
@@ -157,7 +157,7 @@ def register_memory_tools(
             name="set_reminder",
             description="Create a simple reminder tied to a future simulation day.",
             surface=ToolSurface.EXTENSION,
-            behavior=ToolBehavior.MEMORY,
+            work_cost=1,
             required_body_fields=("shop_id", "content", "due_day"),
             body_encoding="json",
             parameters_schema=_memory_parameters_schema(
@@ -200,7 +200,7 @@ def register_memory_tools(
             name="complete_reminder",
             description="Mark a reminder as completed so it stops appearing in future briefings.",
             surface=ToolSurface.EXTENSION,
-            behavior=ToolBehavior.MEMORY,
+            work_cost=1,
             required_body_fields=("shop_id", "reminder_id"),
             body_encoding="json",
             parameters_schema=_memory_parameters_schema(
