@@ -519,6 +519,7 @@ function normalizeRunSummaryPayload(summary: any, manifest: any | null) {
   return {
     run_id: summary.run_id,
     shop_id: summary.shop_id,
+    shop_name: summary.shop_name ?? null,
     mode: getRunMode(summary),
     day_count: dayCount,
     scenario,

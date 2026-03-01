@@ -464,10 +464,22 @@ def _build_run_summary(
     )
     scenario = _scenario_summary(normalized.days[0])
 
+    # Resolve shop name: prefer identity step chosen_name, fall back to briefing
+    shop_name: str | None = None
+    for event in normalized.events:
+        if event.kind.value == "identity_step":
+            chosen = event.payload.get("chosen_name") if isinstance(event.payload, dict) else None
+            if chosen:
+                shop_name = str(chosen)
+                break
+    if not shop_name and normalized.days:
+        shop_name = normalized.days[-1].briefing.shop_name or None
+
     return {
         "generated_at": created_at.isoformat(),
         "run_id": normalized.run_id,
         "shop_id": jsonify(normalized.shop_id),
+        "shop_name": shop_name,
         "mode": "live" if normalized.is_live else "briefing_only",
         "scenario": scenario,
         "day_count": len(normalized.days),

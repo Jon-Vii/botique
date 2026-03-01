@@ -212,6 +212,7 @@ export const runIdentitySchema = z.object({
 export const runSummarySchema = z.object({
   run_id: z.string().min(1),
   shop_id: z.number().int().positive(),
+  shop_name: z.string().nullable().optional(),
   mode: z.enum(["live", "mock"]),
   day_count: z.number().int().positive(),
   scenario: simulationScenarioSchema.optional(),

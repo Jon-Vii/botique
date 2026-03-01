@@ -341,8 +341,11 @@ export function RunDetail() {
 
         <div className="min-w-0">
           <h1 className="font-mono text-xl font-bold text-ink">
-            {summary.run_id}
+            {summary.shop_name || summary.run_id}
           </h1>
+          {summary.shop_name && (
+            <p className="text-xs font-mono text-muted mt-0.5">{summary.run_id}</p>
+          )}
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
             <Badge variant="orange" subtle>
               shop {summary.shop_id}

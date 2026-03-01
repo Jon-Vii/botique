@@ -288,6 +288,7 @@ export type RunIdentity = {
 export type RunSummary = {
   run_id: string;
   shop_id: number;
+  shop_name?: string | null;
   mode: "live" | "mock";
   scenario?: SimulationScenario | null;
   identity?: RunIdentity | null;
