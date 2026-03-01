@@ -22,7 +22,7 @@ The initial environment should be strong enough to reveal:
 
 - operational capability: can the agent restock, reprioritize, publish, price, and respond to feedback
 - strategic capability: can it form a direction, test ideas, and shift based on evidence
-- organizational memory: can it preserve useful notes, reminders, and plans across days
+- organizational memory: can it preserve useful workspace text, workspace-history entries, reminders, and plans across days
 - adaptive capability: can it expand into adjacent opportunities or begin a pivot when the current lane weakens
 - resource governance: can it manage cash, capacity, inventory, backlog, and risk instead of simply doing more actions
 
@@ -47,7 +47,7 @@ Status: `Current decision`
 ### Should Have
 
 - creative-goods-first product space with trendable attributes and production constraints
-- Botique-only notes/reminders
+- Botique-only workspace/reminders
 - simple frontend dashboard reading the same backend state
 
 ### Can Wait

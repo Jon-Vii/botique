@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Iterable, Mapping
 
@@ -13,6 +13,8 @@ from .memory import (
     ReminderRecord,
     ReminderStatus,
     ShopId,
+    WorkspaceEntryRecord,
+    WorkspaceRecord,
 )
 from .serialization import jsonify
 
@@ -24,9 +26,13 @@ def _utcnow() -> datetime:
 DEFAULT_PRIORITIES_PROMPT = (
     "Set the highest-leverage priorities for this workday, use today's limited work slots "
     "carefully, act on inventory, backlog, production, and market signals when they "
-    "matter, use notes or reminders when they genuinely help, and stop once the "
+    "matter, use the workspace or reminders when they genuinely help, and stop once the "
     "important work is done."
 )
+DEFAULT_WORKSPACE_TEXT_MAX_CHARS = 4000
+DEFAULT_WORKSPACE_ENTRY_MAX_CHARS = 1200
+DEFAULT_RECENT_WORKSPACE_ENTRY_LIMIT = 3
+_BRIEFING_TRUNCATION_SUFFIX = "\n\n[truncated for briefing]"
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,9 +111,8 @@ class MorningBriefing:
     due_reminders: tuple[ReminderRecord, ...] = ()
     market_movements: tuple[MarketMovement, ...] = ()
     production_focus: tuple[str, ...] = ()
-    saved_note_count: int = 0
-    scratchpad_has_content: bool = False
-    scratchpad_updated_day: int | None = None
+    workspace: WorkspaceRecord | None = None
+    recent_workspace_entries: tuple[WorkspaceEntryRecord, ...] = ()
     objective_progress: ObjectiveProgress = field(
         default_factory=lambda: ObjectiveProgress(
             primary_objective="Grow the shop sustainably.",
@@ -116,7 +121,6 @@ class MorningBriefing:
             status_summary="No objective snapshot provided.",
         )
     )
-    notes: tuple[str, ...] = ()
     priorities_prompt: str = DEFAULT_PRIORITIES_PROMPT
 
     def to_payload(self) -> dict[str, object]:
@@ -146,22 +150,6 @@ class MorningBriefing:
         if self.production_focus:
             lines.append("- Production watch:")
             lines.extend(f"  - {item}" for item in self.production_focus)
-
-        if self.saved_note_count:
-            lines.append(
-                f"- Saved notes: {self.saved_note_count} available via read_notes if useful today."
-            )
-
-        if self.scratchpad_has_content:
-            updated_suffix = (
-                ""
-                if self.scratchpad_updated_day is None
-                else f" (last updated on day {self.scratchpad_updated_day})"
-            )
-            lines.append(
-                "- Scratchpad: saved content available via read_scratchpad if useful today"
-                f"{updated_suffix}."
-            )
 
         if self.listing_changes:
             lines.append("- Listing movement:")
@@ -196,9 +184,41 @@ class MorningBriefing:
                 for movement in self.market_movements
             )
 
-        if self.notes:
-            lines.append("- Relevant notes:")
-            lines.extend(f"  - {note}" for note in self.notes)
+        if self.workspace is not None and self.workspace.content:
+            workspace_details = [f"revision {self.workspace.revision}"]
+            if self.workspace.updated_day is not None:
+                workspace_details.append(f"updated day {self.workspace.updated_day}")
+            if self.workspace.is_truncated:
+                workspace_details.append("truncated to fit briefing")
+            lines.extend(
+                [
+                    "",
+                    "## Workspace",
+                    f"- Current workspace ({', '.join(workspace_details)}):",
+                    "```text",
+                    self.workspace.content,
+                    "```",
+                ]
+            )
+
+        if self.recent_workspace_entries:
+            lines.extend(["", "## Recent workspace history"])
+            for entry in self.recent_workspace_entries:
+                details: list[str] = [entry.entry_id]
+                if entry.created_day is not None:
+                    details.append(f"day {entry.created_day}")
+                if entry.tags:
+                    details.append(f"tags: {', '.join(entry.tags)}")
+                if entry.is_truncated:
+                    details.append("truncated")
+                lines.extend(
+                    [
+                        f"- {' | '.join(details)}",
+                        "```text",
+                        entry.content,
+                        "```",
+                    ]
+                )
 
         lines.extend(
             [
@@ -268,11 +288,9 @@ class MorningBriefingBuilder:
         new_customer_messages: Iterable[CustomerMessageSummary] = (),
         market_movements: Iterable[MarketMovement] = (),
         production_focus: Iterable[str] = (),
-        saved_note_count: int = 0,
-        scratchpad_has_content: bool = False,
-        scratchpad_updated_day: int | None = None,
+        workspace: WorkspaceRecord | None = None,
+        recent_workspace_entries: Iterable[WorkspaceEntryRecord] = (),
         due_reminders: Iterable[ReminderRecord] | None = None,
-        notes: Iterable[str] = (),
         priorities_prompt: str = DEFAULT_PRIORITIES_PROMPT,
     ) -> MorningBriefing:
         reminders = (
@@ -296,11 +314,11 @@ class MorningBriefingBuilder:
             due_reminders=reminders,
             market_movements=tuple(market_movements),
             production_focus=tuple(production_focus),
-            saved_note_count=max(saved_note_count, 0),
-            scratchpad_has_content=scratchpad_has_content,
-            scratchpad_updated_day=scratchpad_updated_day,
+            workspace=_bounded_workspace(workspace),
+            recent_workspace_entries=_bounded_workspace_entries(
+                recent_workspace_entries
+            ),
             objective_progress=objective_progress,
-            notes=tuple(notes),
             priorities_prompt=priorities_prompt,
         )
 
@@ -413,7 +431,7 @@ class LiveMorningBriefingBuilder:
             capacity_status=capacity_status,
             listings=listings,
         )
-        scratchpad = self._memory.read_scratchpad(shop_id=shop_id)
+        workspace = self._memory.read_workspace(shop_id=shop_id)
         briefing = self._briefing_builder.build(
             run_id=run_id,
             shop_id=shop_id,
@@ -430,10 +448,10 @@ class LiveMorningBriefingBuilder:
                 listings=listings,
                 capacity_status=capacity_status,
             ),
-            saved_note_count=len(self._memory.list_notes(shop_id=shop_id)),
-            scratchpad_has_content=bool(scratchpad and scratchpad.content),
-            scratchpad_updated_day=(
-                None if scratchpad is None else scratchpad.updated_day
+            workspace=workspace,
+            recent_workspace_entries=self._memory.read_workspace_entries(
+                shop_id=shop_id,
+                limit=DEFAULT_RECENT_WORKSPACE_ENTRY_LIMIT,
             ),
         )
         return LiveBriefingBuildResult(
@@ -507,6 +525,50 @@ class LiveMorningBriefingBuilder:
             offset += len(page_results)
 
 
+def _bounded_workspace(workspace: WorkspaceRecord | None) -> WorkspaceRecord | None:
+    if workspace is None or not workspace.content:
+        return workspace
+
+    content, is_truncated = _truncate_for_briefing(
+        workspace.content,
+        max_chars=DEFAULT_WORKSPACE_TEXT_MAX_CHARS,
+    )
+    if not is_truncated:
+        return workspace
+    return replace(workspace, content=content, is_truncated=True)
+
+
+def _bounded_workspace_entries(
+    entries: Iterable[WorkspaceEntryRecord],
+) -> tuple[WorkspaceEntryRecord, ...]:
+    bounded_entries: list[WorkspaceEntryRecord] = []
+    for entry in list(entries)[:DEFAULT_RECENT_WORKSPACE_ENTRY_LIMIT]:
+        content, is_truncated = _truncate_for_briefing(
+            entry.content,
+            max_chars=DEFAULT_WORKSPACE_ENTRY_MAX_CHARS,
+        )
+        bounded_entries.append(
+            entry
+            if not is_truncated
+            else replace(entry, content=content, is_truncated=True)
+        )
+    return tuple(bounded_entries)
+
+
+def _truncate_for_briefing(text: str, *, max_chars: int) -> tuple[str, bool]:
+    if len(text) <= max_chars:
+        return text, False
+
+    if max_chars <= len(_BRIEFING_TRUNCATION_SUFFIX):
+        return text[:max_chars], True
+
+    return (
+        text[: max_chars - len(_BRIEFING_TRUNCATION_SUFFIX)]
+        + _BRIEFING_TRUNCATION_SUFFIX,
+        True,
+    )
+
+
 def morning_briefing_from_payload(payload: Mapping[str, Any]) -> MorningBriefing:
     return MorningBriefing(
         run_id=str(payload["run_id"]),
@@ -541,15 +603,16 @@ def morning_briefing_from_payload(payload: Mapping[str, Any]) -> MorningBriefing
         production_focus=tuple(
             str(item) for item in payload.get("production_focus", [])
         ),
-        saved_note_count=int(payload.get("saved_note_count", 0)),
-        scratchpad_has_content=bool(payload.get("scratchpad_has_content", False)),
-        scratchpad_updated_day=(
+        workspace=(
             None
-            if payload.get("scratchpad_updated_day") is None
-            else int(payload.get("scratchpad_updated_day"))
+            if payload.get("workspace") is None
+            else _parse_workspace(payload.get("workspace"))
+        ),
+        recent_workspace_entries=tuple(
+            _parse_workspace_entry(item)
+            for item in payload.get("recent_workspace_entries", [])
         ),
         objective_progress=_parse_objective_progress(payload.get("objective_progress", {})),
-        notes=tuple(str(item) for item in payload.get("notes", [])),
         priorities_prompt=str(
             payload.get("priorities_prompt", DEFAULT_PRIORITIES_PROMPT)
         ),
@@ -642,9 +705,38 @@ def _parse_objective_progress(payload: Any) -> ObjectiveProgress:
     )
 
 
+def _parse_workspace(payload: Any) -> WorkspaceRecord:
+    value = _mapping(payload, "workspace")
+    return WorkspaceRecord(
+        shop_id=_parse_shop_id(value["shop_id"]),
+        content=str(value.get("content", "")),
+        revision=int(value.get("revision", 0)),
+        updated_day=(
+            None if value.get("updated_day") is None else int(value["updated_day"])
+        ),
+        is_truncated=bool(value.get("is_truncated", False)),
+        updated_at=_parse_datetime(value.get("updated_at")),
+    )
+
+
+def _parse_workspace_entry(payload: Any) -> WorkspaceEntryRecord:
+    value = _mapping(payload, "recent_workspace_entries")
+    return WorkspaceEntryRecord(
+        entry_id=str(value["entry_id"]),
+        shop_id=_parse_shop_id(value["shop_id"]),
+        content=str(value.get("content", "")),
+        tags=tuple(str(item) for item in value.get("tags", [])),
+        created_day=(
+            None if value.get("created_day") is None else int(value["created_day"])
+        ),
+        is_truncated=bool(value.get("is_truncated", False)),
+        created_at=_parse_datetime(value.get("created_at")),
+    )
+
+
 def _parse_reminder(payload: Any) -> ReminderRecord:
     value = _mapping(payload, "due_reminders")
-    note_id = value.get("note_id")
+    workspace_entry_id = value.get("workspace_entry_id")
     status = value.get("status", ReminderStatus.PENDING.value)
     return ReminderRecord(
         reminder_id=str(value["reminder_id"]),
@@ -652,7 +744,9 @@ def _parse_reminder(payload: Any) -> ReminderRecord:
         content=str(value["content"]),
         due_day=int(value["due_day"]),
         status=ReminderStatus(status),
-        note_id=None if note_id is None else str(note_id),
+        workspace_entry_id=(
+            None if workspace_entry_id is None else str(workspace_entry_id)
+        ),
         created_day=None if value.get("created_day") is None else int(value["created_day"]),
         created_at=_parse_datetime(value.get("created_at")),
     )

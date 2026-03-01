@@ -22,13 +22,13 @@ class ReminderStatus(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class NoteRecord:
-    note_id: str
+class WorkspaceEntryRecord:
+    entry_id: str
     shop_id: ShopId
-    title: str
-    body: str
+    content: str
     tags: tuple[str, ...] = ()
     created_day: int | None = None
+    is_truncated: bool = False
     created_at: datetime = field(default_factory=_utcnow)
 
     def to_payload(self) -> dict[str, object]:
@@ -42,7 +42,7 @@ class ReminderRecord:
     content: str
     due_day: int
     status: ReminderStatus = ReminderStatus.PENDING
-    note_id: str | None = None
+    workspace_entry_id: str | None = None
     created_day: int | None = None
     created_at: datetime = field(default_factory=_utcnow)
 
@@ -51,37 +51,42 @@ class ReminderRecord:
 
 
 @dataclass(frozen=True, slots=True)
-class ScratchpadRecord:
+class WorkspaceRecord:
     shop_id: ShopId
     content: str
     revision: int
     updated_day: int | None = None
+    is_truncated: bool = False
     updated_at: datetime = field(default_factory=_utcnow)
 
     def to_payload(self) -> dict[str, object]:
         return jsonify(self)  # type: ignore[return-value]
 
 
-class NotesBackend(Protocol):
-    def write_note(
+class WorkspaceEntriesBackend(Protocol):
+    def add_workspace_entry(
         self,
         *,
         shop_id: ShopId,
-        title: str,
-        body: str,
+        content: str,
         tags: Iterable[str] = (),
         day: int | None = None,
-    ) -> NoteRecord: ...
+    ) -> WorkspaceEntryRecord: ...
 
-    def read_notes(
+    def read_workspace_entries(
         self,
         *,
         shop_id: ShopId,
         limit: int | None = None,
         tag: str | None = None,
-    ) -> list[NoteRecord]: ...
+        since_day: int | None = None,
+    ) -> list[WorkspaceEntryRecord]: ...
 
-    def list_notes(self, *, shop_id: ShopId) -> list[NoteRecord]: ...
+    def list_workspace_entries(
+        self,
+        *,
+        shop_id: ShopId,
+    ) -> list[WorkspaceEntryRecord]: ...
 
 
 class ReminderBackend(Protocol):
@@ -91,7 +96,7 @@ class ReminderBackend(Protocol):
         shop_id: ShopId,
         content: str,
         due_day: int,
-        note_id: str | None = None,
+        workspace_entry_id: str | None = None,
         day: int | None = None,
     ) -> ReminderRecord: ...
 
@@ -118,75 +123,86 @@ class ReminderBackend(Protocol):
     ) -> list[ReminderRecord]: ...
 
 
-class ScratchpadBackend(Protocol):
-    def read_scratchpad(
+class WorkspaceBackend(Protocol):
+    def read_workspace(
         self,
         *,
         shop_id: ShopId,
-    ) -> ScratchpadRecord | None: ...
+    ) -> WorkspaceRecord | None: ...
 
-    def update_scratchpad(
+    def update_workspace(
         self,
         *,
         shop_id: ShopId,
         content: str,
         day: int | None = None,
-    ) -> ScratchpadRecord: ...
+    ) -> WorkspaceRecord: ...
 
-    def list_scratchpad_revisions(
+    def list_workspace_revisions(
         self,
         *,
         shop_id: ShopId,
-    ) -> list[ScratchpadRecord]: ...
+    ) -> list[WorkspaceRecord]: ...
 
 
-class AgentMemoryStore(NotesBackend, ReminderBackend, ScratchpadBackend, Protocol):
+class AgentMemoryStore(
+    WorkspaceEntriesBackend, ReminderBackend, WorkspaceBackend, Protocol
+):
     """Simple inspectable memory surface for System 3."""
 
 
 class InMemoryAgentMemory(AgentMemoryStore):
     def __init__(self) -> None:
-        self._notes: dict[ShopId, list[NoteRecord]] = {}
+        self._workspace_entries: dict[ShopId, list[WorkspaceEntryRecord]] = {}
         self._reminders: dict[ShopId, list[ReminderRecord]] = {}
-        self._scratchpads: dict[ShopId, ScratchpadRecord] = {}
-        self._scratchpad_revisions: dict[ShopId, list[ScratchpadRecord]] = {}
+        self._workspaces: dict[ShopId, WorkspaceRecord] = {}
+        self._workspace_revisions: dict[ShopId, list[WorkspaceRecord]] = {}
 
-    def write_note(
+    def add_workspace_entry(
         self,
         *,
         shop_id: ShopId,
-        title: str,
-        body: str,
+        content: str,
         tags: Iterable[str] = (),
         day: int | None = None,
-    ) -> NoteRecord:
-        note = NoteRecord(
-            note_id=f"note_{uuid4().hex[:12]}",
+    ) -> WorkspaceEntryRecord:
+        entry = WorkspaceEntryRecord(
+            entry_id=f"ws_entry_{uuid4().hex[:12]}",
             shop_id=shop_id,
-            title=title,
-            body=body,
+            content=content,
             tags=tuple(tags),
             created_day=day,
         )
-        self._notes.setdefault(shop_id, []).append(note)
-        return note
+        self._workspace_entries.setdefault(shop_id, []).append(entry)
+        return entry
 
-    def read_notes(
+    def read_workspace_entries(
         self,
         *,
         shop_id: ShopId,
         limit: int | None = None,
         tag: str | None = None,
-    ) -> list[NoteRecord]:
-        notes = list(reversed(self._notes.get(shop_id, [])))
+        since_day: int | None = None,
+    ) -> list[WorkspaceEntryRecord]:
+        entries = list(reversed(self._workspace_entries.get(shop_id, [])))
         if tag is not None:
-            notes = [note for note in notes if tag in note.tags]
+            entries = [entry for entry in entries if tag in entry.tags]
+        if since_day is not None:
+            entries = [
+                entry
+                for entry in entries
+                if entry.created_day is not None and entry.created_day >= since_day
+            ]
         if limit is not None:
-            notes = notes[:limit]
-        return notes
+            entries = entries[:limit]
+        return entries
 
-    def list_notes(self, *, shop_id: ShopId) -> list[NoteRecord]:
-        return list(self._notes.get(shop_id, ()))
+    def list_workspace_entries(
+        self,
+        *,
+        shop_id: ShopId,
+    ) -> list[WorkspaceEntryRecord]:
+        return list(self._workspace_entries.get(shop_id, ()))
 
     def set_reminder(
         self,
@@ -194,7 +210,7 @@ class InMemoryAgentMemory(AgentMemoryStore):
         shop_id: ShopId,
         content: str,
         due_day: int,
-        note_id: str | None = None,
+        workspace_entry_id: str | None = None,
         day: int | None = None,
     ) -> ReminderRecord:
         reminder = ReminderRecord(
@@ -202,7 +218,7 @@ class InMemoryAgentMemory(AgentMemoryStore):
             shop_id=shop_id,
             content=content,
             due_day=due_day,
-            note_id=note_id,
+            workspace_entry_id=workspace_entry_id,
             created_day=day,
         )
         self._reminders.setdefault(shop_id, []).append(reminder)
@@ -255,35 +271,35 @@ class InMemoryAgentMemory(AgentMemoryStore):
             return reminders
         return [reminder for reminder in reminders if reminder.status == status]
 
-    def read_scratchpad(
+    def read_workspace(
         self,
         *,
         shop_id: ShopId,
-    ) -> ScratchpadRecord | None:
-        return self._scratchpads.get(shop_id)
+    ) -> WorkspaceRecord | None:
+        return self._workspaces.get(shop_id)
 
-    def update_scratchpad(
+    def update_workspace(
         self,
         *,
         shop_id: ShopId,
         content: str,
         day: int | None = None,
-    ) -> ScratchpadRecord:
-        previous = self._scratchpads.get(shop_id)
+    ) -> WorkspaceRecord:
+        previous = self._workspaces.get(shop_id)
         revision = 1 if previous is None else previous.revision + 1
-        scratchpad = ScratchpadRecord(
+        workspace = WorkspaceRecord(
             shop_id=shop_id,
             content=content,
             revision=revision,
             updated_day=day,
         )
-        self._scratchpads[shop_id] = scratchpad
-        self._scratchpad_revisions.setdefault(shop_id, []).append(scratchpad)
-        return scratchpad
+        self._workspaces[shop_id] = workspace
+        self._workspace_revisions.setdefault(shop_id, []).append(workspace)
+        return workspace
 
-    def list_scratchpad_revisions(
+    def list_workspace_revisions(
         self,
         *,
         shop_id: ShopId,
-    ) -> list[ScratchpadRecord]:
-        return list(self._scratchpad_revisions.get(shop_id, ()))
+    ) -> list[WorkspaceRecord]:
+        return list(self._workspace_revisions.get(shop_id, ()))

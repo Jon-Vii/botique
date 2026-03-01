@@ -14,8 +14,8 @@ Status: `Current decision` on the workday framing and runtime-owned day settleme
 - let the environment own outcomes, timing, and day settlement
 - keep one tool call per turn
 - use a visible daily turn-slot limit instead of hidden action shaping
-- keep notes and reminders available as ordinary support tools
-- keep scratchpad memory explicit, optional, and inspectable
+- keep workspace and reminders available as ordinary support tools
+- keep workspace memory explicit, optional, and inspectable
 - prefer compact inspectable session state over orchestration-heavy payloads
 - avoid provider-specific hacks or hidden reasoning dependencies
 
@@ -31,7 +31,7 @@ Per simulated day:
 4. agent takes up to `N` turns
 5. each turn allows at most one tool call
 6. runtime settles the day automatically
-7. logs, notes, and scratchpad state persist into the next day
+7. logs, workspace state, workspace-history entries, and reminders persist into the next day
 
 Status: `Current decision`
 
@@ -54,7 +54,7 @@ Recommended default for the current runtime:
 
 - turns per day: `5`
 - one tool call per turn
-- notes and reminders stay available but do not get special cost shaping
+- workspace and reminders stay available but do not get special cost shaping
 
 Status: `Recommended default`
 
@@ -76,6 +76,8 @@ Recommended sections:
 - yesterday order and revenue summary
 - listing movement worth noticing
 - new reviews or customer messages
+- current workspace text when non-empty, bounded to a reasonable size
+- a small recent workspace-history slice
 - reminders due today
 - market watch items
 - short instruction to choose the highest-leverage work
@@ -90,8 +92,9 @@ Current implementation in `src/agent_runtime/briefing.py` now provides both:
 Memory rule:
 
 - reminders due today should be surfaced automatically
-- notes should remain agent-pulled support context rather than being injected into every briefing
-- scratchpad content should stay pull-based too; the briefing may mention that scratchpad content exists, but it should not dump the full workspace into every morning prompt
+- current workspace text should be injected as-is when non-empty, bounded to a reasonable size
+- only a small recent workspace-history slice should be injected, not the full history
+- injected workspace content remains seller-visible and inspectable in artifacts
 
 The live briefing path still pulls seller-facing shop, listing, order, review, and payment data through `seller_core`, and world/day state through the separate control API.
 
@@ -112,9 +115,9 @@ Current implementation in `src/agent_runtime/providers/policy.py` uses a plain-l
 
 - the rendered morning brief
 - a short work-session summary
-- explicit visibility of note/reminder tools
+- explicit visibility of workspace/reminder tools
 - exact same-day action arguments and tool results carried forward within the workday context
-- scratchpad tools available as ordinary support actions, without forcing a particular planning template
+- workspace tools available as ordinary support actions, without forcing a particular planning template
 
 ## Turn Rules
 
@@ -187,7 +190,7 @@ The first live smoke run showed a predictable failure mode:
 
 - repeated low-risk `search_marketplace` calls
 - no listing or shop changes
-- no note/reminder writes
+- no workspace/reminder writes
 - no voluntary end-of-day decision
 
 This suggests the current loop over-rewards inspection and makes day ending feel like an artificial seller choice.
@@ -211,7 +214,7 @@ Per simulated day:
 2. System 3 builds the morning briefing
 3. agent gets a bounded inspect budget
 4. agent gets one primary action window
-5. optional note/reminder write if useful
+5. optional workspace/reminder write if useful
 6. runtime ends the day automatically
 7. System 2 advances and produces next-day consequences
 
@@ -245,8 +248,10 @@ Treat tools as two behavioral classes even if they stay on the same exposed sell
 
 `memory support`
 
-- `write_note`
-- `read_notes`
+- `read_workspace`
+- `update_workspace`
+- `add_workspace_entry`
+- `read_workspace_entries`
 - `set_reminder`
 - `complete_reminder`
 
@@ -274,7 +279,7 @@ Add explicit guidance that:
 - inspection is for deciding what to change
 - repeated search without a decision is low value
 - the goal is to make or justify one concrete business move per day
-- notes/reminders support decisions but do not replace them
+- workspace/reminders support decisions but do not replace them
 
 ### V1 briefing changes
 
@@ -318,11 +323,11 @@ The loop change is successful when a short live run usually shows:
 
 - fewer redundant marketplace searches
 - at least one concrete seller action on days where a change is justified
-- inspectable reasoning through action summaries and notes
+- inspectable reasoning through action summaries and workspace entries
 - automatic day settlement without loop confusion
 - artifact bundles that remain easy to compare across runs
 
-## Notes and Reminders
+### Guardrails
 
 Status: `Current decision`
 
@@ -331,14 +336,16 @@ Avoid:
 - exposing provider-specific instructions
 - asking for hidden chain-of-thought
 - overloading the prompt with runtime bookkeeping fields
-- treating note/reminder tools as secret runtime capabilities
+- treating workspace/reminder tools as secret runtime capabilities
 
-## Notes And Reminders
+## Workspace And Reminders
 
 Use simple inspectable support tools only:
 
-- `write_note`
-- `read_notes`
+- `read_workspace`
+- `update_workspace`
+- `add_workspace_entry`
+- `read_workspace_entries`
 - `set_reminder`
 - `complete_reminder`
 
@@ -347,9 +354,10 @@ These are part of the visible workday tool surface. They are not hidden from the
 Operational rule:
 
 - reminders are push-style resurfacing and should appear when due
-- notes are pull-style memory and the agent should decide when they are worth reading
-- `read_notes` should stay bounded and targeted rather than dumping the full note history
-- after each day, the runtime also stores one model-written note outside the work-slot budget so later days have inspectable carry-forward memory
+- the current workspace is mutable carry-forward memory that the agent may rewrite when useful
+- workspace-history entries are pull-style memory and the agent should decide when they are worth reading
+- `read_workspace_entries` should stay bounded and targeted rather than dumping the full history
+- after each day, the runtime also stores one model-written workspace-history entry outside the work-slot budget so later days have inspectable carry-forward memory
 
 Status: `Current decision`
 
@@ -363,7 +371,7 @@ Every day and every turn should log:
 - tool result
 - turn used
 - remaining turn slots after tool calls
-- note and reminder writes
+- workspace and reminder writes
 - day end reason and turn totals
 
 Logs remain part of the product because they make seller strategy legible.
@@ -381,7 +389,9 @@ Reference-run artifact layout:
   result.json
   events.jsonl
   memory/
-    notes.json
+    workspace.json
+    workspace_entries.json
+    workspace_revisions.json
     reminders.json
   days/
     day-0003/

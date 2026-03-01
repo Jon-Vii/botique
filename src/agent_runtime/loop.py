@@ -10,7 +10,7 @@ from seller_core.models import JSONValue
 
 from .briefing import MorningBriefing
 from .events import EventKind, EventLog, InMemoryEventLog, RuntimeEvent
-from .memory import NoteRecord, ShopId
+from .memory import ShopId, WorkspaceEntryRecord
 from .serialization import jsonify
 from .tools.registry import AgentToolRegistry, ToolExecutionResult, ToolManifestEntry
 
@@ -132,7 +132,7 @@ class DayRunResult:
     turns_per_day: int
     turns_used: int
     turns_remaining: int
-    day_note: NoteRecord | None = None
+    day_workspace_entry: WorkspaceEntryRecord | None = None
 
     @property
     def work_budget(self) -> int:
@@ -305,18 +305,18 @@ class SingleShopDailyLoop:
                 },
             )
 
-            if tool_result.tool_name == "write_note":
+            if tool_result.tool_name == "add_workspace_entry":
                 self.event_log.append(
-                    kind=EventKind.NOTE_WRITTEN,
+                    kind=EventKind.WORKSPACE_ENTRY_ADDED,
                     run_id=active_run_id,
                     shop_id=briefing.shop_id,
                     day=briefing.day,
                     turn_index=turn_index,
                     payload={"result": jsonify(tool_result.output)},
                 )
-            elif tool_result.tool_name == "update_scratchpad":
+            elif tool_result.tool_name == "update_workspace":
                 self.event_log.append(
-                    kind=EventKind.SCRATCHPAD_UPDATED,
+                    kind=EventKind.WORKSPACE_UPDATED,
                     run_id=active_run_id,
                     shop_id=briefing.shop_id,
                     day=briefing.day,

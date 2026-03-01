@@ -95,7 +95,7 @@ class TournamentScorecard:
     review_count: int
     active_listing_count: int
     draft_listing_count: int
-    notes_written: int
+    workspace_entries_written: int
     open_reminders: int
     final_day: int
     final_simulation_date: str
@@ -578,7 +578,9 @@ def _build_scorecard(
 ) -> TournamentScorecard:
     available_cash = shop_state.balance_summary.available or 0.0
     pending_cash = shop_state.balance_summary.pending or 0.0
-    notes_written = len(runner.memory.list_notes(shop_id=shop_state.shop_id))
+    workspace_entries_written = len(
+        runner.memory.list_workspace_entries(shop_id=shop_state.shop_id)
+    )
     open_reminders = len(
         runner.memory.list_reminders(
             shop_id=shop_state.shop_id,
@@ -595,7 +597,7 @@ def _build_scorecard(
         review_count=shop_state.review_count,
         active_listing_count=shop_state.active_listing_count,
         draft_listing_count=shop_state.draft_listing_count,
-        notes_written=notes_written,
+        workspace_entries_written=workspace_entries_written,
         open_reminders=open_reminders,
         final_day=shop_state.day,
         final_simulation_date=shop_state.simulation_date,
