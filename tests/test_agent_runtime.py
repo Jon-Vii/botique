@@ -56,9 +56,11 @@ from agent_runtime.artifacts import persist_run_artifacts
 from agent_runtime.cli import main as runtime_cli_main
 from agent_runtime.providers.policy import END_DAY_TOOL_NAME
 from agent_runtime.tools import (
+    AgentToolRegistry,
     DEFAULT_OWNER_AGENT_CORE_TOOLS,
     DEFAULT_OWNER_AGENT_EXTENSION_TOOLS,
     DEFAULT_OWNER_AGENT_SELLER_TOOLS,
+    register_memory_tools,
 )
 from control_api import (
     AdvanceDayResult,
@@ -411,13 +413,13 @@ class TournamentStubProvider:
 
     def complete(self, *, messages, tools, tool_choice="auto", allow_parallel_tool_calls=False):
         tool_names = {tool.name for tool in tools}
-        if "save_end_of_day_journal_entry" in tool_names:
+        if "save_end_of_day_scratchpad" in tool_names:
             return ProviderResponse(
                 content="",
                 tool_calls=(
                     ProviderToolCall(
-                        name="save_end_of_day_journal_entry",
-                        arguments={"content": f"{self.label} notes the day."},
+                        name="save_end_of_day_scratchpad",
+                        arguments={"content": f"{self.label} keeps this as the next scratchpad."},
                     ),
                 ),
             )
@@ -768,7 +770,7 @@ class MorningBriefingTests(unittest.TestCase):
 
 
 class ToolRegistryTests(unittest.TestCase):
-    def test_owner_registry_wraps_core_tools_and_memory_extensions(self) -> None:
+    def test_owner_registry_wraps_core_tools_and_journal_extensions(self) -> None:
         client = FakeSellerCoreClient()
         memory = InMemoryAgentMemory()
         registry = build_owner_agent_tool_registry(client, memory=memory, shop_id=7)
@@ -778,12 +780,12 @@ class ToolRegistryTests(unittest.TestCase):
         self.assertIn("get_listing_details", tool_names)
         self.assertIn("search_marketplace", tool_names)
         self.assertIn("queue_production", tool_names)
-        self.assertIn("read_scratchpad", tool_names)
-        self.assertIn("update_scratchpad", tool_names)
         self.assertIn("add_journal_entry", tool_names)
         self.assertIn("read_journal_entries", tool_names)
         self.assertIn("set_reminder", tool_names)
         self.assertIn("complete_reminder", tool_names)
+        self.assertNotIn("read_scratchpad", tool_names)
+        self.assertNotIn("update_scratchpad", tool_names)
         self.assertNotIn("get_shop_info", tool_names)
         self.assertNotIn("get_shop_listings", tool_names)
         self.assertNotIn("get_capacity_status", tool_names)
@@ -798,13 +800,6 @@ class ToolRegistryTests(unittest.TestCase):
             {
                 "listing_id": 2001,
                 "units": 2,
-            },
-        )
-        workspace_result = registry.invoke(
-            "update_scratchpad",
-            {
-                "content": "Current plan: activate the draft and watch backlog.",
-                "day": 3,
             },
         )
         entry_result = registry.invoke(
@@ -824,7 +819,6 @@ class ToolRegistryTests(unittest.TestCase):
             },
         )
         entries_result = registry.invoke("read_journal_entries", {})
-        workspace_read_result = registry.invoke("read_scratchpad", {})
 
         self.assertEqual(
             client.calls,
@@ -847,22 +841,36 @@ class ToolRegistryTests(unittest.TestCase):
         self.assertEqual(shop_result.output["catalog_summary"]["total_listings"], 0)
         self.assertEqual(listing_result.output["listing"]["listing_id"], 0)
         self.assertEqual(production_result.output["arguments"]["units"], 2)
-        self.assertEqual(workspace_result.output["scratchpad"]["shop_id"], 7)
-        self.assertEqual(workspace_result.output["scratchpad"]["revision"], 1)
         self.assertEqual(entry_result.output["journal_entry"]["shop_id"], 7)
         self.assertEqual(entry_result.output["journal_entry"]["tags"], ["seo"])
-        self.assertEqual(
-            workspace_read_result.output["scratchpad"]["content"],
-            "Current plan: activate the draft and watch backlog.",
-        )
         self.assertEqual(reminder_result.output["reminder"]["due_day"], 4)
         self.assertEqual(entries_result.output["count"], 1)
 
-    def test_owner_registry_rejects_attempts_to_override_bound_shop_id(self) -> None:
-        registry = build_owner_agent_tool_registry(
-            FakeSellerCoreClient(),
-            memory=InMemoryAgentMemory(),
-            shop_id=7,
+    def test_memory_tool_registration_can_expose_scratchpad_tools_when_requested(self) -> None:
+        registry = AgentToolRegistry()
+        memory = InMemoryAgentMemory()
+        register_memory_tools(registry, memory, shop_id=7)
+
+        tool_names = {entry.name for entry in registry.manifest()}
+        self.assertIn("read_scratchpad", tool_names)
+        self.assertIn("update_scratchpad", tool_names)
+        self.assertIn("add_journal_entry", tool_names)
+        self.assertIn("read_journal_entries", tool_names)
+
+        workspace_result = registry.invoke(
+            "update_scratchpad",
+            {
+                "content": "Current plan: activate the draft and watch backlog.",
+                "day": 3,
+            },
+        )
+        workspace_read_result = registry.invoke("read_scratchpad", {})
+
+        self.assertEqual(workspace_result.output["scratchpad"]["shop_id"], 7)
+        self.assertEqual(workspace_result.output["scratchpad"]["revision"], 1)
+        self.assertEqual(
+            workspace_read_result.output["scratchpad"]["content"],
+            "Current plan: activate the draft and watch backlog.",
         )
 
         with self.assertRaisesRegex(ValueError, "arguments.shop_id is not allowed"):
@@ -885,23 +893,11 @@ class ToolRegistryTests(unittest.TestCase):
             manifests["get_listing_details"].parameters_schema["properties"],
         )
         self.assertEqual(
-            manifests["read_scratchpad"].parameters_schema["required"],
-            [],
-        )
-        self.assertEqual(
-            manifests["update_scratchpad"].parameters_schema["required"],
-            ["content"],
-        )
-        self.assertEqual(
             manifests["add_journal_entry"].parameters_schema["required"],
             ["content"],
         )
         self.assertEqual(manifests["update_listing"].work_cost, 1)
         self.assertEqual(manifests["add_journal_entry"].work_cost, 1)
-        self.assertNotIn("shop_id", manifests["read_scratchpad"].parameters_schema["properties"])
-        self.assertNotIn(
-            "shop_id", manifests["update_scratchpad"].parameters_schema["properties"]
-        )
         self.assertEqual(manifests["get_shop_dashboard"].parameters_schema["required"], [])
         self.assertEqual(
             manifests["queue_production"].surface,
@@ -1161,8 +1157,8 @@ class ProviderPolicyTests(unittest.TestCase):
         user_prompt = provider.calls[0]["messages"][1].content
         self.assertIn("# Studio North workday", user_prompt)
         self.assertIn("Work slots: 5 left / 5 total", user_prompt)
-        self.assertIn("read_scratchpad", user_prompt)
         self.assertIn("add_journal_entry", user_prompt)
+        self.assertNotIn("read_scratchpad", user_prompt)
 
     def test_tool_calling_policy_maps_end_day_tool(self) -> None:
         registry, briefing = self._make_context()
@@ -1328,7 +1324,7 @@ class OwnerAgentRunnerTests(unittest.TestCase):
                     content="",
                     tool_calls=(
                         ProviderToolCall(
-                            name="save_end_of_day_journal_entry",
+                            name="save_end_of_day_scratchpad",
                             arguments={
                                 "content": "The shop needs a clearer follow-up tomorrow."
                             },
@@ -1371,19 +1367,19 @@ class OwnerAgentRunnerTests(unittest.TestCase):
 
         self.assertEqual(result.end_reason, DayEndReason.AGENT_ENDED_DAY)
         self.assertEqual(len(result.turns), 1)
-        self.assertIsNotNone(result.day_workspace_entry)
+        self.assertIsNotNone(result.day_scratchpad)
         self.assertEqual(
-            result.day_workspace_entry.content,
+            result.day_scratchpad.content,
             "The shop needs a clearer follow-up tomorrow.",
         )
-        self.assertIn("future self", provider.calls[2]["messages"][0].content)
-        self.assertEqual(len(memory.list_workspace_entries(shop_id=7)), 1)
+        self.assertIn("Revise your persistent scratchpad", provider.calls[2]["messages"][0].content)
+        self.assertEqual(len(memory.list_workspace_entries(shop_id=7)), 0)
         self.assertEqual(
-            memory.list_workspace_entries(shop_id=7)[0].content,
+            memory.read_workspace(shop_id=7).content,
             "The shop needs a clearer follow-up tomorrow.",
         )
         self.assertIn(
-            "workspace_entry_added",
+            "workspace_updated",
             [event.kind.value for event in result.events],
         )
         self.assertEqual(
@@ -1455,7 +1451,7 @@ class OwnerAgentRunnerTests(unittest.TestCase):
                     content="",
                     tool_calls=(
                         ProviderToolCall(
-                            name="save_end_of_day_journal_entry",
+                            name="save_end_of_day_scratchpad",
                             arguments={
                                 "content": "Woodwork is worth checking if current listings stall.",
                             },
@@ -1488,7 +1484,7 @@ class OwnerAgentRunnerTests(unittest.TestCase):
                     content="",
                     tool_calls=(
                         ProviderToolCall(
-                            name="save_end_of_day_journal_entry",
+                            name="save_end_of_day_scratchpad",
                             arguments={
                                 "content": "The planner angle may be stronger than the current catalog mix.",
                             },
@@ -1528,11 +1524,11 @@ class OwnerAgentRunnerTests(unittest.TestCase):
         self.assertEqual(control_client.advance_calls, 1)
         self.assertEqual(result.days[1].market_state_before.current_day.day, 4)
         self.assertEqual(
-            result.days[0].day_result.day_workspace_entry.content,
+            result.days[0].day_result.day_scratchpad.content,
             "Woodwork is worth checking if current listings stall.",
         )
         self.assertEqual(
-            result.days[1].day_result.day_workspace_entry.content,
+            result.days[1].day_result.day_scratchpad.content,
             "The planner angle may be stronger than the current catalog mix.",
         )
         self.assertEqual(
@@ -1546,25 +1542,17 @@ class OwnerAgentRunnerTests(unittest.TestCase):
                 ("get_capacity_status", {"shop_id": 1001}),
             ],
         )
-        self.assertEqual(len(result.workspace_entries), 3)
+        self.assertEqual(len(result.workspace_entries), 1)
         self.assertEqual(
             result.workspace_entries[0].content,
-            "Woodwork is worth checking if current listings stall.",
-        )
-        self.assertEqual(
-            result.workspace_entries[1].content,
             "Planner demand is rotating up.",
-        )
-        self.assertEqual(
-            result.workspace_entries[2].content,
-            "The planner angle may be stronger than the current catalog mix.",
         )
         self.assertIsNotNone(result.workspace)
         self.assertEqual(
             result.workspace.content,
-            "Current thesis: wall art may be stalling.",
+            "The planner angle may be stronger than the current catalog mix.",
         )
-        self.assertEqual(len(result.workspace_revisions), 1)
+        self.assertEqual(len(result.workspace_revisions), 3)
         self.assertIn(
             "simulation_advanced",
             [event.kind.value for event in result.events],
@@ -1619,7 +1607,7 @@ class OwnerAgentRunnerTests(unittest.TestCase):
                     content="",
                     tool_calls=(
                         ProviderToolCall(
-                            name="save_end_of_day_journal_entry",
+                            name="save_end_of_day_scratchpad",
                             arguments={"content": "Reset smoke note."},
                         ),
                     ),
@@ -1865,7 +1853,7 @@ class ArtifactPersistenceTests(unittest.TestCase):
                     content="",
                     tool_calls=(
                         ProviderToolCall(
-                            name="save_end_of_day_journal_entry",
+                            name="save_end_of_day_scratchpad",
                             arguments={"content": "Watch whether wall art keeps softening."},
                         ),
                     ),
@@ -1927,14 +1915,13 @@ class ArtifactPersistenceTests(unittest.TestCase):
 
         self.assertEqual(
             workspace_payload["content"],
-            "Current thesis: wall art may be stalling.",
+            "Watch whether wall art keeps softening.",
         )
-        self.assertEqual(len(entries_payload), 2)
+        self.assertEqual(len(entries_payload), 1)
         self.assertEqual(entries_payload[0]["content"], "Trend check: planner demand may be rising.")
-        self.assertEqual(entries_payload[1]["content"], "Watch whether wall art keeps softening.")
         self.assertEqual(len(reminders_payload), 1)
-        self.assertEqual(len(revisions_payload), 1)
-        self.assertEqual(summary_payload["memory"]["workspace_entry_count"], 2)
+        self.assertEqual(len(revisions_payload), 2)
+        self.assertEqual(summary_payload["memory"]["workspace_entry_count"], 1)
         self.assertTrue(summary_payload["memory"]["workspace_has_content"])
 
 

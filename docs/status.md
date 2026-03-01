@@ -27,7 +27,7 @@ These pieces already exist in the repo and are safe to build on.
 - Python `seller_core` client/CLI for the portability-aware seller surface
 - Python single-shop owner-agent runtime with live morning briefing generation from seller-visible state
 - turn-slot workday loop with one action per slot, runtime-owned day settlement, and resettable reference runs
-- unified owner-agent memory with mutable scratchpad text, append-only journal entries, and reminders
+- unified owner-agent memory with end-of-day scratchpad revision, append-only journal entries, and reminders
 - Mistral provider wiring for live tool-calling runs
 - artifact-rich single-run bundles with briefings, turns, scratchpad state, journal history, reminders, and run summaries
 - additive arena-style tournament orchestration with rotating entrant order, rotating shop assignments, and shared-world resets

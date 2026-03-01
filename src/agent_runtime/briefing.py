@@ -26,7 +26,7 @@ def _utcnow() -> datetime:
 DEFAULT_PRIORITIES_PROMPT = (
     "Set the highest-leverage priorities for this workday, use today's limited work slots "
     "carefully, act on inventory, backlog, production, and market signals when they "
-    "matter, use the scratchpad, journal, or reminders when they genuinely help, and stop once the "
+    "matter, use the journal or reminders when they genuinely help, and stop once the "
     "important work is done."
 )
 DEFAULT_WORKSPACE_TEXT_MAX_CHARS = 4000

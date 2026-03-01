@@ -27,8 +27,6 @@ from .base import (
 
 END_DAY_TOOL_NAME = "end_day"
 SUPPORT_TOOL_NAMES = {
-    "read_scratchpad",
-    "update_scratchpad",
     "add_journal_entry",
     "read_journal_entries",
     "set_reminder",
@@ -59,11 +57,11 @@ DEFAULT_SYSTEM_PROMPT = (
     "using one available action. End the day when further work is unlikely to improve "
     "outcomes. "
     "You have one persistent memory system for cross-day work. The current "
-    "scratchpad is persistent text you can revise for future days by keeping "
-    "what still matters, removing stale parts, and adding anything new. Journal "
-    "entries are append-only log items for things worth remembering later. Reminders "
-    "resurface on a future day. Use these tools when they help you think across time, "
-    "not by reflex. "
+    "scratchpad is persistent text that carries your working context from one day "
+    "to the next and is revised between days. Journal entries are append-only log "
+    "items for things worth remembering later. Reminders resurface on a future day. "
+    "Use journal entries and reminders when they help you think across time, not by "
+    "reflex. "
     "Think like a business owner: inspect enough evidence to make decisions, improve the "
     "shop when action is warranted, manage inventory and backlog carefully, and adapt as "
     "the market changes."

@@ -38,12 +38,12 @@ from .providers import (
 from .serialization import jsonify
 from .tools import build_owner_agent_tool_registry
 
-END_OF_DAY_WORKSPACE_ENTRY_TOOL_NAME = "save_end_of_day_journal_entry"
-END_OF_DAY_WORKSPACE_ENTRY_SYSTEM_PROMPT = (
-    "You are closing out a Botique shop workday. Write one journal entry for "
-    "your future self about anything from today worth remembering. This entry is part of "
-    "your own cross-day memory system for later days. No user is waiting for you. Do not "
-    "explain the entry; just save it."
+END_OF_DAY_SCRATCHPAD_TOOL_NAME = "save_end_of_day_scratchpad"
+END_OF_DAY_SCRATCHPAD_SYSTEM_PROMPT = (
+    "You are closing out a Botique shop workday. Revise your persistent scratchpad for "
+    "future days. Keep anything still useful, remove stale parts, and add anything new. "
+    "The scratchpad is your mutable cross-day working context. No user is waiting for "
+    "you. Do not explain your process; just save the next full scratchpad text."
 )
 
 
@@ -112,7 +112,7 @@ class OwnerAgentRunner:
             config=DailyLoopConfig(turns_per_day=self.config.turns_per_day),
         )
         day_result = loop.run_day(briefing=briefing, policy=self.policy)
-        return self._write_end_of_day_workspace_entry(
+        return self._write_end_of_day_scratchpad(
             briefing=briefing,
             day_result=day_result,
         )
@@ -265,7 +265,7 @@ class OwnerAgentRunner:
             )
         return self.control_client
 
-    def _write_end_of_day_workspace_entry(
+    def _write_end_of_day_scratchpad(
         self,
         *,
         briefing: MorningBriefing,
@@ -275,11 +275,11 @@ class OwnerAgentRunner:
             messages=(
                 ProviderMessage(
                     role=ProviderMessageRole.SYSTEM,
-                    content=END_OF_DAY_WORKSPACE_ENTRY_SYSTEM_PROMPT,
+                    content=END_OF_DAY_SCRATCHPAD_SYSTEM_PROMPT,
                 ),
                 ProviderMessage(
                     role=ProviderMessageRole.USER,
-                    content=self._build_end_of_day_workspace_entry_message(
+                    content=self._build_end_of_day_scratchpad_message(
                         briefing=briefing,
                         day_result=day_result,
                     ),
@@ -287,19 +287,14 @@ class OwnerAgentRunner:
             ),
             tools=(
                 ProviderToolDefinition(
-                    name=END_OF_DAY_WORKSPACE_ENTRY_TOOL_NAME,
-                    description="Save one journal entry for later use after the day is over.",
+                    name=END_OF_DAY_SCRATCHPAD_TOOL_NAME,
+                    description="Save the next full scratchpad text for future days after the current workday is over.",
                     parameters_schema={
                         "type": "object",
                         "properties": {
                             "content": {
                                 "type": "string",
-                                "description": "The journal entry content to save for later days.",
-                            },
-                            "tags": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "description": "Optional tags for the entry.",
+                                "description": "The next full scratchpad text. Keep anything still useful, remove stale parts, and add anything new. This may be empty if you intentionally want to clear the scratchpad.",
                             },
                         },
                         "required": ["content"],
@@ -311,26 +306,25 @@ class OwnerAgentRunner:
             allow_parallel_tool_calls=False,
         )
 
-        content, tags = self._extract_end_of_day_workspace_entry(response)
-        entry = self.memory.add_workspace_entry(
+        content = self._extract_end_of_day_scratchpad(response)
+        scratchpad = self.memory.update_workspace(
             shop_id=briefing.shop_id,
             content=content,
-            tags=tags,
             day=briefing.day,
         )
         self.event_log.append(
-            kind=EventKind.WORKSPACE_ENTRY_ADDED,
+            kind=EventKind.WORKSPACE_UPDATED,
             run_id=day_result.run_id,
             shop_id=briefing.shop_id,
             day=briefing.day,
             payload={
                 "source": "end_of_day_reflection",
-                "result": entry.to_payload(),
+                "result": scratchpad.to_payload(),
             },
         )
         return replace(
             day_result,
-            day_workspace_entry=entry,
+            day_scratchpad=scratchpad,
             events=tuple(
                 self.event_log.list_events(
                     run_id=day_result.run_id,
@@ -341,37 +335,29 @@ class OwnerAgentRunner:
         )
 
     @staticmethod
-    def _extract_end_of_day_workspace_entry(
+    def _extract_end_of_day_scratchpad(
         response: object,
-    ) -> tuple[str, tuple[str, ...]]:
+    ) -> str:
         if hasattr(response, "tool_calls"):
             tool_calls = getattr(response, "tool_calls")
             if tool_calls:
                 tool_call = tool_calls[0]
-                if tool_call.name != END_OF_DAY_WORKSPACE_ENTRY_TOOL_NAME:
+                if tool_call.name != END_OF_DAY_SCRATCHPAD_TOOL_NAME:
                     raise ProviderError(
-                        f"Expected {END_OF_DAY_WORKSPACE_ENTRY_TOOL_NAME}, received {tool_call.name!r}."
+                        f"Expected {END_OF_DAY_SCRATCHPAD_TOOL_NAME}, received {tool_call.name!r}."
                     )
                 content = tool_call.arguments.get("content")
-                raw_tags = tool_call.arguments.get("tags", ())
-                if isinstance(content, str) and content.strip():
-                    tags = (
-                        tuple(tag for tag in raw_tags if isinstance(tag, str))
-                        if isinstance(raw_tags, (list, tuple))
-                        else ()
-                    )
-                    return content.strip(), tags
-                raise ProviderError(
-                    "End-of-day journal entry content must be a non-empty string."
-                )
+                if isinstance(content, str):
+                    return content.strip()
+                raise ProviderError("End-of-day scratchpad content must be a string.")
 
         content = getattr(response, "content", None)
-        if isinstance(content, str) and content.strip():
-            return content.strip(), ()
-        raise ProviderError("Provider returned no usable end-of-day journal entry.")
+        if isinstance(content, str):
+            return content.strip()
+        raise ProviderError("Provider returned no usable end-of-day scratchpad revision.")
 
     @staticmethod
-    def _build_end_of_day_workspace_entry_message(
+    def _build_end_of_day_scratchpad_message(
         *,
         briefing: MorningBriefing,
         day_result: DayRunResult,
@@ -391,11 +377,16 @@ class OwnerAgentRunner:
         payload = {
             "day": briefing.day,
             "end_reason": day_result.end_reason.value,
+            "current_scratchpad": (
+                None
+                if briefing.workspace is None
+                else briefing.workspace.content
+            ),
             "morning_briefing": briefing.to_prompt_payload(),
             "work_done_today": turns_payload,
         }
         return (
-            "Write one journal entry for later days based on today's seller-visible state and work.\n\n"
+            "Revise the scratchpad for later days based on the current scratchpad, today's seller-visible state, and today's work.\n\n"
             "```json\n"
             f"{json.dumps(payload, indent=2)}\n"
             "```"

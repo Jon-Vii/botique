@@ -14,7 +14,7 @@ Status: `Current decision`
 - let the environment own outcomes, timing, and day settlement
 - keep one available action per work slot
 - use a visible daily work-slot limit instead of hidden action shaping
-- keep scratchpad, journal, and reminders available as ordinary support tools
+- keep journal and reminders available as ordinary daytime support tools
 - keep same-day context intact inside one workday window
 - keep cross-day memory explicit and inspectable through scratchpad text, journal entries, and reminders
 - avoid provider-specific hacks or hidden reasoning dependencies
@@ -32,7 +32,7 @@ Per simulated day:
 5. each work slot allows exactly one action
 6. the agent may end the day early
 7. the runtime settles the day
-8. the runtime writes one end-of-day journal entry
+8. the runtime revises the scratchpad at end of day for the next day
 9. logs, scratchpad state, journal entries, reminders, and artifacts persist
 
 Status: `Current decision`
@@ -56,7 +56,8 @@ Recommended default for the current runtime:
 
 - turns per day: `5`
 - one action per work slot
-- scratchpad, journal, and reminders stay available without special cost shaping
+- journal and reminders stay available during the day without special cost shaping
+- scratchpad revision happens in the end-of-day phase rather than spending a daytime work slot
 
 Status: `Recommended default`
 
@@ -157,7 +158,7 @@ Runtime note:
 
 ## End-Of-Day Memory
 
-At the end of each day, the runtime asks the model to write one journal entry for later days.
+At the end of each day, the runtime asks the model to revise the persistent scratchpad for later days.
 
 This entry:
 
@@ -176,7 +177,8 @@ The system prompt should frame the model as an autonomous business owner:
 - the goal is realized business performance over time
 - only seller-visible tools and memory surfaces are available
 - capacity, backlog, cash, reviews, and market shifts create delayed consequences
-- scratchpad, journal, and reminders are tools the agent may use when useful, not rituals
+- journal and reminders are daytime tools the agent may use when useful, not rituals
+- scratchpad revision is an end-of-day cross-day memory step, not an in-day memo ritual
 
 The prompt should explain the environment clearly enough that:
 

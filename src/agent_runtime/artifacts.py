@@ -550,6 +550,19 @@ def _render_day_summary(day: _NormalizedDayArtifact) -> str:
         for step in day.advancement.steps:
             lines.append(f"- `{step.name}`: {step.description}")
 
+    if day.day_result.day_scratchpad is not None:
+        lines.extend(
+            [
+                "",
+                "## End-of-Day Scratchpad",
+                "",
+                f"- Revision: {day.day_result.day_scratchpad.revision}",
+                "```text",
+                day.day_result.day_scratchpad.content,
+                "```",
+            ]
+        )
+
     return "\n".join(lines).rstrip() + "\n"
 
 

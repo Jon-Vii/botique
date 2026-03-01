@@ -114,8 +114,6 @@ Direct seller tools:
 
 Botique support tools still remain:
 
-- `read_scratchpad`
-- `update_scratchpad`
 - `add_journal_entry`
 - `read_journal_entries`
 - `set_reminder`
@@ -173,8 +171,6 @@ Botique now exposes one coherent memory system with three underlying semantics:
 
 Default owner-agent memory tools:
 
-- `read_scratchpad`
-- `update_scratchpad`
 - `add_journal_entry`
 - `read_journal_entries`
 - `set_reminder`
@@ -183,7 +179,7 @@ Default owner-agent memory tools:
 Memory rules:
 
 - the scratchpad is intentionally freeform and model-authored
-- `update_scratchpad` saves the next full version of the current scratchpad text, so the agent can keep useful parts, remove stale parts, and add new ones; clearing it with an empty string is optional, not required
+- the scratchpad is revised in the end-of-day phase rather than through the normal daytime owner-agent tool surface
 - `add_journal_entry` appends one inspectable journal entry without rewriting prior entries
 - `read_journal_entries` stays simple and bounded with `limit`, optional `tag`, and optional `since_day`
 - reminders remain push-style resurfacing rather than hidden retrieval

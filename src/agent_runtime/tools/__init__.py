@@ -33,7 +33,13 @@ def build_owner_agent_tool_registry(
     registry = AgentToolRegistry()
     register_owner_summary_tools(registry, client, shop_id=shop_id)
     register_seller_tools(registry, client, shop_id=shop_id)
-    register_memory_tools(registry, memory or InMemoryAgentMemory(), shop_id=shop_id)
+    register_memory_tools(
+        registry,
+        memory or InMemoryAgentMemory(),
+        shop_id=shop_id,
+        include_scratchpad_tools=False,
+        include_journal_tools=True,
+    )
     return registry
 
 

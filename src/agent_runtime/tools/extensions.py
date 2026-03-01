@@ -75,163 +75,167 @@ def register_memory_tools(
     memory: AgentMemoryStore,
     *,
     shop_id: int | str | None = None,
+    include_scratchpad_tools: bool = True,
+    include_journal_tools: bool = True,
 ) -> AgentToolRegistry:
-    registry.register(
-        ToolManifestEntry(
-            name="read_scratchpad",
-            description="Read the current persistent scratchpad text for the shop. This is the main mutable cross-day working context you can carry across days and revise for future days.",
-            surface=ToolSurface.EXTENSION,
-            work_cost=1,
-            required_body_fields=("shop_id",),
-            body_encoding="json",
-            notes=(
-                "The scratchpad is freeform model-authored text, not a required template.",
+    if include_scratchpad_tools:
+        registry.register(
+            ToolManifestEntry(
+                name="read_scratchpad",
+                description="Read the current persistent scratchpad text for the shop. This is the main mutable cross-day working context you can carry across days and revise for future days.",
+                surface=ToolSurface.EXTENSION,
+                work_cost=1,
+                required_body_fields=("shop_id",),
+                body_encoding="json",
+                notes=(
+                    "The scratchpad is freeform model-authored text, not a required template.",
+                ),
+                parameters_schema=_memory_parameters_schema(
+                    properties={
+                        "shop_id": SHOP_ID_SCHEMA,
+                    },
+                    required=["shop_id"],
+                    shop_id=shop_id,
+                ),
             ),
-            parameters_schema=_memory_parameters_schema(
-                properties={
-                    "shop_id": SHOP_ID_SCHEMA,
-                },
-                required=["shop_id"],
-                shop_id=shop_id,
-            ),
-        ),
-        lambda arguments, *, store=memory: {
-            "scratchpad": (
-                None
-                if (
-                    workspace := store.read_workspace(
+            lambda arguments, *, store=memory: {
+                "scratchpad": (
+                    None
+                    if (
+                        workspace := store.read_workspace(
+                            shop_id=_bound_shop_id(arguments, shop_id)
+                        )
+                    )
+                    is None
+                    else workspace.to_payload()
+                ),
+                "revision_count": len(
+                    store.list_workspace_revisions(
                         shop_id=_bound_shop_id(arguments, shop_id)
                     )
-                )
-                is None
-                else workspace.to_payload()
-            ),
-            "revision_count": len(
-                store.list_workspace_revisions(
-                    shop_id=_bound_shop_id(arguments, shop_id)
-                )
-            ),
-        },
-    )
+                ),
+            },
+        )
 
-    registry.register(
-        ToolManifestEntry(
-            name="update_scratchpad",
-            description="Revise the current persistent scratchpad text for the shop. Use it as a freeform mutable cross-day working context for plans, hypotheses, experiments, or anything else useful across days.",
-            surface=ToolSurface.EXTENSION,
-            work_cost=1,
-            required_body_fields=("shop_id", "content"),
-            body_encoding="json",
-            notes=(
-                "Write the next full version of the scratchpad: keep anything still useful, remove stale parts, and add anything new. Use an empty string only if you intentionally want to clear it.",
+        registry.register(
+            ToolManifestEntry(
+                name="update_scratchpad",
+                description="Revise the current persistent scratchpad text for the shop. Use it as a freeform mutable cross-day working context for plans, hypotheses, experiments, or anything else useful across days.",
+                surface=ToolSurface.EXTENSION,
+                work_cost=1,
+                required_body_fields=("shop_id", "content"),
+                body_encoding="json",
+                notes=(
+                    "Write the next full version of the scratchpad: keep anything still useful, remove stale parts, and add anything new. Use an empty string only if you intentionally want to clear it.",
+                ),
+                parameters_schema=_memory_parameters_schema(
+                    properties={
+                        "shop_id": SHOP_ID_SCHEMA,
+                        "content": {
+                            "type": "string",
+                            "description": "The next full scratchpad text after your revision. Keep any parts that still matter, remove stale parts, and add anything new. This may be empty only if you intentionally want to clear it.",
+                        },
+                        "day": {
+                            "type": "integer",
+                            "description": "Current simulation day.",
+                        },
+                    },
+                    required=["shop_id", "content"],
+                    shop_id=shop_id,
+                ),
             ),
-            parameters_schema=_memory_parameters_schema(
-                properties={
-                    "shop_id": SHOP_ID_SCHEMA,
-                    "content": {
-                        "type": "string",
-                        "description": "The next full scratchpad text after your revision. Keep any parts that still matter, remove stale parts, and add anything new. This may be empty only if you intentionally want to clear it.",
-                    },
-                    "day": {
-                        "type": "integer",
-                        "description": "Current simulation day.",
-                    },
-                },
-                required=["shop_id", "content"],
-                shop_id=shop_id,
-            ),
-        ),
-        lambda arguments, *, store=memory: {
-            "scratchpad": store.update_workspace(
-                shop_id=_bound_shop_id(arguments, shop_id),
-                content=_require_text(arguments, "content"),
-                day=arguments.get("day"),
-            ).to_payload()
-        },
-    )
-
-    registry.register(
-        ToolManifestEntry(
-            name="add_journal_entry",
-            description="Append a new journal entry for the shop. Use this for durable append-only notes about things you want to remember later.",
-            surface=ToolSurface.EXTENSION,
-            work_cost=1,
-            required_body_fields=("shop_id", "content"),
-            body_encoding="json",
-            notes=(
-                "Journal entries are append-only and stay inspectable in artifacts.",
-            ),
-            parameters_schema=_memory_parameters_schema(
-                properties={
-                    "shop_id": SHOP_ID_SCHEMA,
-                    "content": {
-                        "type": "string",
-                        "description": "Journal entry text.",
-                    },
-                    "tags": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Optional tags for later filtering.",
-                    },
-                    "day": {
-                        "type": "integer",
-                        "description": "Current simulation day.",
-                    },
-                },
-                required=["shop_id", "content"],
-                shop_id=shop_id,
-            ),
-        ),
-        lambda arguments, *, store=memory: {
-            "journal_entry": store.add_workspace_entry(
-                shop_id=_bound_shop_id(arguments, shop_id),
-                content=_require_text(arguments, "content"),
-                tags=tuple(arguments.get("tags", ())),
-                day=arguments.get("day"),
-            ).to_payload()
-        },
-    )
-
-    registry.register(
-        ToolManifestEntry(
-            name="read_journal_entries",
-            description="Read a bounded set of recent journal entries for the current shop. Use this when you want targeted recall from your journal/history.",
-            surface=ToolSurface.EXTENSION,
-            work_cost=1,
-            required_body_fields=("shop_id",),
-            body_encoding="json",
-            parameters_schema=_memory_parameters_schema(
-                properties={
-                    "shop_id": SHOP_ID_SCHEMA,
-                    "limit": {
-                        "type": "integer",
-                        "description": "Maximum number of entries to return.",
-                    },
-                    "tag": {
-                        "type": "string",
-                        "description": "Optional tag filter.",
-                    },
-                    "since_day": {
-                        "type": "integer",
-                        "description": "Optional lower bound on created simulation day.",
-                    },
-                },
-                required=["shop_id"],
-                shop_id=shop_id,
-            ),
-        ),
-        lambda arguments, *, store=memory: {
-            "count": len(
-                entries := store.read_workspace_entries(
+            lambda arguments, *, store=memory: {
+                "scratchpad": store.update_workspace(
                     shop_id=_bound_shop_id(arguments, shop_id),
-                    limit=arguments.get("limit", 5),
-                    tag=arguments.get("tag"),
-                    since_day=arguments.get("since_day"),
-                )
+                    content=_require_text(arguments, "content"),
+                    day=arguments.get("day"),
+                ).to_payload()
+            },
+        )
+
+    if include_journal_tools:
+        registry.register(
+            ToolManifestEntry(
+                name="add_journal_entry",
+                description="Append a new journal entry for the shop. Use this for durable append-only notes about things you want to remember later.",
+                surface=ToolSurface.EXTENSION,
+                work_cost=1,
+                required_body_fields=("shop_id", "content"),
+                body_encoding="json",
+                notes=(
+                    "Journal entries are append-only and stay inspectable in artifacts.",
+                ),
+                parameters_schema=_memory_parameters_schema(
+                    properties={
+                        "shop_id": SHOP_ID_SCHEMA,
+                        "content": {
+                            "type": "string",
+                            "description": "Journal entry text.",
+                        },
+                        "tags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Optional tags for later filtering.",
+                        },
+                        "day": {
+                            "type": "integer",
+                            "description": "Current simulation day.",
+                        },
+                    },
+                    required=["shop_id", "content"],
+                    shop_id=shop_id,
+                ),
             ),
-            "journal_entries": [entry.to_payload() for entry in entries],
-        },
-    )
+            lambda arguments, *, store=memory: {
+                "journal_entry": store.add_workspace_entry(
+                    shop_id=_bound_shop_id(arguments, shop_id),
+                    content=_require_text(arguments, "content"),
+                    tags=tuple(arguments.get("tags", ())),
+                    day=arguments.get("day"),
+                ).to_payload()
+            },
+        )
+
+        registry.register(
+            ToolManifestEntry(
+                name="read_journal_entries",
+                description="Read a bounded set of recent journal entries for the current shop. Use this when you want targeted recall from your journal/history.",
+                surface=ToolSurface.EXTENSION,
+                work_cost=1,
+                required_body_fields=("shop_id",),
+                body_encoding="json",
+                parameters_schema=_memory_parameters_schema(
+                    properties={
+                        "shop_id": SHOP_ID_SCHEMA,
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of entries to return.",
+                        },
+                        "tag": {
+                            "type": "string",
+                            "description": "Optional tag filter.",
+                        },
+                        "since_day": {
+                            "type": "integer",
+                            "description": "Optional lower bound on created simulation day.",
+                        },
+                    },
+                    required=["shop_id"],
+                    shop_id=shop_id,
+                ),
+            ),
+            lambda arguments, *, store=memory: {
+                "count": len(
+                    entries := store.read_workspace_entries(
+                        shop_id=_bound_shop_id(arguments, shop_id),
+                        limit=arguments.get("limit", 5),
+                        tag=arguments.get("tag"),
+                        since_day=arguments.get("since_day"),
+                    )
+                ),
+                "journal_entries": [entry.to_payload() for entry in entries],
+            },
+        )
 
     registry.register(
         ToolManifestEntry(
