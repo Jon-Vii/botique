@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 
 export function useActiveListings(params?: Parameters<typeof api.getActiveListings>[0]) {
@@ -93,6 +93,136 @@ export function useAdvanceDay() {
       qc.invalidateQueries({ queryKey: ["world-state"] });
       qc.invalidateQueries({ queryKey: ["listings"] });
       qc.invalidateQueries({ queryKey: ["shop"] });
+    },
+  });
+}
+
+/* ── Run Explorer ── */
+
+export function useRunList() {
+  return useQuery({
+    queryKey: ["runs"],
+    queryFn: () => api.getRunList(),
+  });
+}
+
+export function useRunSummary(runId: string) {
+  return useQuery({
+    queryKey: ["runs", runId, "summary"],
+    queryFn: () => api.getRunSummary(runId),
+    enabled: !!runId,
+  });
+}
+
+export function useRunSummaries(runIds: string[]) {
+  return useQueries({
+    queries: runIds.map((runId) => ({
+      queryKey: ["runs", runId, "summary"],
+      queryFn: () => api.getRunSummary(runId),
+      enabled: !!runId,
+    })),
+  });
+}
+
+export function useRunManifest(runId: string) {
+  return useQuery({
+    queryKey: ["runs", runId, "manifest"],
+    queryFn: () => api.getRunManifest(runId),
+    enabled: !!runId,
+  });
+}
+
+export function useRunDaySnapshots(runId: string) {
+  return useQuery({
+    queryKey: ["runs", runId, "days"],
+    queryFn: () => api.getRunDaySnapshots(runId),
+    enabled: !!runId,
+  });
+}
+
+export function useRunDayBriefing(runId: string, day: number) {
+  return useQuery({
+    queryKey: ["runs", runId, "day", day, "briefing"],
+    queryFn: () => api.getRunDayBriefing(runId, day),
+    enabled: !!runId && day > 0,
+  });
+}
+
+export function useRunDayTurns(runId: string, day: number) {
+  return useQuery({
+    queryKey: ["runs", runId, "day", day, "turns"],
+    queryFn: () => api.getRunDayTurns(runId, day),
+    enabled: !!runId && day > 0,
+  });
+}
+
+export function useRunMemoryNotes(runId: string) {
+  return useQuery({
+    queryKey: ["runs", runId, "memory", "notes"],
+    queryFn: () => api.getRunMemoryNotes(runId),
+    enabled: !!runId,
+  });
+}
+
+export function useRunMemoryReminders(runId: string) {
+  return useQuery({
+    queryKey: ["runs", runId, "memory", "reminders"],
+    queryFn: () => api.getRunMemoryReminders(runId),
+    enabled: !!runId,
+  });
+}
+
+/* ── Tournaments ── */
+
+export function useTournamentList() {
+  return useQuery({
+    queryKey: ["tournaments"],
+    queryFn: () => api.getTournamentList(),
+  });
+}
+
+export function useTournamentResult(tournamentId: string) {
+  return useQuery({
+    queryKey: ["tournaments", tournamentId],
+    queryFn: () => api.getTournamentResult(tournamentId),
+    enabled: !!tournamentId,
+  });
+}
+
+/* ── Operator Controls ── */
+
+export function useResetWorld() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.resetWorld(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["simulation"] });
+      qc.invalidateQueries({ queryKey: ["world-state"] });
+      qc.invalidateQueries({ queryKey: ["listings"] });
+      qc.invalidateQueries({ queryKey: ["shop"] });
+      qc.invalidateQueries({ queryKey: ["runs"] });
+    },
+  });
+}
+
+export function useLaunchRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Parameters<typeof api.launchRun>[0]) =>
+      api.launchRun(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["runs"] });
+    },
+  });
+}
+
+export function useLaunchTournament() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Parameters<typeof api.launchTournament>[0]) =>
+      api.launchTournament(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tournaments"] });
     },
   });
 }
