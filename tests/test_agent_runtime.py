@@ -574,7 +574,7 @@ class ToolRegistryTests(unittest.TestCase):
                 ("get_reviews", {"shop_id": 7, "limit": 3, "offset": 0}),
                 ("get_payments", {"shop_id": 7}),
                 ("get_capacity_status", {"shop_id": 7}),
-                ("get_listing", {"shop_id": 7, "listing_id": 2001}),
+                ("get_listing", {"listing_id": 2001}),
                 ("get_reviews", {"shop_id": 7, "listing_id": 2001, "limit": 3, "offset": 0}),
                 ("get_capacity_status", {"shop_id": 7}),
                 ("queue_production", {"listing_id": 2001, "units": 2, "shop_id": 7}),

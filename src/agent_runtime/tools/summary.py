@@ -373,7 +373,7 @@ def _get_listing_details(
     listing = _call_tool(
         client,
         "get_listing",
-        {"shop_id": shop_id, "listing_id": listing_id},
+        {"listing_id": listing_id},
     )
     reviews = _page_results(
         _call_tool(
