@@ -1,11 +1,13 @@
-import { execFile } from "node:child_process";
-import { access, mkdir, readdir, readFile, stat } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { access, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import { z } from "zod";
 
 import { BadRequestError, NotFoundError } from "../errors";
+import type { SimulationModule } from "../simulation/world-simulation";
+import type { StoredWorldState } from "../simulation/state-types";
 import {
   dayBriefingSchema,
   daySnapshotListSchema,
@@ -15,8 +17,11 @@ import {
   runLaunchResponseSchema,
   runListEntrySchema,
   runManifestSchema,
+  runProgressSchema,
   runSummarySchema,
   turnRecordListSchema,
+  workspaceRevisionListSchema,
+  workspaceSchema,
 } from "../schemas/control";
 
 const execFileAsync = promisify(execFile);
@@ -24,6 +29,7 @@ const execFileAsync = promisify(execFile);
 type RunLaunchRequest = z.infer<typeof runLaunchRequestSchema>;
 type RunLaunchResponse = z.infer<typeof runLaunchResponseSchema>;
 type RunListEntry = z.infer<typeof runListEntrySchema>;
+type RunProgress = z.infer<typeof runProgressSchema>;
 type RunSummary = z.infer<typeof runSummarySchema>;
 type RunManifest = z.infer<typeof runManifestSchema>;
 type DaySnapshot = z.infer<typeof daySnapshotListSchema>[number];
@@ -31,6 +37,8 @@ type DayBriefing = z.infer<typeof dayBriefingSchema>;
 type TurnRecord = z.infer<typeof turnRecordListSchema>[number];
 type MemoryNote = z.infer<typeof memoryNoteListSchema>[number];
 type MemoryReminder = z.infer<typeof memoryReminderListSchema>[number];
+type Workspace = z.infer<typeof workspaceSchema>;
+type WorkspaceRevision = z.infer<typeof workspaceRevisionListSchema>[number];
 
 type RunControlServiceOptions = {
   artifactsRoot?: string;
@@ -63,6 +71,7 @@ export class RunControlService {
     await mkdir(this.artifactsRoot, { recursive: true });
     const entries = await readdir(this.artifactsRoot, { withFileTypes: true });
     const runs: RunListEntry[] = [];
+    const completedRunIds = new Set<string>();
 
     for (const entry of entries) {
       if (!entry.isDirectory()) {
@@ -73,22 +82,59 @@ export class RunControlService {
         continue;
       }
 
-      runs.push(
-        runListEntrySchema.parse({
-          run_id: artifact.summary.run_id,
-          shop_id: artifact.summary.shop_id,
-          mode: artifact.summary.mode,
-          day_count: artifact.summary.day_count,
-          scenario: extractRunScenario(artifact.summary),
-          identity: extractRunIdentity(artifact.manifest, artifact.summary),
-          has_summary: true,
-          has_manifest: artifact.manifest !== null,
-          created_at: artifact.createdAt,
-        }),
+      const normalized = normalizeRunListEntryPayload(
+        artifact.summary,
+        artifact.manifest,
+        artifact.createdAt,
       );
+      if (normalized) {
+        runs.push(runListEntrySchema.parse(normalized));
+        completedRunIds.add(normalized.run_id);
+      }
     }
 
-    return runs.sort((left, right) => (right.created_at ?? "").localeCompare(left.created_at ?? ""));
+    // Detect in-progress runs (have progress.json but no summary.json)
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const dir = join(this.artifactsRoot, entry.name);
+      const hasSummary = await this.pathExists(join(dir, "summary.json"));
+      if (hasSummary) continue;
+      const progress = await this.readJsonSafe(join(dir, "progress.json"));
+      if (!progress || typeof progress !== "object") continue;
+      const runId = progress.run_id;
+      if (typeof runId !== "string" || completedRunIds.has(runId)) continue;
+
+      runs.push(runListEntrySchema.parse({
+        run_id: runId,
+        shop_id: typeof progress.shop_id === "number" ? progress.shop_id : 1,
+        mode: "live" as const,
+        day_count: progress.total_days ?? 1,
+        has_summary: false,
+        has_manifest: false,
+        created_at: progress.updated_at ?? new Date().toISOString(),
+        status: progress.status ?? "running",
+        completed_day_count: progress.completed_day_count ?? 0,
+      }));
+    }
+
+    // Sort: running runs first, then by created_at descending
+    return runs.sort((left, right) => {
+      const leftRunning = left.status === "running" ? 0 : 1;
+      const rightRunning = right.status === "running" ? 0 : 1;
+      if (leftRunning !== rightRunning) return leftRunning - rightRunning;
+      return (right.created_at ?? "").localeCompare(left.created_at ?? "");
+    });
+  }
+
+  async getRunProgress(runId: string): Promise<RunProgress | null> {
+    const progressPath = join(this.artifactsRoot, runId, "progress.json");
+    const progress = await this.readJsonSafe(progressPath);
+    if (!progress || typeof progress !== "object") return null;
+    try {
+      return runProgressSchema.parse(progress);
+    } catch {
+      return null;
+    }
   }
 
   async getRunSummary(runId: string): Promise<RunSummary> {
@@ -144,6 +190,36 @@ export class RunControlService {
     return memoryReminderListSchema.parse(reminders.map(normalizeReminderPayload));
   }
 
+  async getRunWorkspace(runId: string): Promise<Workspace> {
+    const artifactDir = await this.findRunArtifactDir(runId);
+    const workspace = await this.readJsonSafe(join(artifactDir, "memory", "workspace.json"));
+    if (workspace === null || typeof workspace !== "object") {
+      return null;
+    }
+    return workspaceSchema.parse(workspace);
+  }
+
+  async getRunWorkspaceRevisions(runId: string): Promise<WorkspaceRevision[]> {
+    const artifactDir = await this.findRunArtifactDir(runId);
+    const revisions = await this.readJsonSafe(join(artifactDir, "memory", "workspace_revisions.json"));
+    if (!Array.isArray(revisions)) {
+      return [];
+    }
+    return workspaceRevisionListSchema.parse(revisions);
+  }
+
+  private activeRuns = new Map<string, { status: "running" | "completed" | "failed"; error?: string }>();
+
+  getRunStatus(runId: string): "running" | "completed" | "failed" | "unknown" {
+    return this.activeRuns.get(runId)?.status ?? "unknown";
+  }
+
+  getRunStatusInfo(runId: string): { status: string; error?: string } {
+    const info = this.activeRuns.get(runId);
+    if (!info) return { status: "unknown" };
+    return { status: info.status, ...(info.error ? { error: info.error } : {}) };
+  }
+
   async launchRun(request: RunLaunchRequest): Promise<RunLaunchResponse> {
     const payload = runLaunchRequestSchema.parse(request);
     const runId = payload.run_id?.trim() || `run_${Date.now()}`;
@@ -177,31 +253,163 @@ export class RunControlService {
       args.push("--scenario", scenarioId);
     }
 
-    try {
-      const { stdout, stderr } = await execFileAsync(this.runtimeCliPath, args, {
-        cwd: process.cwd(),
-        env: process.env,
-        encoding: "utf-8",
-        maxBuffer: 10 * 1024 * 1024,
-      });
-      const raw = stdout.trim();
-      if (!raw) {
-        throw new BadRequestError(`Run runtime produced no output.${stderr ? ` ${stderr}` : ""}`);
-      }
-      const response = JSON.parse(raw) as { ok?: boolean; error?: { message?: string } };
-      if (!response.ok) {
-        throw new BadRequestError(response.error?.message ?? "Run launch failed.");
-      }
-
-      await access(join(outputDir, "summary.json"));
-      return runLaunchResponseSchema.parse({ run_id: runId });
-    } catch (error) {
-      if (error instanceof BadRequestError) {
-        throw error;
-      }
-      const message = error instanceof Error ? error.message : "Run launch failed.";
-      throw new BadRequestError(message);
+    const env = { ...process.env };
+    if (payload.api_key) {
+      env.MISTRAL_API_KEY = payload.api_key;
     }
+
+    // Fire-and-forget: spawn the process in the background, return immediately
+    this.activeRuns.set(runId, { status: "running" });
+
+    const child = spawn(this.runtimeCliPath, args, {
+      cwd: process.cwd(),
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: false,
+    });
+
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+    child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        try {
+          const response = JSON.parse(stdout.trim()) as { ok?: boolean; error?: { message?: string } };
+          if (response.ok) {
+            this.activeRuns.set(runId, { status: "completed" });
+          } else {
+            this.activeRuns.set(runId, {
+              status: "failed",
+              error: response.error?.message ?? "Run returned non-ok",
+            });
+          }
+        } catch {
+          this.activeRuns.set(runId, { status: "completed" });
+        }
+      } else {
+        // Try to parse structured error from stdout (the CLI outputs JSON on failure)
+        let errorMsg = stderr.trim().slice(0, 500) || `Process exited with code ${code}`;
+        try {
+          const parsed = JSON.parse(stdout.trim());
+          if (parsed?.error?.message) errorMsg = parsed.error.message;
+        } catch { /* ignore */ }
+        this.activeRuns.set(runId, { status: "failed", error: errorMsg });
+      }
+    });
+
+    child.on("error", (err) => {
+      this.activeRuns.set(runId, { status: "failed", error: err.message });
+    });
+
+    return runLaunchResponseSchema.parse({ run_id: runId });
+  }
+
+  async simulateRun(
+    simulation: SimulationModule,
+    options: { shop_id: number; days: number; scenario_id?: "operate" | "bootstrap" },
+  ): Promise<{ run_id: string }> {
+    const runId = `sim_${Date.now().toString(36)}`;
+    const shopId = options.shop_id;
+
+    // Reset world with scenario
+    await simulation.resetWorld({
+      scenario_id: options.scenario_id,
+      controlled_shop_ids: [shopId],
+    });
+
+    const startWorld = await simulation.getWorldState();
+    const startState = extractShopSnapshot(startWorld, shopId);
+    const days: any[] = [];
+
+    let previousBalance = startState.available_balance;
+
+    for (let i = 0; i < options.days; i++) {
+      // Don't mark shop as controlled — no agent is running, so NPC auto-replenishment should kick in
+      const result = await simulation.advanceDay({});
+      const world = result.world;
+      const snapshot = extractShopSnapshot(world, shopId);
+      const yesterdayRevenue = Math.max(snapshot.available_balance - previousBalance, 0);
+      previousBalance = snapshot.available_balance;
+
+      days.push({
+        day: snapshot.day,
+        simulation_date: snapshot.simulation_date,
+        state_before: i === 0 ? startState : days[i - 1].state_after,
+        state_after: snapshot,
+        state_next_day: snapshot,
+        turn_count: 0,
+        yesterday_revenue: yesterdayRevenue,
+        tool_calls: [],
+      });
+    }
+
+    const endState = days.length > 0 ? days[days.length - 1].state_after : startState;
+    const scenario = options.scenario_id
+      ? { scenario_id: options.scenario_id, controlled_shop_ids: [shopId] }
+      : { scenario_id: "operate" as const, controlled_shop_ids: [shopId] };
+
+    const summary = {
+      run_id: runId,
+      shop_id: shopId,
+      mode: "live",
+      day_count: options.days,
+      scenario,
+      identity: { provider: "simulation", model: "demand-model" },
+      start_day: startState.day ?? 1,
+      end_day: endState.day ?? options.days,
+      start_simulation_date: startState.simulation_date ?? "",
+      end_simulation_date: endState.simulation_date ?? "",
+      starting_state: startState,
+      ending_state: endState,
+      totals: {
+        tool_call_count: 0,
+        tool_calls_by_name: {},
+        tool_calls_by_surface: {},
+        turn_count: 0,
+        yesterday_revenue: days.reduce((sum, d) => sum + d.yesterday_revenue, 0),
+        notes_written: 0,
+        reminders_set: 0,
+        reminders_completed: 0,
+        simulation_advances: options.days,
+      },
+      memory: { note_count: 0, reminder_count: 0, pending_reminder_count: 0 },
+      days,
+    };
+
+    const manifest = {
+      artifact_version: 1,
+      run_id: runId,
+      shop_id: shopId,
+      mode: "live",
+      day_count: options.days,
+      generated_at: new Date().toISOString(),
+      invocation: {
+        command: "simulate",
+        days: options.days,
+        shop_id: shopId,
+        run_id: runId,
+        provider: "simulation",
+        model: "demand-model",
+        scenario_id: options.scenario_id ?? "operate",
+      },
+    };
+
+    // Write artifacts
+    const outputDir = join(this.artifactsRoot, runId);
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(join(outputDir, "summary.json"), JSON.stringify(summary, null, 2));
+    await writeFile(join(outputDir, "manifest.json"), JSON.stringify(manifest, null, 2));
+
+    // Write day subdirectories
+    for (const day of days) {
+      const dayDir = join(outputDir, "days", formatDayDirectory(day.day));
+      await mkdir(dayDir, { recursive: true });
+      await writeFile(join(dayDir, "record.json"), JSON.stringify(day, null, 2));
+    }
+
+    return { run_id: runId };
   }
 
   private async getRunArtifact(runId: string): Promise<RunArtifact> {
@@ -303,34 +511,48 @@ function formatDayDirectory(day: number): string {
 function normalizeRunSummaryPayload(summary: any, manifest: any | null) {
   const scenario = extractRunScenario(summary);
   const identity = extractRunIdentity(manifest, summary);
+  const dayCount = getRunDayCount(summary, manifest);
+  const startDay = getRunStartDay(summary);
+  const endDay = getRunEndDay(summary, dayCount, startDay);
+  const startDate = getRunStartSimulationDate(summary);
+  const endDate = getRunEndSimulationDate(summary, startDate);
+  const startingState = normalizeStartingState(summary, startDate, startDay);
+  const endingState = normalizeEndingState(summary, endDate, endDay);
 
   return {
     run_id: summary.run_id,
     shop_id: summary.shop_id,
-    mode: summary.mode,
-    day_count: summary.day_count,
+    mode: getRunMode(summary),
+    day_count: dayCount,
     scenario,
     identity,
-    start_day: summary.start_day,
-    end_day: summary.end_day,
-    start_simulation_date: summary.start_simulation_date,
-    end_simulation_date: summary.end_simulation_date,
-    starting_state: summary.starting_state,
-    ending_state: summary.ending_state,
+    start_day: startDay,
+    end_day: endDay,
+    start_simulation_date: startDate,
+    end_simulation_date: endDate,
+    starting_state: startingState,
+    ending_state: endingState,
     totals: {
-      tool_call_count: summary?.totals?.tool_call_count ?? 0,
-      tool_calls_by_name: summary?.totals?.tool_calls_by_name ?? {},
+      tool_call_count: summary?.totals?.tool_call_count ?? summarizeLegacyActionCount(summary),
+      tool_calls_by_name:
+        summary?.totals?.tool_calls_by_name ?? summarizeLegacyToolCalls(summary),
       tool_calls_by_surface: summary?.totals?.tool_calls_by_surface ?? {},
-      turn_count: summary?.totals?.turn_count ?? 0,
-      yesterday_revenue: summary?.totals?.yesterday_revenue ?? 0,
-      notes_written: summary?.totals?.workspace_entries_added ?? 0,
-      reminders_set: summary?.totals?.reminders_set ?? 0,
+      turn_count: summary?.totals?.turn_count ?? summarizeLegacyTurnCount(summary),
+      yesterday_revenue:
+        summary?.totals?.yesterday_revenue ?? summarizeLegacyYesterdayRevenue(summary),
+      notes_written:
+        summary?.totals?.workspace_entries_added ?? normalizeNonNegativeInteger(summary?.note_count) ?? 0,
+      reminders_set:
+        summary?.totals?.reminders_set ?? normalizeNonNegativeInteger(summary?.reminder_count) ?? 0,
       reminders_completed: summary?.totals?.reminders_completed ?? 0,
-      simulation_advances: summary?.totals?.simulation_advances ?? 0,
+      simulation_advances:
+        summary?.totals?.simulation_advances ?? Math.max(dayCount - 1, 0),
     },
     memory: {
-      note_count: summary?.memory?.workspace_entry_count ?? 0,
-      reminder_count: summary?.memory?.reminder_count ?? 0,
+      note_count:
+        summary?.memory?.workspace_entry_count ?? normalizeNonNegativeInteger(summary?.note_count) ?? 0,
+      reminder_count:
+        summary?.memory?.reminder_count ?? normalizeNonNegativeInteger(summary?.reminder_count) ?? 0,
       pending_reminder_count: summary?.memory?.pending_reminder_count ?? 0,
     },
   };
@@ -348,14 +570,14 @@ function normalizeRunManifestPayload(manifest: any, summary: any) {
     artifact_version: manifest?.artifact_version ?? 1,
     run_id: manifest?.run_id ?? summary?.run_id,
     shop_id: manifest?.shop_id ?? summary?.shop_id,
-    mode: manifest?.mode ?? summary?.mode ?? "live",
-    day_count: manifest?.day_count ?? summary?.day_count ?? 0,
+    mode: manifest?.mode ?? getRunMode(summary),
+    day_count: getRunDayCount(summary, manifest),
     scenario,
     identity,
     invocation: {
       ...rawInvocation,
       command: rawInvocation.command ?? "run-days",
-      days: rawInvocation.days ?? summary?.day_count ?? 0,
+      days: rawInvocation.days ?? getRunDayCount(summary, manifest),
       max_turns: rawInvocation.max_turns ?? rawInvocation.turns_per_day ?? null,
       turns_per_day: rawInvocation.turns_per_day ?? rawInvocation.max_turns ?? null,
       shop_id: rawInvocation.shop_id ?? String(summary?.shop_id ?? ""),
@@ -381,6 +603,35 @@ function normalizeRunManifestPayload(manifest: any, summary: any) {
   };
 }
 
+function normalizeRunListEntryPayload(
+  summary: any,
+  manifest: any | null,
+  createdAt: string,
+) {
+  const runId =
+    typeof summary?.run_id === "string" && summary.run_id.trim()
+      ? summary.run_id
+      : undefined;
+  const shopId = normalizePositiveInteger(summary?.shop_id);
+  const dayCount = getRunDayCount(summary, manifest);
+
+  if (!runId || !shopId || !dayCount) {
+    return undefined;
+  }
+
+  return {
+    run_id: runId,
+    shop_id: shopId,
+    mode: getRunMode(summary),
+    day_count: dayCount,
+    scenario: extractRunScenario(summary),
+    identity: extractRunIdentity(manifest, summary),
+    has_summary: true,
+    has_manifest: manifest !== null,
+    created_at: createdAt,
+  };
+}
+
 function normalizeDaySnapshotPayload(day: any) {
   const state = day?.state_after ?? day?.state_before ?? day?.state_next_day;
   return {
@@ -395,6 +646,7 @@ function normalizeDaySnapshotPayload(day: any) {
     review_count: state?.review_count ?? 0,
     turn_count: day?.turn_count,
     yesterday_revenue: day?.yesterday_revenue ?? 0,
+    tool_calls: Array.isArray(day?.tool_calls) ? day.tool_calls : [],
   };
 }
 
@@ -582,4 +834,205 @@ function normalizeNumber(value: unknown): number | undefined {
     return Number.isFinite(parsed) ? parsed : undefined;
   }
   return undefined;
+}
+
+function normalizeNonNegativeInteger(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function getLegacyDays(summary: any): any[] {
+  return Array.isArray(summary?.days) ? summary.days : [];
+}
+
+function getRunDayCount(summary: any, manifest: any | null): number {
+  return (
+    normalizePositiveInteger(summary?.day_count) ??
+    normalizePositiveInteger(manifest?.day_count) ??
+    normalizePositiveInteger(manifest?.invocation?.days) ??
+    getLegacyDays(summary).length ??
+    1
+  );
+}
+
+function getRunMode(summary: any): "live" | "mock" {
+  return summary?.mode === "mock" ? "mock" : "live";
+}
+
+function getRunStartDay(summary: any): number {
+  const days = getLegacyDays(summary);
+  return (
+    normalizePositiveInteger(summary?.start_day) ??
+    normalizePositiveInteger(days[0]?.day) ??
+    normalizePositiveInteger(summary?.starting_state?.day) ??
+    normalizePositiveInteger(summary?.final_state?.day) ??
+    1
+  );
+}
+
+function getRunEndDay(summary: any, dayCount: number, startDay: number): number {
+  const days = getLegacyDays(summary);
+  return (
+    normalizePositiveInteger(summary?.end_day) ??
+    normalizePositiveInteger(days.at(-1)?.day) ??
+    normalizePositiveInteger(summary?.ending_state?.day) ??
+    normalizePositiveInteger(summary?.final_state?.day) ??
+    Math.max(startDay + dayCount - 1, startDay)
+  );
+}
+
+function getRunStartSimulationDate(summary: any): string {
+  const days = getLegacyDays(summary);
+  return (
+    readString(summary?.start_simulation_date) ??
+    readString(summary?.starting_state?.simulation_date) ??
+    readString(days[0]?.simulation_date) ??
+    readString(summary?.end_simulation_date) ??
+    readString(summary?.ending_state?.simulation_date) ??
+    readString(summary?.final_state?.simulation_date) ??
+    new Date(0).toISOString()
+  );
+}
+
+function getRunEndSimulationDate(summary: any, fallback: string): string {
+  const days = getLegacyDays(summary);
+  return (
+    readString(summary?.end_simulation_date) ??
+    readString(summary?.ending_state?.simulation_date) ??
+    readString(summary?.final_state?.simulation_date) ??
+    readString(days.at(-1)?.simulation_date) ??
+    fallback
+  );
+}
+
+function normalizeStartingState(summary: any, simulationDate: string, day: number) {
+  if (summary?.starting_state && typeof summary.starting_state === "object") {
+    return summary.starting_state;
+  }
+
+  const firstDay = getLegacyDays(summary)[0];
+  return {
+    available_balance: normalizeNumber(firstDay?.balance_before) ?? 0,
+    currency_code: readString(summary?.final_state?.currency_code) ?? "USD",
+    active_listing_count: normalizeNonNegativeInteger(firstDay?.active_before) ?? 0,
+    draft_listing_count: normalizeNonNegativeInteger(firstDay?.draft_before) ?? 0,
+    total_sales_count: 0,
+    review_average: normalizeNumber(summary?.final_state?.review_average) ?? 0,
+    review_count: normalizeNonNegativeInteger(summary?.final_state?.review_count) ?? 0,
+    simulation_date: simulationDate,
+    day,
+  };
+}
+
+function normalizeEndingState(summary: any, simulationDate: string, day: number) {
+  if (summary?.ending_state && typeof summary.ending_state === "object") {
+    return summary.ending_state;
+  }
+
+  const finalState =
+    summary?.final_state && typeof summary.final_state === "object"
+      ? summary.final_state
+      : {};
+  return {
+    available_balance: normalizeNumber(finalState.available_balance) ?? 0,
+    currency_code: readString(finalState.currency_code) ?? "USD",
+    active_listing_count: normalizeNonNegativeInteger(finalState.active_listing_count) ?? 0,
+    draft_listing_count: normalizeNonNegativeInteger(finalState.draft_listing_count) ?? 0,
+    total_sales_count: normalizeNonNegativeInteger(finalState.total_sales_count) ?? 0,
+    review_average: normalizeNumber(finalState.review_average) ?? 0,
+    review_count: normalizeNonNegativeInteger(finalState.review_count) ?? 0,
+    simulation_date: simulationDate,
+    day,
+  };
+}
+
+function summarizeLegacyActionCount(summary: any): number {
+  return getLegacyDays(summary).reduce((total, day) => {
+    if (Array.isArray(day?.actions)) {
+      return total + day.actions.length;
+    }
+    return total + (normalizeNonNegativeInteger(day?.turns_used) ?? 0);
+  }, 0);
+}
+
+function summarizeLegacyTurnCount(summary: any): number {
+  return getLegacyDays(summary).reduce(
+    (total, day) =>
+      total +
+      (normalizeNonNegativeInteger(day?.turns_used) ??
+        (Array.isArray(day?.actions) ? day.actions.length : 0)),
+    0,
+  );
+}
+
+function summarizeLegacyToolCalls(summary: any): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const day of getLegacyDays(summary)) {
+    if (!Array.isArray(day?.actions)) {
+      continue;
+    }
+    for (const action of day.actions) {
+      if (typeof action !== "string" || !action.trim()) {
+        continue;
+      }
+      counts[action] = (counts[action] ?? 0) + 1;
+    }
+  }
+  return counts;
+}
+
+function summarizeLegacyYesterdayRevenue(summary: any): number {
+  const lastDay = getLegacyDays(summary).at(-1);
+  const after = normalizeNumber(lastDay?.balance_after);
+  const before = normalizeNumber(lastDay?.balance_before);
+  if (after !== undefined && before !== undefined) {
+    return Math.max(after - before, 0);
+  }
+  return 0;
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function extractShopSnapshot(world: StoredWorldState, shopId: number) {
+  const shop = world.marketplace.shops.find((s) => s.shop_id === shopId);
+  const listings = world.marketplace.listings.filter((l) => l.shop_id === shopId);
+  const orders = world.marketplace.orders.filter((o) => o.shop_id === shopId);
+  const reviews = world.marketplace.reviews.filter((r) => r.shop_id === shopId);
+  const payments = world.marketplace.payments.filter((p) => p.shop_id === shopId);
+
+  const activeCount = listings.filter((l) => l.state === "active").length;
+  const draftCount = listings.filter((l) => l.state === "draft").length;
+
+  const postedTotal = payments
+    .filter((p) => p.status === "posted")
+    .reduce((sum, p) => sum + p.amount, 0);
+
+  const materialCosts = shop?.material_costs_paid_total ?? 0;
+  const seedCapital = shop?.seed_capital ?? 0;
+  const availableBalance = Number((postedTotal + seedCapital - materialCosts).toFixed(2));
+
+  const ratings = reviews.map((r) => r.rating).filter((r): r is number => typeof r === "number");
+  const reviewAverage = ratings.length > 0
+    ? Number((ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(2))
+    : 0;
+
+  return {
+    day: world.simulation.current_day.day,
+    simulation_date: world.simulation.current_day.date,
+    available_balance: availableBalance,
+    currency_code: shop?.currency_code ?? "USD",
+    active_listing_count: activeCount,
+    draft_listing_count: draftCount,
+    total_sales_count: orders.length,
+    review_average: reviewAverage,
+    review_count: reviews.length,
+  };
 }

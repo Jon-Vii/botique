@@ -18,7 +18,8 @@ export const simulationDaySchema = z.object({
 
 export const simulationScenarioSchema = z.object({
   scenario_id: z.enum(["operate", "bootstrap"]),
-  controlled_shop_ids: z.array(z.number().int().positive())
+  controlled_shop_ids: z.array(z.number().int().positive()),
+  seed_capital: z.number().nonnegative().optional()
 });
 
 export const marketTrendSchema = z.object({
@@ -140,7 +141,8 @@ export const advanceDayRequestSchema = z.object({
 
 export const resetWorldRequestSchema = z.object({
   scenario_id: z.enum(["operate", "bootstrap"]).optional(),
-  controlled_shop_ids: z.array(z.number().int().positive()).optional()
+  controlled_shop_ids: z.array(z.number().int().positive()).optional(),
+  seed_capital: z.number().nonnegative().optional()
 });
 
 export const runLaunchRequestSchema = z.object({
@@ -152,10 +154,21 @@ export const runLaunchRequestSchema = z.object({
   provider: z.string().min(1),
   scenario: z.enum(["operate", "bootstrap"]).optional(),
   scenario_id: z.enum(["operate", "bootstrap"]).optional(),
+  api_key: z.string().min(1).optional(),
 });
 
 export const runLaunchResponseSchema = z.object({
   run_id: z.string().min(1)
+});
+
+export const simulateRunRequestSchema = z.object({
+  shop_id: z.number().int().positive(),
+  days: z.number().int().positive().max(365),
+  scenario_id: z.enum(["operate", "bootstrap"]).optional(),
+});
+
+export const simulateRunResponseSchema = z.object({
+  run_id: z.string().min(1),
 });
 
 export const shopStateSnapshotSchema = z.object({
@@ -253,9 +266,33 @@ export const runListEntrySchema = z.object({
   identity: runIdentitySchema.optional(),
   has_summary: z.boolean(),
   has_manifest: z.boolean(),
-  created_at: z.string().optional()
+  created_at: z.string().optional(),
+  status: z.enum(["running", "completed", "failed"]).optional(),
+  completed_day_count: z.number().int().nonnegative().optional(),
 });
 export const runListSchema = z.array(runListEntrySchema);
+
+export const runProgressDaySchema = z.object({
+  day: z.number().int().nonnegative(),
+  simulation_date: z.string().nullable().optional(),
+  turn_count: z.number().int().nonnegative(),
+  tool_calls: z.array(z.string()),
+  available_balance: z.number(),
+  active_listing_count: z.number().int().nonnegative(),
+  total_sales_count: z.number().int().nonnegative(),
+  review_average: z.number(),
+  review_count: z.number().int().nonnegative(),
+});
+
+export const runProgressSchema = z.object({
+  run_id: z.string().min(1),
+  shop_id: z.number().int().positive(),
+  status: z.enum(["running", "completed", "failed"]),
+  total_days: z.number().int().positive(),
+  completed_day_count: z.number().int().nonnegative(),
+  updated_at: z.string(),
+  days: z.array(runProgressDaySchema),
+});
 
 export const daySnapshotSchema = z.object({
   day: z.number().int().positive(),
@@ -268,7 +305,8 @@ export const daySnapshotSchema = z.object({
   review_average: z.number(),
   review_count: z.number().int().nonnegative(),
   turn_count: z.number().int().nonnegative().optional(),
-  yesterday_revenue: z.number().optional()
+  yesterday_revenue: z.number().optional(),
+  tool_calls: z.array(z.string()).optional()
 });
 
 export const daySnapshotListSchema = z.array(daySnapshotSchema);
@@ -380,6 +418,18 @@ export const memoryReminderSchema = z.object({
 export const memoryNoteListSchema = z.array(memoryNoteSchema);
 export const memoryReminderListSchema = z.array(memoryReminderSchema);
 
+export const workspaceRevisionSchema = z.object({
+  shop_id: z.union([z.number(), z.string()]),
+  content: z.string(),
+  revision: z.number().int().positive(),
+  updated_day: z.number().int().nonnegative().nullable(),
+  is_truncated: z.boolean().optional(),
+  updated_at: z.string()
+});
+
+export const workspaceSchema = workspaceRevisionSchema.nullable();
+export const workspaceRevisionListSchema = z.array(workspaceRevisionSchema);
+
 export const tournamentEntrantSchema = z.object({
   entrant_id: z.string().min(1),
   display_name: z.string().min(1),
@@ -394,7 +444,8 @@ export const tournamentLaunchRequestSchema = z.object({
   rounds: z.number().int().positive(),
   turns_per_day: z.number().int().positive(),
   scenario_id: z.enum(["operate", "bootstrap"]).optional(),
-  run_id: z.string().min(1).optional()
+  run_id: z.string().min(1).optional(),
+  api_key: z.string().min(1).optional(),
 });
 
 export const tournamentLaunchResponseSchema = z.object({
@@ -432,8 +483,9 @@ export const tournamentShopAssignmentSchema = z.object({
 });
 
 export const tournamentEntrantDayResultSchema = z.object({
-  entrant_id: z.string().min(1),
-  live_day: z.number().int().positive()
+  entrant: tournamentEntrantSchema.optional(),
+  entrant_id: z.string().min(1).optional(),
+  live_day: z.number().int().nonnegative()
 });
 
 export const tournamentRoundDayResultSchema = z.object({
@@ -443,12 +495,19 @@ export const tournamentRoundDayResultSchema = z.object({
   entrant_results: z.array(tournamentEntrantDayResultSchema)
 });
 
+export const tournamentBalancePointSchema = z.object({
+  entrant_id: z.string().min(1),
+  day: z.number().int().nonnegative(),
+  balance: z.number(),
+});
+
 export const tournamentRoundResultSchema = z.object({
   round_index: z.number().int().nonnegative(),
   run_id: z.string().min(1),
   shop_assignments: z.array(tournamentShopAssignmentSchema),
   days: z.array(tournamentRoundDayResultSchema),
-  standings: z.array(tournamentStandingSchema)
+  standings: z.array(tournamentStandingSchema),
+  balance_timeline: z.array(tournamentBalancePointSchema).optional(),
 });
 
 export const tournamentAggregateStandingSchema = z.object({
@@ -482,7 +541,8 @@ export const tournamentListItemSchema = z.object({
   days_per_round: z.number().int().positive(),
   created_at: z.string(),
   status: z.enum(["running", "completed", "failed"]),
-  winner: tournamentEntrantSchema.optional()
+  winner: tournamentEntrantSchema.optional(),
+  entrants: z.array(tournamentEntrantSchema).optional()
 });
 
 export const tournamentListSchema = z.array(tournamentListItemSchema);

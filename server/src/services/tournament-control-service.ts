@@ -63,7 +63,8 @@ export class TournamentControlService {
   async getTournamentResult(tournamentId: string): Promise<TournamentResult> {
     const artifactDir = await this.findTournamentArtifactDir(tournamentId);
     const result = await this.readTournamentResult(artifactDir);
-    return tournamentResultSchema.parse(result);
+    const stripped = this.stripHeavyDayData(result);
+    return tournamentResultSchema.parse(stripped);
   }
 
   async launchTournament(request: TournamentLaunchRequest): Promise<TournamentLaunchResponse> {
@@ -102,9 +103,14 @@ export class TournamentControlService {
         args.push("--scenario", payload.scenario_id);
       }
 
+      const env = { ...process.env };
+      if (payload.api_key) {
+        env.MISTRAL_API_KEY = payload.api_key;
+      }
+
       const { stdout, stderr } = await execFileAsync(this.runtimeCliPath, args, {
         cwd: process.cwd(),
-        env: process.env,
+        env,
         encoding: "utf-8",
         maxBuffer: 10 * 1024 * 1024,
       });
@@ -125,8 +131,25 @@ export class TournamentControlService {
       if (error instanceof BadRequestError) {
         throw error;
       }
-      const message =
-        error instanceof Error ? error.message : "Tournament launch failed.";
+      // execFileAsync errors carry stdout/stderr with the real error details
+      const execError = error as { stdout?: string; stderr?: string; message?: string };
+      let message = "Tournament launch failed.";
+      if (execError.stdout) {
+        try {
+          const parsed = JSON.parse(execError.stdout.trim()) as { ok?: boolean; error?: { message?: string } };
+          if (parsed.error?.message) {
+            message = parsed.error.message;
+          }
+        } catch {
+          // stdout wasn't valid JSON — fall through
+        }
+      }
+      if (message === "Tournament launch failed." && execError.stderr) {
+        message = execError.stderr.trim().slice(0, 500) || message;
+      }
+      if (message === "Tournament launch failed." && execError.message) {
+        message = execError.message;
+      }
       throw new BadRequestError(message);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
@@ -156,9 +179,46 @@ export class TournamentControlService {
 
   private async readTournamentArtifact(
     artifactDir: string
-  ): Promise<{ listItem: TournamentListItem; result: TournamentResult } | null> {
+  ): Promise<{ listItem: TournamentListItem; result: TournamentResult | null } | null> {
     const manifest = await this.readTournamentManifest(artifactDir);
     const result = await this.readTournamentResultFileSafe(artifactDir, manifest);
+
+    // Try building list item from manifest summary first (fast, avoids parsing huge result.json)
+    const summary = manifest?.summary;
+    if (summary && typeof summary === "object" && summary.run_id) {
+      const generatedAt =
+        typeof manifest?.generated_at === "string"
+          ? manifest.generated_at
+          : (await stat(artifactDir)).mtime.toISOString();
+
+      const scenario =
+        summary.scenario ??
+        result?.scenario ??
+        this.scenarioFromManifest(manifest, summary);
+
+      if (!scenario) {
+        return null;
+      }
+
+      const winner = summary.winner ?? summary.standings?.[0]?.entrant ?? result?.standings[0]?.entrant;
+      const entrants = result?.entrants ?? summary.standings?.map((s: any) => s.entrant) ?? [];
+      const parsed = tournamentListItemSchema.safeParse({
+        run_id: summary.run_id,
+        scenario,
+        entrant_count: summary.entrant_count ?? result?.entrants?.length ?? 0,
+        round_count: summary.round_count ?? result?.round_count ?? 1,
+        days_per_round: summary.days_per_round ?? result?.days_per_round ?? 0,
+        created_at: generatedAt,
+        status: "completed",
+        winner: winner ?? undefined,
+        entrants: entrants.length > 0 ? entrants : undefined,
+      });
+      if (parsed.success) {
+        return { result, listItem: parsed.data };
+      }
+    }
+
+    // Fall back to building from full result
     if (result === null) {
       return null;
     }
@@ -180,6 +240,72 @@ export class TournamentControlService {
         created_at: generatedAt,
         status: "completed",
         winner: winner ?? undefined,
+        entrants: result.entrants,
+      }),
+    };
+  }
+
+  private scenarioFromManifest(manifest: any, summary: any): unknown | null {
+    const scenarioId =
+      typeof manifest?.invocation?.scenario_id === "string"
+        ? manifest.invocation.scenario_id
+        : typeof manifest?.invocation?.scenario === "string"
+          ? manifest.invocation.scenario
+          : null;
+    if (!scenarioId) return null;
+    return {
+      scenario_id: scenarioId,
+      controlled_shop_ids: Array.isArray(summary.shop_ids) ? summary.shop_ids : [],
+    };
+  }
+
+  /** Strip the massive per-day live_day traces to keep the API response small.
+   *  Extracts a lightweight balance_timeline per round for charting. */
+  private stripHeavyDayData(payload: unknown): unknown {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+    const value = payload as Record<string, unknown>;
+    if (!Array.isArray(value.rounds)) return payload;
+
+    return {
+      ...value,
+      rounds: (value.rounds as any[]).map((round: any) => {
+        const balanceTimeline: { entrant_id: string; day: number; balance: number }[] = [];
+
+        const days = Array.isArray(round.days)
+          ? round.days.map((day: any) => {
+              const entrant_results = Array.isArray(day.entrant_results)
+                ? day.entrant_results.map((er: any) => {
+                    const entrantId = er.entrant?.entrant_id ?? er.entrant_id;
+                    const liveDayObj = typeof er.live_day === "object" && er.live_day !== null ? er.live_day : null;
+                    const dayNum = liveDayObj?.day ?? (typeof er.live_day === "number" ? er.live_day : day.day);
+
+                    // Extract balance for timeline
+                    const balance = liveDayObj?.state_after?.balance_summary?.available;
+                    if (entrantId && typeof balance === "number") {
+                      balanceTimeline.push({ entrant_id: entrantId, day: dayNum, balance });
+                    }
+
+                    return {
+                      entrant: er.entrant,
+                      entrant_id: entrantId,
+                      live_day: dayNum,
+                    };
+                  })
+                : [];
+              return {
+                day: day.day,
+                simulation_date: day.simulation_date,
+                turn_order: day.turn_order,
+                entrant_results,
+              };
+            })
+          : [];
+
+        return {
+          ...round,
+          days,
+          balance_timeline: balanceTimeline,
+        };
       }),
     };
   }
@@ -210,7 +336,8 @@ export class TournamentControlService {
               await this.readTournamentResultFile(artifactDir),
               manifest,
             );
-      const parsed = tournamentResultSchema.safeParse(payload);
+      const stripped = this.stripHeavyDayData(payload);
+      const parsed = tournamentResultSchema.safeParse(stripped);
       return parsed.success ? parsed.data : null;
     } catch {
       return null;

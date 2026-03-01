@@ -18,12 +18,16 @@ import {
   runSummarySchema,
   simulationDaySchema,
   simulationScenarioSchema,
+  simulateRunRequestSchema,
+  simulateRunResponseSchema,
   turnRecordListSchema,
   tournamentLaunchRequestSchema,
   tournamentLaunchResponseSchema,
   tournamentListSchema,
   tournamentResultSchema,
   trendStateSchema,
+  workspaceRevisionListSchema,
+  workspaceSchema,
   worldStateInputSchema,
   worldStateSchema
 } from "../schemas/control";
@@ -163,11 +167,55 @@ export async function registerControlRoutes(
     )
   );
 
+  app.get("/runs/:runId/memory/workspace", async (request, reply) =>
+    sendValidated(
+      reply,
+      workspaceSchema,
+      await runService.getRunWorkspace((request.params as { runId: string }).runId)
+    )
+  );
+
+  app.get("/runs/:runId/memory/workspace/revisions", async (request, reply) =>
+    sendValidated(
+      reply,
+      workspaceRevisionListSchema,
+      await runService.getRunWorkspaceRevisions((request.params as { runId: string }).runId)
+    )
+  );
+
   app.post("/runs/launch", async (request, reply) =>
     sendValidated(
       reply,
       runLaunchResponseSchema,
       await runService.launchRun(runLaunchRequestSchema.parse(request.body ?? {})),
+      201
+    )
+  );
+
+  app.get("/runs/:runId/status", async (request, reply) => {
+    const { runId } = request.params as { runId: string };
+    const info = runService.getRunStatusInfo(runId);
+    return { run_id: runId, ...info };
+  });
+
+  app.get("/runs/:runId/progress", async (request, reply) => {
+    const { runId } = request.params as { runId: string };
+    const progress = await runService.getRunProgress(runId);
+    if (!progress) {
+      reply.code(404);
+      return { error: { message: `No progress data for run ${runId}` } };
+    }
+    return progress;
+  });
+
+  app.post("/runs/simulate", async (request, reply) =>
+    sendValidated(
+      reply,
+      simulateRunResponseSchema,
+      await runService.simulateRun(
+        service.getSimulationModule(),
+        simulateRunRequestSchema.parse(request.body ?? {}),
+      ),
       201
     )
   );
