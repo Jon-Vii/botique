@@ -1067,6 +1067,9 @@ class OwnerAgentRunnerTests(unittest.TestCase):
 
         self.assertEqual(result.end_reason, DayEndReason.AGENT_ENDED_DAY)
         self.assertEqual(len(result.turns), 1)
+        self.assertIsNotNone(result.day_note)
+        self.assertEqual(result.day_note.title, "Day 5 note")
+        self.assertIn("future self", provider.calls[2]["messages"][0].content)
         self.assertEqual(len(memory.list_notes(shop_id=7)), 1)
         self.assertEqual(memory.list_notes(shop_id=7)[0].title, "Day 5 note")
         self.assertIn("note_written", [event.kind.value for event in result.events])
@@ -1206,6 +1209,8 @@ class OwnerAgentRunnerTests(unittest.TestCase):
         self.assertIsNone(result.days[1].advancement)
         self.assertEqual(control_client.advance_calls, 1)
         self.assertEqual(result.days[1].market_state_before.current_day.day, 4)
+        self.assertEqual(result.days[0].day_result.day_note.title, "Day three note")
+        self.assertEqual(result.days[1].day_result.day_note.title, "Day 4 note")
         self.assertEqual(
             seller_client.calls,
             [

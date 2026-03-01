@@ -296,6 +296,7 @@ class OwnerAgentRunner:
         )
         return replace(
             day_result,
+            day_note=note,
             events=tuple(
                 self.event_log.list_events(
                     run_id=day_result.run_id,

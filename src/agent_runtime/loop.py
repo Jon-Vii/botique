@@ -10,7 +10,7 @@ from seller_core.models import JSONValue
 
 from .briefing import MorningBriefing
 from .events import EventKind, EventLog, InMemoryEventLog, RuntimeEvent
-from .memory import ShopId
+from .memory import NoteRecord, ShopId
 from .serialization import jsonify
 from .tools.registry import AgentToolRegistry, ToolExecutionResult, ToolManifestEntry
 
@@ -132,6 +132,7 @@ class DayRunResult:
     turns_per_day: int
     turns_used: int
     turns_remaining: int
+    day_note: NoteRecord | None = None
 
     @property
     def work_budget(self) -> int:
