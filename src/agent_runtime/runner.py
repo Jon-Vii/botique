@@ -158,7 +158,9 @@ class OwnerAgentRunner:
         advancement: AdvanceDayResult | None = None
         next_day_state: ShopStateSnapshot | None = None
         if advance_day:
-            advancement = self._require_control_client().advance_day()
+            advancement = self._require_control_client().advance_day(
+                controlled_shop_ids=(int(shop_id),)
+            )
             self.event_log.append(
                 kind=EventKind.SIMULATION_ADVANCED,
                 run_id=active_run_id,

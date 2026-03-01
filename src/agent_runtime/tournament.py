@@ -227,7 +227,11 @@ class ArenaTournamentRunner:
 
                 advancement = None
                 if day_offset < self.config.days_per_round - 1:
-                    advancement = self.control_client.advance_day()
+                    advancement = self.control_client.advance_day(
+                        controlled_shop_ids=tuple(
+                            int(shop_id) for shop_id in assignments.values()
+                        )
+                    )
 
                 first_result = entrant_results[0].live_day
                 round_days.append(

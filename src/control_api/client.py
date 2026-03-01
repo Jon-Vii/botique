@@ -200,8 +200,19 @@ class ControlApiClient:
             )
         )
 
-    def advance_day(self) -> AdvanceDayResult:
-        payload = self._request("advance_day", "POST", "/simulation/advance-day")
+    def advance_day(
+        self, *, controlled_shop_ids: tuple[int | str, ...] | list[int | str] = ()
+    ) -> AdvanceDayResult:
+        body: dict[str, Any] = {}
+        if controlled_shop_ids:
+            body["controlled_shop_ids"] = [int(shop_id) for shop_id in controlled_shop_ids]
+        payload = self._request(
+            "advance_day",
+            "POST",
+            "/simulation/advance-day",
+            body=body,
+            body_encoding=BodyEncoding.JSON,
+        )
         return _parse_advance_day_result(payload)
 
     def reset_world(self) -> None:
