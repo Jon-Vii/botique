@@ -95,10 +95,187 @@ describe("Botique server control endpoints", () => {
       }
     ]
   };
+  const runList = [
+    {
+      run_id: "run_demo_01",
+      shop_id: 1001,
+      mode: "live",
+      day_count: 5,
+      has_summary: true,
+      has_manifest: true,
+      created_at: "2026-03-01T10:00:00.000Z"
+    }
+  ];
+  const runSummary = {
+    run_id: "run_demo_01",
+    shop_id: 1001,
+    mode: "live",
+    day_count: 5,
+    start_day: 1,
+    end_day: 5,
+    start_simulation_date: "2026-02-27T00:00:00.000Z",
+    end_simulation_date: "2026-03-03T00:00:00.000Z",
+    starting_state: {
+      available_balance: 28,
+      currency_code: "USD",
+      active_listing_count: 1,
+      draft_listing_count: 1,
+      total_sales_count: 1,
+      review_average: 5,
+      review_count: 1
+    },
+    ending_state: {
+      available_balance: 56,
+      currency_code: "USD",
+      active_listing_count: 2,
+      draft_listing_count: 0,
+      total_sales_count: 2,
+      review_average: 5,
+      review_count: 1
+    },
+    totals: {
+      tool_call_count: 10,
+      tool_calls_by_name: { get_shop_dashboard: 5, update_listing: 1 },
+      tool_calls_by_surface: { extension: 8, core: 2 },
+      turn_count: 10,
+      yesterday_revenue: 28,
+      notes_written: 3,
+      reminders_set: 0,
+      reminders_completed: 0,
+      simulation_advances: 4
+    },
+    memory: {
+      note_count: 3,
+      reminder_count: 0,
+      pending_reminder_count: 0
+    }
+  };
+  const runManifest = {
+    artifact_version: 1,
+    run_id: "run_demo_01",
+    shop_id: 1001,
+    mode: "live",
+    day_count: 5,
+    invocation: {
+      command: "run-days",
+      days: 5,
+      max_turns: null,
+      shop_id: "1001",
+      run_id: "run_demo_01"
+    }
+  };
+  const runDaySnapshots = [
+    {
+      day: 1,
+      simulation_date: "2026-02-27T00:00:00.000Z",
+      available_balance: 28,
+      currency_code: "USD",
+      active_listing_count: 1,
+      draft_listing_count: 1,
+      total_sales_count: 1,
+      review_average: 5,
+      review_count: 1,
+      turn_count: 2,
+      yesterday_revenue: 28
+    }
+  ];
+  const runBriefing = {
+    day: 1,
+    shop_id: 1001,
+    shop_name: "layercake-labs",
+    run_id: "run_demo_01",
+    generated_at: "2026-03-01T10:00:00.000Z",
+    balance_summary: {
+      available: 28,
+      pending: 0,
+      currency_code: "USD"
+    },
+    objective_progress: {
+      primary_objective: "Grow ending balance",
+      metric_name: "available_balance",
+      current_value: 28,
+      target_value: null,
+      status_summary: "Available balance is $28.00.",
+      supporting_diagnostics: ["active_listings=1"]
+    },
+    listing_changes: [],
+    market_movements: [],
+    yesterday_orders: {
+      order_count: 1,
+      revenue: 28,
+      average_order_value: 28,
+      refunded_order_count: 0
+    },
+    new_reviews: [],
+    new_customer_messages: [],
+    notes: [],
+    due_reminders: [],
+    priorities_prompt: "Do the highest leverage work."
+  };
+  const runTurns = [
+    {
+      turn_index: 1,
+      tool_call: {
+        name: "get_shop_dashboard",
+        arguments: {}
+      },
+      tool_result: {
+        tool_name: "get_shop_dashboard",
+        arguments: {},
+        output: {
+          catalog_summary: {
+            active_listings: 1,
+            draft_listings: 1,
+            total_listings: 2
+          }
+        },
+        surface: "extension"
+      },
+      decision_summary: "Call get_shop_dashboard.",
+      assistant_text: "",
+      started_at: "2026-03-01T10:00:00.000Z",
+      completed_at: "2026-03-01T10:00:01.000Z",
+      state_changes: null,
+      provider_tool_calls: []
+    }
+  ];
+  const runNotes = [
+    {
+      note_id: "ws_entry_123",
+      shop_id: 1001,
+      title: "Day 1 journal",
+      body: "Activated the draft listing.",
+      tags: [],
+      created_day: 1,
+      created_at: "2026-03-01T10:00:00.000Z"
+    }
+  ];
+  const runReminders = [
+    {
+      reminder_id: "rem_123",
+      shop_id: 1001,
+      title: "Check backlog",
+      body: "Look at backlog tomorrow.",
+      due_day: 2,
+      completed: false,
+      created_at: "2026-03-01T10:00:00.000Z"
+    }
+  ];
 
   beforeEach(async () => {
     app = await buildApp({
       repository: createInMemoryMarketplaceRepository(createSampleState()),
+      runService: {
+        listRuns: async () => runList,
+        getRunSummary: async () => runSummary,
+        getRunManifest: async () => runManifest,
+        getRunDaySnapshots: async () => runDaySnapshots,
+        getRunDayBriefing: async () => runBriefing,
+        getRunDayTurns: async () => runTurns,
+        getRunMemoryNotes: async () => runNotes,
+        getRunMemoryReminders: async () => runReminders,
+        launchRun: async () => ({ run_id: "run_demo_01" })
+      } as any,
       tournamentService: {
         listTournaments: async () => [
           {
@@ -344,5 +521,67 @@ describe("Botique server control endpoints", () => {
 
     assert.equal(launchResponse.statusCode, 201);
     assert.equal(launchResponse.json().tournament_id, "tournament_demo_01");
+  });
+
+  test("lists, reads, and launches runs through /control", async () => {
+    const [
+      listResponse,
+      summaryResponse,
+      manifestResponse,
+      daysResponse,
+      briefingResponse,
+      turnsResponse,
+      notesResponse,
+      remindersResponse,
+      launchResponse
+    ] = await Promise.all([
+      app.inject({ method: "GET", url: "/control/runs" }),
+      app.inject({ method: "GET", url: "/control/runs/run_demo_01/summary" }),
+      app.inject({ method: "GET", url: "/control/runs/run_demo_01/manifest" }),
+      app.inject({ method: "GET", url: "/control/runs/run_demo_01/days" }),
+      app.inject({ method: "GET", url: "/control/runs/run_demo_01/days/1/briefing" }),
+      app.inject({ method: "GET", url: "/control/runs/run_demo_01/days/1/turns" }),
+      app.inject({ method: "GET", url: "/control/runs/run_demo_01/memory/notes" }),
+      app.inject({ method: "GET", url: "/control/runs/run_demo_01/memory/reminders" }),
+      app.inject({
+        method: "POST",
+        url: "/control/runs/launch",
+        payload: {
+          shop_id: 1001,
+          days: 5,
+          turns_per_day: 5,
+          run_id: "run_demo_01",
+          model: "mistral-medium-latest",
+          provider: "mistral"
+        }
+      })
+    ]);
+
+    assert.equal(listResponse.statusCode, 200);
+    assert.equal(listResponse.json()[0].run_id, "run_demo_01");
+
+    assert.equal(summaryResponse.statusCode, 200);
+    assert.equal(summaryResponse.json().totals.notes_written, 3);
+
+    assert.equal(manifestResponse.statusCode, 200);
+    assert.equal(manifestResponse.json().invocation.command, "run-days");
+
+    assert.equal(daysResponse.statusCode, 200);
+    assert.equal(daysResponse.json()[0].turn_count, 2);
+
+    assert.equal(briefingResponse.statusCode, 200);
+    assert.equal(briefingResponse.json().shop_name, "layercake-labs");
+
+    assert.equal(turnsResponse.statusCode, 200);
+    assert.equal(turnsResponse.json()[0].tool_call.name, "get_shop_dashboard");
+
+    assert.equal(notesResponse.statusCode, 200);
+    assert.equal(notesResponse.json()[0].note_id, "ws_entry_123");
+
+    assert.equal(remindersResponse.statusCode, 200);
+    assert.equal(remindersResponse.json()[0].reminder_id, "rem_123");
+
+    assert.equal(launchResponse.statusCode, 201);
+    assert.equal(launchResponse.json().run_id, "run_demo_01");
   });
 });

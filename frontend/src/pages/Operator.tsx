@@ -44,10 +44,11 @@ export function Operator() {
       <SimStatusBar />
 
       <BackendNotice
-        title="Single-run launch is still blocked on a backend endpoint"
-        description="World inspection, reset, and tournament launch are wired locally. The remaining operator blocker is browser-triggered single-run launch, which still needs a control-plane route."
+        title="Operator control-plane contract"
+        description="World inspection, reset, single-run launch, and tournament launch are available through the control plane. Browser-triggered launch still depends on the frontend feature flag."
         endpoints={[
           "POST /control/runs/launch",
+          "POST /control/tournaments/launch",
         ]}
         compact
       />

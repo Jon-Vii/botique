@@ -85,8 +85,8 @@ export function RunDetail() {
           description="This run could not be loaded from the current control-plane API."
         />
         <BackendNotice
-          title="Run summary endpoint is missing"
-          description="The run explorer depends on control-plane artifact endpoints that are not implemented in the current server."
+          title="Run summary could not be loaded"
+          description="The run explorer depends on control-plane artifact endpoints. The request failed or the run id is unknown."
           endpoints={["GET /control/runs/:runId/summary"]}
         />
       </div>
@@ -201,8 +201,8 @@ export function RunDetail() {
 
       {daySnapshotsQuery.isError ? (
         <BackendNotice
-          title="Day snapshots are not available"
-          description="This view can show a day timeline as soon as the backend exposes per-day artifact snapshots."
+          title="Day snapshots could not be loaded"
+          description="The day timeline depends on per-day run artifact snapshots. The request failed or the artifact bundle is incomplete."
           endpoints={["GET /control/runs/:runId/days"]}
         />
       ) : daySnapshots.length > 0 ? (
@@ -268,8 +268,8 @@ export function RunDetail() {
 
       {dayDetailUnavailable ? (
         <BackendNotice
-          title="Per-day trace detail is not wired yet"
-          description="The selected run can show summary metadata, but morning briefings and turn-level trace playback need additional control-plane endpoints."
+          title="Per-day trace detail could not be loaded"
+          description="The selected run has summary metadata, but day briefing, turn playback, or memory requests failed."
           endpoints={[
             "GET /control/runs/:runId/days/:day/briefing",
             "GET /control/runs/:runId/days/:day/turns",

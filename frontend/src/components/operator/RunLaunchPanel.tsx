@@ -42,7 +42,7 @@ export function RunLaunchPanel({
       return;
     }
     if (!canLaunchFromUi) {
-      onError("Run launch is not wired to the backend yet");
+      onError("Run launch is disabled in the frontend feature flags");
       return;
     }
     const rid = runId.trim() || `run-${Date.now()}`;
@@ -76,9 +76,9 @@ export function RunLaunchPanel({
             Single Run
           </span>
         </div>
-        <Badge variant="amber" subtle>
+        <Badge variant={canLaunchFromUi ? "emerald" : "amber"} subtle>
           <Warning size={10} weight="fill" />
-          Backend endpoint pending
+          {canLaunchFromUi ? "Backend live" : "CLI fallback"}
         </Badge>
       </div>
 
@@ -201,7 +201,7 @@ export function RunLaunchPanel({
         <div className="mt-5">
           <BackendNotice
             title="Use the CLI for single runs"
-            description="The operator form stays visible for the eventual control-plane integration, but the current repo does not expose the POST endpoint needed to start runs from the browser."
+            description="The control-plane endpoint exists, but this frontend build has browser launch disabled by feature flag."
             endpoints={["POST /control/runs/launch"]}
             compact
           >

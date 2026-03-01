@@ -30,8 +30,8 @@ export function RunList() {
 
       {error ? (
         <BackendNotice
-          title="Run artifacts are not exposed through the server yet"
-          description="The runtime already writes artifact bundles to disk, but the current server does not implement the control-plane endpoints this screen expects."
+          title="Run archive could not be loaded"
+          description="The run explorer uses control-plane artifact endpoints. The request failed or the server returned invalid data."
           endpoints={[
             "GET /control/runs",
             "GET /control/runs/:runId/summary",
@@ -124,7 +124,7 @@ export function RunList() {
         <EmptyState
           icon={<ClockCounterClockwise size={48} weight="duotone" />}
           title="No runs found"
-          description="Once the backend serves persisted artifacts through /control/runs, they will appear here."
+          description="Launch a run and it will appear here once its artifact bundle is persisted."
         />
       )}
     </div>

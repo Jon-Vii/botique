@@ -8,6 +8,7 @@ import type { MarketplaceRepository } from "./repositories/types";
 import { registerCoreRoutes } from "./routes/core-routes";
 import { registerControlRoutes } from "./routes/control-routes";
 import { MarketplaceService } from "./services/marketplace-service";
+import { RunControlService } from "./services/run-control-service";
 import { RuntimeControlService } from "./services/runtime-control-service";
 import { TournamentControlService } from "./services/tournament-control-service";
 import { createWorldSimulation } from "./simulation/world-simulation";
@@ -16,6 +17,7 @@ export type BuildAppOptions = {
   config?: Partial<BotiqueServerConfig>;
   repository?: MarketplaceRepository;
   logger?: boolean;
+  runService?: RunControlService;
   tournamentService?: TournamentControlService;
 };
 
@@ -39,6 +41,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const service = new MarketplaceService(repository, simulation);
   const controlService = new RuntimeControlService(simulation);
   const controlHost = config.host === "0.0.0.0" ? "127.0.0.1" : config.host;
+  const runService =
+    options.runService ??
+    new RunControlService({
+      applicationBaseUrl: `http://${controlHost}:${config.port}/v3/application`,
+      controlBaseUrl: `http://${controlHost}:${config.port}/control`,
+    });
   const tournamentService =
     options.tournamentService ??
     new TournamentControlService({
@@ -55,7 +63,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     await registerCoreRoutes(instance, service);
   }, { prefix: "/v3/application" });
   await app.register(async (instance) => {
-    await registerControlRoutes(instance, controlService, tournamentService);
+    await registerControlRoutes(instance, controlService, runService, tournamentService);
   }, { prefix: "/control" });
 
   app.get("/health", async () => ({

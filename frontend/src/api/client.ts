@@ -177,14 +177,7 @@ export const api = {
     });
   },
 
-  /* ── Benchmark / Runs ──
-   * NOTE: Backend endpoints under /control/runs/... do not exist yet.
-   * These methods define the expected contract. The backend needs to:
-   *   GET /control/runs              -> RunListEntry[]
-   *   GET /control/runs/:runId/summary   -> RunSummary
-   *   GET /control/runs/:runId/manifest  -> RunManifest
-   *   GET /control/runs/:runId/days      -> DaySnapshot[]
-   */
+  /* ── Benchmark / Runs ── */
 
   getRunList(): Promise<RunListEntry[]> {
     return requestJSON<RunListEntry[]>("/runs", { base: CONTROL });
@@ -211,14 +204,7 @@ export const api = {
     );
   },
 
-  /* ── Run Day Details ──
-   * NOTE: Backend endpoints for per-day detail do not exist yet.
-   * Expected contract:
-   *   GET /control/runs/:runId/days/:day/briefing -> briefing JSON
-   *   GET /control/runs/:runId/days/:day/turns    -> turn records array
-   *   GET /control/runs/:runId/memory/notes       -> memory notes array
-   *   GET /control/runs/:runId/memory/reminders   -> memory reminders array
-   */
+  /* ── Run Day Details ── */
 
   getRunDayBriefing(runId: string, day: number): Promise<DayBriefing> {
     return requestJSON<DayBriefing>(
@@ -270,7 +256,6 @@ export const api = {
     });
   },
 
-  /** NOTE: POST /control/runs/launch does NOT exist yet on the backend */
   async launchRun(payload: {
     shop_id: number;
     days: number;
@@ -278,6 +263,7 @@ export const api = {
     run_id: string;
     model: string;
     provider: string;
+    scenario?: "operate" | "bootstrap";
   }): Promise<{ run_id: string }> {
     return requestJSON<{ run_id: string }>("/runs/launch", {
       base: CONTROL,

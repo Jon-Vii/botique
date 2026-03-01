@@ -447,8 +447,8 @@ export function Benchmarks() {
       {/* Leaderboard table */}
       {listError ? (
         <BackendNotice
-          title="Benchmark data is blocked on run artifact endpoints"
-          description="This comparison view is ready for real artifact summaries, but the current server does not expose the control-plane run endpoints it queries."
+          title="Benchmark data could not be loaded"
+          description="This comparison view depends on run artifact endpoints. The request failed or the returned data was invalid."
           endpoints={[
             "GET /control/runs",
             "GET /control/runs/:runId/summary",
@@ -606,8 +606,8 @@ export function Benchmarks() {
 
       {/* Backend contract note */}
       <BackendNotice
-        title="Expected backend contract"
-        description="Benchmarks aggregate run summaries and stay intentionally read-only until the backend publishes artifact metadata through the control surface."
+        title="Backend contract"
+        description="Benchmarks aggregate run summaries from the control surface and remain read-only by design."
         endpoints={[
           "GET /control/runs",
           "GET /control/runs/:runId/summary",

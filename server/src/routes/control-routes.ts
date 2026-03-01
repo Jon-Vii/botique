@@ -4,10 +4,21 @@ import type { ZodTypeAny } from "zod";
 import {
   advanceDayRequestSchema,
   advanceDayResultSchema,
+  dayBriefingSchema,
+  daySnapshotListSchema,
   marketSnapshotSchema,
+  memoryNoteListSchema,
+  memoryReminderListSchema,
   resetWorldRequestSchema,
+  runLaunchRequestSchema,
+  runLaunchResponseSchema,
+  runListEntrySchema,
+  runListSchema,
+  runManifestSchema,
+  runSummarySchema,
   simulationDaySchema,
   simulationScenarioSchema,
+  turnRecordListSchema,
   tournamentLaunchRequestSchema,
   tournamentLaunchResponseSchema,
   tournamentListSchema,
@@ -18,6 +29,7 @@ import {
 } from "../schemas/control";
 import type { StoredWorldState } from "../simulation/state-types";
 import type { RuntimeControlService } from "../services/runtime-control-service";
+import type { RunControlService } from "../services/run-control-service";
 import type { TournamentControlService } from "../services/tournament-control-service";
 import { registerRouteErrorHandler } from "./error-handler";
 function sendValidated<TSchema extends ZodTypeAny>(
@@ -34,6 +46,7 @@ function sendValidated<TSchema extends ZodTypeAny>(
 export async function registerControlRoutes(
   app: FastifyInstance,
   service: RuntimeControlService,
+  runService: RunControlService,
   tournamentService: TournamentControlService,
 ) {
   app.get("/simulation/day", async (_request, reply) =>
@@ -82,6 +95,81 @@ export async function registerControlRoutes(
 
   app.get("/tournaments", async (_request, reply) =>
     sendValidated(reply, tournamentListSchema, await tournamentService.listTournaments())
+  );
+
+  app.get("/runs", async (_request, reply) =>
+    sendValidated(reply, runListSchema, await runService.listRuns())
+  );
+
+  app.get("/runs/:runId/summary", async (request, reply) =>
+    sendValidated(
+      reply,
+      runSummarySchema,
+      await runService.getRunSummary((request.params as { runId: string }).runId)
+    )
+  );
+
+  app.get("/runs/:runId/manifest", async (request, reply) =>
+    sendValidated(
+      reply,
+      runManifestSchema,
+      await runService.getRunManifest((request.params as { runId: string }).runId)
+    )
+  );
+
+  app.get("/runs/:runId/days", async (request, reply) =>
+    sendValidated(
+      reply,
+      daySnapshotListSchema,
+      await runService.getRunDaySnapshots((request.params as { runId: string }).runId)
+    )
+  );
+
+  app.get("/runs/:runId/days/:day/briefing", async (request, reply) =>
+    sendValidated(
+      reply,
+      dayBriefingSchema,
+      await runService.getRunDayBriefing(
+        (request.params as { runId: string; day: string }).runId,
+        Number((request.params as { runId: string; day: string }).day),
+      )
+    )
+  );
+
+  app.get("/runs/:runId/days/:day/turns", async (request, reply) =>
+    sendValidated(
+      reply,
+      turnRecordListSchema,
+      await runService.getRunDayTurns(
+        (request.params as { runId: string; day: string }).runId,
+        Number((request.params as { runId: string; day: string }).day),
+      )
+    )
+  );
+
+  app.get("/runs/:runId/memory/notes", async (request, reply) =>
+    sendValidated(
+      reply,
+      memoryNoteListSchema,
+      await runService.getRunMemoryNotes((request.params as { runId: string }).runId)
+    )
+  );
+
+  app.get("/runs/:runId/memory/reminders", async (request, reply) =>
+    sendValidated(
+      reply,
+      memoryReminderListSchema,
+      await runService.getRunMemoryReminders((request.params as { runId: string }).runId)
+    )
+  );
+
+  app.post("/runs/launch", async (request, reply) =>
+    sendValidated(
+      reply,
+      runLaunchResponseSchema,
+      await runService.launchRun(runLaunchRequestSchema.parse(request.body ?? {})),
+      201
+    )
   );
 
   app.get("/tournaments/:tournamentId", async (request, reply) =>
