@@ -13,18 +13,10 @@ DEFAULT_OWNER_AGENT_CORE_TOOLS: tuple[str, ...] = (
     "create_draft_listing",
     "update_listing",
     "delete_listing",
-    "get_listing",
-    "get_shop_listings",
     "search_marketplace",
-    "get_shop_info",
-    "get_orders",
-    "get_order_details",
-    "get_reviews",
-    "get_taxonomy_nodes",
 )
 DEFAULT_OWNER_AGENT_EXTENSION_TOOLS: tuple[str, ...] = (
     "queue_production",
-    "get_capacity_status",
 )
 DEFAULT_OWNER_AGENT_SELLER_TOOLS: tuple[str, ...] = (
     *DEFAULT_OWNER_AGENT_CORE_TOOLS,

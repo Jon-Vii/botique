@@ -119,7 +119,7 @@ def register_memory_tools(
     registry.register(
         ToolManifestEntry(
             name="read_notes",
-            description="Read recent notes for the current shop.",
+            description="Read a bounded set of recent notes for the current shop. Use this only when you want targeted recall.",
             surface=ToolSurface.EXTENSION,
             work_cost=1,
             required_body_fields=("shop_id",),
@@ -144,7 +144,7 @@ def register_memory_tools(
             "count": len(
                 notes := store.read_notes(
                     shop_id=_bound_shop_id(arguments, shop_id),
-                    limit=arguments.get("limit"),
+                    limit=arguments.get("limit", 5),
                     tag=arguments.get("tag"),
                 )
             ),

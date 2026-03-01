@@ -9,7 +9,6 @@ from seller_core.client import SellerCoreClient
 
 from .memory import (
     AgentMemoryStore,
-    NoteRecord,
     ReminderBackend,
     ReminderRecord,
     ReminderStatus,
@@ -382,10 +381,6 @@ class LiveMorningBriefingBuilder:
             listing_changes=listing_changes,
             new_reviews=new_reviews,
             market_movements=_build_market_movements(market_state),
-            notes=tuple(
-                _format_note(note)
-                for note in self._memory.read_notes(shop_id=shop_id, limit=5)
-            ),
         )
         return LiveBriefingBuildResult(
             briefing=briefing,
@@ -808,11 +803,6 @@ def _build_objective_progress(
         supporting_diagnostics=tuple(diagnostics),
         status_summary=status_summary,
     )
-
-
-def _format_note(note: NoteRecord) -> str:
-    prefix = "Undated" if note.created_day is None else f"Day {note.created_day}"
-    return f"{prefix} - {note.title}: {note.body}"
 
 
 def _format_balance_summary(summary: BalanceSummary) -> str:

@@ -81,7 +81,6 @@ Recommended sections:
 - new reviews or customer messages
 - reminders due today
 - market watch items
-- recent notes worth carrying into the day
 - short instruction to choose the highest-leverage work
 
 Status: `Current decision`
@@ -90,6 +89,11 @@ Current implementation in `src/agent_runtime/briefing.py` now provides both:
 
 - structured payloads for logging and testability
 - `MorningBriefing.render_for_agent()` for the provider-facing morning brief text
+
+Memory rule:
+
+- reminders due today should be surfaced automatically
+- notes should remain agent-pulled support context rather than being injected into every briefing
 
 The live briefing path still pulls seller-facing shop, listing, order, review, and payment data through `seller_core`, and world/day state through the separate control API.
 
@@ -164,6 +168,12 @@ Use simple inspectable support tools only:
 - `complete_reminder`
 
 These are part of the visible workday tool surface. They are not hidden from the model and they do consume work budget like other small support tasks.
+
+Operational rule:
+
+- reminders are push-style resurfacing and should appear when due
+- notes are pull-style memory and the agent should decide when they are worth reading
+- `read_notes` should stay bounded and targeted rather than dumping the full note history
 
 Status: `Current decision`
 

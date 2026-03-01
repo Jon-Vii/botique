@@ -39,7 +39,8 @@ This is a `Current decision`.
 ## What Works Now
 
 - live morning brief generation from seller-facing and control-plane state
-- shop-scoped core and extension tool exposure
+- a narrower owner-agent tool surface with runtime-composed shop and listing summaries
+- shop-scoped core and extension tool exposure behind that narrower runtime surface
 - work-budgeted single-day loop execution
 - multi-day runs with runtime-owned simulation advancement between days
 - inspectable in-memory notes and reminders
@@ -53,7 +54,7 @@ Current focus is making one believable single-shop run feel like a constrained c
 That means:
 
 - keeping the loop legible
-- keeping the tool surface explicit
+- keeping the tool surface explicit but narrower than raw `seller_core`
 - improving prompt framing without adding hidden reasoning dependencies
 - keeping production constraints visible without turning the benchmark into warehouse software
 
@@ -62,6 +63,7 @@ That means:
 - tune work-budget sizing and per-tool costs against observed behavior
 - enrich morning brief quality as more simulation outcomes exist
 - tune how much production detail is surfaced to the owner agent without hiding important world state
+- validate whether the new shop dashboard and listing drill-down reduce low-value bookkeeping in live runs
 - add more outcome-rich day settlement in System 2 while keeping the same System 3 loop contract
 - decide how much operator-facing replay/debug UI is needed for demos
 

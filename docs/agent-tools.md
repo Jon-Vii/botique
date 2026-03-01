@@ -99,19 +99,18 @@ This is the core semantic shift for v1:
 
 The default seller-facing tools exposed to the owner agent should now be:
 
+Runtime-composed summary tools:
+
+- `get_shop_dashboard`
+- `get_listing_details`
+
+Direct seller tools:
+
 - `create_draft_listing`
 - `update_listing`
 - `delete_listing`
-- `get_listing`
-- `get_shop_listings`
 - `search_marketplace`
-- `get_shop_info`
-- `get_orders`
-- `get_order_details`
-- `get_reviews`
-- `get_taxonomy_nodes`
 - `queue_production`
-- `get_capacity_status`
 
 Botique support tools still remain:
 
@@ -122,20 +121,69 @@ Botique support tools still remain:
 
 Status: `Current decision` for the owner-agent default set.
 
+The important distinction is:
+
+- `seller_core` stays broad and canonical
+- the default owner-agent runtime surface is narrower and more decision-oriented
+
+The owner agent should not need to spend half its day rebuilding a dashboard from low-level reads.
+
+## Runtime Summary Tools
+
+These tools are not added to `seller_core`. They are runtime-composed summaries over ordinary seller-visible state.
+
+Current runtime summary tools:
+
+- `get_shop_dashboard`
+- `get_listing_details`
+
+Boundary rules:
+
+- they aggregate only seller-visible state
+- they do not reveal hidden world state
+- they do not embed strategy or choose actions for the agent
+- they reduce bookkeeping width rather than automating business decisions
+
+`get_shop_dashboard` should replace most day-opening low-level reads by summarizing:
+
+- posted and pending cash signals
+- active versus draft listing counts
+- production capacity and backlog pressure
+- recent order and review signals
+- short listing rows for the most relevant listings
+- alerts such as low stock, queue pressure, or inactive inventory
+
+`get_listing_details` should replace generic listing inspection by focusing on:
+
+- listing economics
+- fulfillment mode
+- finished stock or backlog
+- queued production
+- recent review signals
+
 ## Tools Not Exposed By Default
 
 These tools still exist, but they are not part of the default owner-agent workday surface:
 
 - `update_shop`
+- `get_shop_info`
+- `get_shop_listings`
+- `get_orders`
+- `get_order_details`
+- `get_reviews`
+- `get_capacity_status`
 - `get_listing_inventory`
 - `update_listing_inventory`
 - `get_payments`
+- `get_taxonomy_nodes`
 
 Rationale:
 
 - `update_shop` mostly changes storefront copy and messaging, not the production-constrained business loop
+- the default owner-agent should not need multiple low-level read calls just to understand today’s shop state
 - low-level inventory document tools are compatibility surfaces and are easier for the model to misuse than production-aware tools
 - `get_payments` is useful for briefing assembly and reporting, but it is less action-driving than orders, listings, reviews, and capacity state during a bounded workday
+- taxonomy browsing remains useful, but it is not necessary on every workday and is hidden by default until the listing-creation flow clearly needs it
 
 ## Tool Notes
 
@@ -186,10 +234,18 @@ Added:
 
 - `queue_production` so the agent can express a real production decision instead of faking supply through inventory semantics
 - `get_capacity_status` so the agent can inspect queue pressure before activating listings or scheduling more work
+- `get_shop_dashboard` and `get_listing_details` so the owner agent can reason from compact seller-visible summaries instead of spending budget on low-level bookkeeping
 
 Removed from the default owner-agent set:
 
 - `update_shop`, because v1 should emphasize business mechanics over storefront copy editing
+- `get_shop_info`
+- `get_shop_listings`
+- `get_orders`
+- `get_order_details`
+- `get_reviews`
+- `get_capacity_status`
+- `get_taxonomy_nodes`
 
 Demoted from preferred owner-agent usage:
 

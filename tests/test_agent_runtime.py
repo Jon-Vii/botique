@@ -103,6 +103,9 @@ class FakeSellerCoreClient:
     def call(self, tool_name: str, arguments: dict[str, object]) -> dict[str, object]:
         copied = dict(arguments)
         self.calls.append((tool_name, copied))
+        method = getattr(self, tool_name, None)
+        if callable(method):
+            return method(**copied)
         return {"tool_name": tool_name, "arguments": copied}
 
 
@@ -509,7 +512,7 @@ class MorningBriefingTests(unittest.TestCase):
         self.assertEqual(result.briefing.listing_changes[0].orders_delta, 1)
         self.assertEqual(len(result.briefing.due_reminders), 1)
         self.assertEqual(result.briefing.market_movements[0].headline, "Trend watch: Wall Art")
-        self.assertIn("Pricing angle", result.briefing.notes[0])
+        self.assertEqual(result.briefing.notes, ())
         self.assertEqual(result.shop_state.active_listing_count, 1)
 
 
@@ -520,17 +523,21 @@ class ToolRegistryTests(unittest.TestCase):
         registry = build_owner_agent_tool_registry(client, memory=memory, shop_id=7)
 
         tool_names = {entry.name for entry in registry.manifest()}
+        self.assertIn("get_shop_dashboard", tool_names)
+        self.assertIn("get_listing_details", tool_names)
         self.assertIn("search_marketplace", tool_names)
         self.assertIn("queue_production", tool_names)
-        self.assertIn("get_capacity_status", tool_names)
         self.assertIn("write_note", tool_names)
         self.assertIn("set_reminder", tool_names)
         self.assertIn("complete_reminder", tool_names)
+        self.assertNotIn("get_shop_info", tool_names)
+        self.assertNotIn("get_shop_listings", tool_names)
+        self.assertNotIn("get_capacity_status", tool_names)
         self.assertNotIn("update_shop", tool_names)
 
         core_result = registry.invoke("search_marketplace", {"keywords": "mushroom planner"})
-        shop_result = registry.invoke("get_shop_info", {})
-        capacity_result = registry.invoke("get_capacity_status", {})
+        shop_result = registry.invoke("get_shop_dashboard", {})
+        listing_result = registry.invoke("get_listing_details", {"listing_id": 2001})
         production_result = registry.invoke(
             "queue_production",
             {
@@ -562,13 +569,21 @@ class ToolRegistryTests(unittest.TestCase):
             [
                 ("search_marketplace", {"keywords": "mushroom planner"}),
                 ("get_shop_info", {"shop_id": 7}),
+                ("get_shop_listings", {"shop_id": 7, "limit": 100, "offset": 0}),
+                ("get_orders", {"shop_id": 7, "limit": 5, "offset": 0}),
+                ("get_reviews", {"shop_id": 7, "limit": 3, "offset": 0}),
+                ("get_payments", {"shop_id": 7}),
+                ("get_capacity_status", {"shop_id": 7}),
+                ("get_listing", {"shop_id": 7, "listing_id": 2001}),
+                ("get_reviews", {"shop_id": 7, "listing_id": 2001, "limit": 3, "offset": 0}),
                 ("get_capacity_status", {"shop_id": 7}),
                 ("queue_production", {"listing_id": 2001, "units": 2, "shop_id": 7}),
             ],
         )
         self.assertEqual(core_result.output["tool_name"], "search_marketplace")
-        self.assertEqual(shop_result.output["arguments"]["shop_id"], 7)
-        self.assertEqual(capacity_result.output["tool_name"], "get_capacity_status")
+        self.assertEqual(shop_result.output["shop"]["shop_id"], 0)
+        self.assertEqual(shop_result.output["catalog_summary"]["total_listings"], 0)
+        self.assertEqual(listing_result.output["listing"]["listing_id"], 0)
         self.assertEqual(production_result.output["arguments"]["units"], 2)
         self.assertEqual(note_result.output["note"]["title"], "Today's angle")
         self.assertEqual(note_result.output["note"]["shop_id"], 7)
@@ -594,12 +609,12 @@ class ToolRegistryTests(unittest.TestCase):
 
         manifests = {entry.name: entry for entry in registry.manifest()}
         self.assertEqual(
-            manifests["search_marketplace"].parameters_schema["type"],
+            manifests["get_shop_dashboard"].parameters_schema["type"],
             "object",
         )
         self.assertIn(
-            "keywords",
-            manifests["search_marketplace"].parameters_schema["properties"],
+            "listing_id",
+            manifests["get_listing_details"].parameters_schema["properties"],
         )
         self.assertEqual(
             manifests["write_note"].parameters_schema["required"],
@@ -608,7 +623,7 @@ class ToolRegistryTests(unittest.TestCase):
         self.assertEqual(manifests["update_listing"].work_cost, 2)
         self.assertEqual(manifests["write_note"].work_cost, 1)
         self.assertNotIn("shop_id", manifests["write_note"].parameters_schema["properties"])
-        self.assertNotIn("shop_id", manifests["get_shop_info"].parameters_schema["properties"])
+        self.assertEqual(manifests["get_shop_dashboard"].parameters_schema["required"], [])
         self.assertEqual(
             manifests["queue_production"].surface,
             "extension",
@@ -909,10 +924,10 @@ class OwnerAgentRunnerTests(unittest.TestCase):
         provider = RecordingProvider(
             [
                 ProviderResponse(
-                    content="Check the shop health before browsing the market.",
+                    content="Check the shop dashboard before browsing the market.",
                     tool_calls=(
                         ProviderToolCall(
-                            name="get_shop_info",
+                            name="get_shop_dashboard",
                             arguments={},
                         ),
                     ),
@@ -962,7 +977,17 @@ class OwnerAgentRunnerTests(unittest.TestCase):
 
         self.assertEqual(result.end_reason, DayEndReason.AGENT_ENDED_DAY)
         self.assertEqual(len(result.turns), 1)
-        self.assertEqual(seller_client.calls, [("get_shop_info", {"shop_id": 7})])
+        self.assertEqual(
+            seller_client.calls,
+            [
+                ("get_shop_info", {"shop_id": 7}),
+                ("get_shop_listings", {"shop_id": 7, "limit": 100, "offset": 0}),
+                ("get_orders", {"shop_id": 7, "limit": 5, "offset": 0}),
+                ("get_reviews", {"shop_id": 7, "limit": 3, "offset": 0}),
+                ("get_payments", {"shop_id": 7}),
+                ("get_capacity_status", {"shop_id": 7}),
+            ],
+        )
 
     def test_runner_can_execute_multiple_live_days_and_advance_simulation(self) -> None:
         seller_client = FakeLiveSellerCoreClient(
@@ -1000,10 +1025,10 @@ class OwnerAgentRunnerTests(unittest.TestCase):
         provider = RecordingProvider(
             [
                 ProviderResponse(
-                    content="Check the shop info first.",
+                    content="Check the shop dashboard first.",
                     tool_calls=(
                         ProviderToolCall(
-                            name="get_shop_info",
+                            name="get_shop_dashboard",
                             arguments={},
                         ),
                     ),
@@ -1065,7 +1090,17 @@ class OwnerAgentRunnerTests(unittest.TestCase):
         self.assertIsNone(result.days[1].advancement)
         self.assertEqual(control_client.advance_calls, 1)
         self.assertEqual(result.days[1].market_state_before.current_day.day, 4)
-        self.assertEqual(seller_client.calls, [("get_shop_info", {"shop_id": 1001})])
+        self.assertEqual(
+            seller_client.calls,
+            [
+                ("get_shop_info", {"shop_id": 1001}),
+                ("get_shop_listings", {"shop_id": 1001, "limit": 100, "offset": 0}),
+                ("get_orders", {"shop_id": 1001, "limit": 5, "offset": 0}),
+                ("get_reviews", {"shop_id": 1001, "limit": 3, "offset": 0}),
+                ("get_payments", {"shop_id": 1001}),
+                ("get_capacity_status", {"shop_id": 1001}),
+            ],
+        )
         self.assertEqual(len(result.notes), 1)
         self.assertEqual(result.notes[0].title, "Trend watch")
         self.assertIn(
