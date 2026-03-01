@@ -145,6 +145,7 @@ Current runtime entrypoint:
 - `botique-agent-runtime run-day --shop-id <shop_id>`
 - `botique-agent-runtime run-day --shop-id <shop_id> --turns-per-day <n>`
 - `botique-agent-runtime run-days --shop-id <shop_id> --days <n>`
+- `botique-agent-runtime run-tournament --entrants-file <path> --shop-ids <comma-list> --days <n> [--rounds <n>]`
 - the CLI can still load a structured briefing directly, but the main reference-run path is now `run-days`, which builds each morning briefing from live Botique state, executes the agent day, advances the simulation between days, and persists an inspectable artifact bundle for the run
 - the default provider wiring is Mistral through `MISTRAL_API_KEY` and optional `BOTIQUE_MISTRAL_*` settings, but the loop itself remains provider-agnostic
 - live runs accept `--output-dir`; if omitted, artifacts are written under `artifacts/agent-runtime/<timestamp>__shop-...__<run_id>`
@@ -405,6 +406,24 @@ How to read it:
 - `days/day-####/summary.md` shows each turn decision with tool arguments and tool results
 - `events.jsonl` and `days/day-####/events.jsonl` keep the raw event stream for replay or diffing
 - `advancement.json` captures the explicit control-plane day advance record between days
+
+## Tournament Mode
+
+Tournament mode is an additive arena-style extension over the same owner-agent workday loop.
+
+Per tournament day:
+
+1. each entrant receives a morning brief for its assigned shop from the same current world state
+2. entrants take their bounded workday turns one shop at a time
+3. the shared world advances once after every entrant ends the day
+
+Current fairness defaults:
+
+- rotate entrant execution order across days
+- rotate entrant-to-shop assignments across rounds
+- reset the world state between rounds using the control API
+
+This keeps the default single-shop loop untouched while making direct competitive runs possible through explicit runtime orchestration rather than hidden seller tools.
 
 ## Failure Modes To Guard Against
 

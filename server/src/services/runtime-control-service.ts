@@ -10,6 +10,10 @@ import type { SimulationModule } from "../simulation/world-simulation";
 export class RuntimeControlService {
   constructor(private readonly simulation: SimulationModule) {}
 
+  async replaceWorldState(state: StoredWorldState): Promise<StoredWorldState> {
+    return this.simulation.replaceWorldState(state);
+  }
+
   async getCurrentDay(): Promise<SimulationDay> {
     return this.simulation.getCurrentDay();
   }

@@ -22,6 +22,7 @@ export interface SimulationStateStore {
 
 export interface SimulationModule {
   getWorldState(): Promise<StoredWorldState>;
+  replaceWorldState(state: StoredWorldState): Promise<StoredWorldState>;
   getCurrentDay(): Promise<SimulationDay>;
   getMarketSnapshot(): Promise<MarketSnapshot>;
   getTrendState(): Promise<TrendState>;
@@ -43,6 +44,10 @@ export class WorldSimulation implements SimulationModule {
       marketplace,
       simulation
     };
+  }
+
+  async replaceWorldState(state: StoredWorldState): Promise<StoredWorldState> {
+    return this.store.replaceWorldState(state);
   }
 
   async getCurrentDay(): Promise<SimulationDay> {

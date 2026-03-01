@@ -32,6 +32,7 @@ These pieces already exist in the repo and are safe to build on.
 - simple Botique memory tools for notes, reminders, and a mutable scratchpad
 - Mistral provider wiring for tool-calling runs
 - multi-day runtime path that can build briefings from live Botique state, advance the simulation between days, and persist artifact-rich reference-run bundles for inspection
+- additive arena-style tournament orchestration with rotating entrant order, rotating shop assignments, and shared-world round resets through the control API
 
 ## In Motion
 

@@ -46,5 +46,13 @@ export async function registerControlRoutes(app: FastifyInstance, service: Runti
     sendValidated(reply, worldStateSchema, await service.getWorldState())
   );
 
+  app.post("/world-state", async (request, reply) =>
+    sendValidated(
+      reply,
+      worldStateSchema,
+      await service.replaceWorldState(worldStateSchema.parse(request.body))
+    )
+  );
+
   registerRouteErrorHandler(app);
 }

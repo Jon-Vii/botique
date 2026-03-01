@@ -7,6 +7,8 @@ from typing import Any, Mapping
 from seller_core.models import BodyEncoding, JSONValue, RequestPlan
 from seller_core.transport import HttpTransport
 
+ControlWorldState = dict[str, JSONValue]
+
 
 @dataclass(frozen=True, slots=True)
 class SimulationDay:
@@ -182,6 +184,22 @@ class ControlApiClient:
             ),
         )
 
+    def get_world_state(self) -> ControlWorldState:
+        return _parse_control_world_state(
+            self._request("get_world_state", "GET", "/world-state")
+        )
+
+    def replace_world_state(self, state: ControlWorldState) -> ControlWorldState:
+        return _parse_control_world_state(
+            self._request(
+                "replace_world_state",
+                "POST",
+                "/world-state",
+                body=state,
+                body_encoding=BodyEncoding.JSON,
+            )
+        )
+
     def advance_day(self) -> AdvanceDayResult:
         payload = self._request("advance_day", "POST", "/simulation/advance-day")
         return _parse_advance_day_result(payload)
@@ -228,6 +246,10 @@ def _parse_global_market_state(payload: Any) -> GlobalMarketState:
         market_snapshot=_parse_market_snapshot(value.get("market_snapshot")),
         trend_state=_parse_trend_state(value.get("trend_state")),
     )
+
+
+def _parse_control_world_state(payload: Any) -> ControlWorldState:
+    return dict(_mapping(payload, "world_state"))
 
 
 def _parse_advance_day_result(payload: Any) -> AdvanceDayResult:

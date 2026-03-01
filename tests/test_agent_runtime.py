@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
 from datetime import datetime, timezone
 from io import StringIO
@@ -22,6 +23,8 @@ from agent_runtime import (
     MistralToolCallingProvider,
     MorningBriefingBuilder,
     ObjectiveProgress,
+    OwnerAgentRunner,
+    OwnerAgentRunnerConfig,
     OrderSummary,
     ProviderMessage,
     ProviderMessageRole,
@@ -29,8 +32,12 @@ from agent_runtime import (
     ProviderResponse,
     ProviderToolCall,
     ProviderToolDefinition,
+    ArenaTournamentRunner,
     SingleShopDailyLoop,
     ShopStateSnapshot,
+    TournamentConfig,
+    TournamentEntrant,
+    TournamentEntrantConfig,
     ToolCallingAgentPolicy,
     ToolCall,
     ToolExecutionResult,
@@ -38,6 +45,7 @@ from agent_runtime import (
     WorkSessionState,
     build_default_owner_agent_runner,
     build_owner_agent_tool_registry,
+    load_tournament_entrants_from_payload,
     morning_briefing_from_payload,
 )
 from agent_runtime.cli import main as runtime_cli_main
@@ -237,6 +245,7 @@ class FakeRunner:
         self.received_briefings = []
         self.live_day_calls = []
         self.live_days_calls = []
+        self.tournament_calls = []
 
     def run_day(self, briefing):
         self.received_briefings.append(briefing)
@@ -249,6 +258,12 @@ class FakeRunner:
     def run_live_days(self, *, shop_id, days, run_id=None, reset_world=False):
         self.live_days_calls.append(
             {"shop_id": shop_id, "days": days, "run_id": run_id, "reset_world": reset_world}
+        )
+        return self.result
+
+    def run(self, *, entrants, shop_ids, run_id=None):
+        self.tournament_calls.append(
+            {"entrants": entrants, "shop_ids": shop_ids, "run_id": run_id}
         )
         return self.result
 
@@ -285,6 +300,132 @@ class FakeControlApiClient:
     def reset_world(self) -> None:
         self.reset_calls += 1
         self.index = 0
+
+
+class FakeTournamentControlApiClient:
+    def __init__(self, market_states: list[GlobalMarketState]) -> None:
+        self.market_states = list(market_states)
+        self.index = 0
+        self.advance_calls = 0
+        self.replace_calls = 0
+
+    def get_global_market_state(self) -> GlobalMarketState:
+        return self.market_states[self.index]
+
+    def advance_day(self) -> AdvanceDayResult:
+        previous = self.market_states[self.index]
+        self.advance_calls += 1
+        if self.index < len(self.market_states) - 1:
+            self.index += 1
+        current = self.market_states[self.index]
+        return AdvanceDayResult(
+            previous_day=previous.current_day,
+            current_day=current.current_day,
+            market_snapshot=current.market_snapshot,
+            trend_state=current.trend_state,
+            steps=(
+                AdvanceDayStep(
+                    name="advance_clock",
+                    description="Increment the simulation day.",
+                ),
+            ),
+        )
+
+    def get_world_state(self):
+        return {"cursor": self.index}
+
+    def replace_world_state(self, state):
+        self.replace_calls += 1
+        self.index = int(state["cursor"])
+        return {"cursor": self.index}
+
+
+class FakeTournamentSellerCoreClient(FakeSellerCoreClient):
+    def __init__(
+        self,
+        *,
+        shops: dict[int, dict[str, object]],
+        listings: dict[int, list[dict[str, object]]],
+        payments: dict[int, list[dict[str, object]]],
+    ) -> None:
+        super().__init__()
+        self.shops = {shop_id: dict(value) for shop_id, value in shops.items()}
+        self.listings = {
+            shop_id: [dict(item) for item in values] for shop_id, values in listings.items()
+        }
+        self.payments = {
+            shop_id: [dict(item) for item in values] for shop_id, values in payments.items()
+        }
+        self.state_calls: list[tuple[str, dict[str, object]]] = []
+
+    def get_shop_info(self, *, shop_id):
+        self.state_calls.append(("get_shop_info", {"shop_id": shop_id}))
+        return dict(self.shops[shop_id])
+
+    def get_shop_listings(self, *, shop_id, limit=100, offset=0, **kwargs):
+        self.state_calls.append(
+            ("get_shop_listings", {"shop_id": shop_id, "limit": limit, "offset": offset, **kwargs})
+        )
+        values = self.listings.get(shop_id, [])
+        return page_payload(values[offset : offset + limit])
+
+    def get_orders(self, *, shop_id, limit=100, offset=0, **kwargs):
+        self.state_calls.append(
+            ("get_orders", {"shop_id": shop_id, "limit": limit, "offset": offset, **kwargs})
+        )
+        return page_payload([])
+
+    def get_reviews(self, *, shop_id, limit=100, offset=0, **kwargs):
+        self.state_calls.append(
+            ("get_reviews", {"shop_id": shop_id, "limit": limit, "offset": offset, **kwargs})
+        )
+        return page_payload([])
+
+    def get_capacity_status(self, *, shop_id):
+        self.state_calls.append(("get_capacity_status", {"shop_id": shop_id}))
+        shop = self.shops[shop_id]
+        return {
+            "shop_id": shop_id,
+            "generated_at": shop.get("generated_at", "2026-03-01T00:00:00Z"),
+            "production_capacity_per_day": int(shop.get("production_capacity_per_day", 0)),
+            "backlog_units": int(shop.get("backlog_units", 0)),
+            "queue_depth": int(shop.get("queue_depth", 0)),
+            "queued_stock_units": int(shop.get("queued_stock_units", 0)),
+            "queued_customer_order_units": int(shop.get("queued_customer_order_units", 0)),
+            "listings": [],
+        }
+
+    def get_payments(self, *, shop_id):
+        self.state_calls.append(("get_payments", {"shop_id": shop_id}))
+        return page_payload(self.payments.get(shop_id, []))
+
+
+class TournamentStubProvider:
+    def __init__(self, label: str) -> None:
+        self.label = label
+
+    def complete(self, *, messages, tools, tool_choice="auto", allow_parallel_tool_calls=False):
+        tool_names = {tool.name for tool in tools}
+        if "save_end_of_day_note" in tool_names:
+            return ProviderResponse(
+                content="",
+                tool_calls=(
+                    ProviderToolCall(
+                        name="save_end_of_day_note",
+                        arguments={"body": f"{self.label} notes the day."},
+                    ),
+                ),
+            )
+
+        return ProviderResponse(
+            content=f"{self.label} ends the day cleanly.",
+            tool_calls=(
+                ProviderToolCall(
+                    name=END_DAY_TOOL_NAME,
+                    arguments={"summary": f"{self.label} ends the day."},
+                ),
+            ),
+        )
 
 
 def build_market_state(day: int, date: str, *, label: str, taxonomy_id: int) -> GlobalMarketState:
@@ -1419,6 +1560,178 @@ class OwnerAgentRunnerTests(unittest.TestCase):
         self.assertEqual(result.days[0].market_state_before.current_day.day, 3)
 
 
+class TournamentModeTests(unittest.TestCase):
+    def test_tournament_runner_rotates_shops_resets_world_and_aggregates_standings(self) -> None:
+        seller_client = FakeTournamentSellerCoreClient(
+            shops={
+                1001: {
+                    "shop_id": 1001,
+                    "shop_name": "alpha-atelier",
+                    "currency_code": "USD",
+                    "listing_active_count": 1,
+                    "total_sales_count": 12,
+                    "review_average": 4.9,
+                    "review_count": 8,
+                },
+                1002: {
+                    "shop_id": 1002,
+                    "shop_name": "beta-bench",
+                    "currency_code": "USD",
+                    "listing_active_count": 1,
+                    "total_sales_count": 6,
+                    "review_average": 4.4,
+                    "review_count": 5,
+                },
+            },
+            listings={
+                1001: [
+                    {
+                        "listing_id": 2001,
+                        "title": "High Margin Planter",
+                        "state": "active",
+                        "price": 32.0,
+                        "quantity": 4,
+                        "views": 120,
+                        "favorites": 30,
+                        "updated_at": "2026-02-28T08:00:00Z",
+                    }
+                ],
+                1002: [
+                    {
+                        "listing_id": 2002,
+                        "title": "Budget Desk Tray",
+                        "state": "active",
+                        "price": 18.0,
+                        "quantity": 7,
+                        "views": 80,
+                        "favorites": 12,
+                        "updated_at": "2026-02-28T08:00:00Z",
+                    }
+                ],
+            },
+            payments={
+                1001: [
+                    {
+                        "payment_id": 7001,
+                        "receipt_id": 5001,
+                        "amount": 120.0,
+                        "currency_code": "USD",
+                    }
+                ],
+                1002: [
+                    {
+                        "payment_id": 7002,
+                        "receipt_id": 5002,
+                        "amount": 80.0,
+                        "currency_code": "USD",
+                    }
+                ],
+            },
+        )
+        control_client = FakeTournamentControlApiClient(
+            [
+                build_market_state(3, "2026-02-28T00:00:00Z", label="Planters", taxonomy_id=9101),
+                build_market_state(4, "2026-03-01T00:00:00Z", label="Desk Goods", taxonomy_id=9102),
+            ]
+        )
+        entrants = (
+            TournamentEntrantConfig(
+                entrant=TournamentEntrant(
+                    entrant_id="mistral-medium",
+                    display_name="Mistral Medium",
+                    provider="mistral",
+                    model="mistral-medium-latest",
+                )
+            ),
+            TournamentEntrantConfig(
+                entrant=TournamentEntrant(
+                    entrant_id="mistral-small",
+                    display_name="Mistral Small",
+                    provider="mistral",
+                    model="mistral-small-latest",
+                )
+            ),
+        )
+
+        def entrant_runner_factory(entrant: TournamentEntrantConfig):
+            return OwnerAgentRunner(
+                provider=TournamentStubProvider(entrant.entrant.display_name),
+                seller_client=seller_client,
+                control_client=control_client,
+                memory=InMemoryAgentMemory(),
+                event_log=InMemoryEventLog(),
+                config=OwnerAgentRunnerConfig(turns_per_day=3),
+            )
+
+        runner = ArenaTournamentRunner(
+            control_client=control_client,
+            entrant_runner_factory=entrant_runner_factory,
+            config=TournamentConfig(days_per_round=2, rounds=2),
+        )
+
+        result = runner.run(
+            entrants=entrants,
+            shop_ids=(1001, 1002),
+            run_id="arena_suite",
+        )
+
+        self.assertEqual(result.run_id, "arena_suite")
+        self.assertEqual(result.round_count, 2)
+        self.assertEqual(len(result.rounds), 2)
+        self.assertEqual(
+            [assignment.shop_id for assignment in result.rounds[0].shop_assignments],
+            [1001, 1002],
+        )
+        self.assertEqual(
+            [assignment.shop_id for assignment in result.rounds[1].shop_assignments],
+            [1002, 1001],
+        )
+        self.assertEqual(result.rounds[0].days[0].turn_order, ("mistral-medium", "mistral-small"))
+        self.assertEqual(result.rounds[0].days[1].turn_order, ("mistral-small", "mistral-medium"))
+        self.assertEqual(control_client.advance_calls, 2)
+        self.assertEqual(control_client.replace_calls, 1)
+        self.assertEqual(result.rounds[0].standings[0].entrant.entrant_id, "mistral-medium")
+        self.assertEqual(result.rounds[1].standings[0].entrant.entrant_id, "mistral-small")
+        self.assertEqual(result.standings[0].average_primary_score, 100.0)
+        self.assertEqual(result.standings[1].average_primary_score, 100.0)
+        self.assertEqual(result.standings[0].round_wins, 1)
+        self.assertEqual(result.standings[1].round_wins, 1)
+        self.assertTrue(
+            all(
+                entrant_result.live_day.day_result.end_reason == DayEndReason.AGENT_ENDED_DAY
+                for round_result in result.rounds
+                for day_result in round_result.days
+                for entrant_result in day_result.entrant_results
+            )
+        )
+
+    def test_tournament_entrant_loader_applies_defaults(self) -> None:
+        entrants = load_tournament_entrants_from_payload(
+            {
+                "entrants": [
+                    {
+                        "entrant_id": "mistral-medium",
+                    },
+                    {
+                        "entrant_id": "mistral-small",
+                        "display_name": "Mistral Small",
+                        "model": "mistral-small-latest",
+                        "temperature": 0.3,
+                    },
+                ]
+            },
+            default_model="mistral-medium-latest",
+            default_temperature=0.1,
+        )
+
+        self.assertEqual(entrants[0].entrant.display_name, "mistral-medium")
+        self.assertEqual(entrants[0].entrant.model, "mistral-medium-latest")
+        self.assertEqual(entrants[0].temperature, 0.1)
+        self.assertEqual(entrants[1].entrant.display_name, "Mistral Small")
+        self.assertEqual(entrants[1].entrant.model, "mistral-small-latest")
+        self.assertEqual(entrants[1].temperature, 0.3)
+
+
 class RuntimeCliTests(unittest.TestCase):
     def test_run_day_command_loads_briefing_and_emits_json(self) -> None:
         fake_runner = FakeRunner(
@@ -1532,6 +1845,54 @@ class RuntimeCliTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["artifacts"]["output_dir"], "/tmp/fake-artifacts")
         self.assertEqual(persist.call_args.kwargs["output_dir"], "artifacts/test-output")
+
+    def test_run_tournament_command_executes_arena_flow(self) -> None:
+        fake_runner = FakeRunner(
+            {
+                "run_id": "run_tournament_cli",
+                "round_count": 1,
+            }
+        )
+        stdout = StringIO()
+        entrants_payload = {
+            "entrants": [
+                {"entrant_id": "mistral-medium", "model": "mistral-medium-latest"},
+                {"entrant_id": "mistral-small", "model": "mistral-small-latest"},
+            ]
+        }
+
+        with tempfile.NamedTemporaryFile("w+", encoding="utf-8") as handle:
+            json.dump(entrants_payload, handle)
+            handle.flush()
+
+            with patch("agent_runtime.cli.build_default_tournament_runner", return_value=fake_runner):
+                with patch("sys.stdout", stdout):
+                    exit_code = runtime_cli_main(
+                        [
+                            "run-tournament",
+                            "--entrants-file",
+                            handle.name,
+                            "--shop-ids",
+                            "1001,1002",
+                            "--days",
+                            "3",
+                            "--rounds",
+                            "2",
+                            "--run-id",
+                            "run_tournament_cli",
+                        ]
+                    )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["run_id"], "run_tournament_cli")
+        self.assertEqual(fake_runner.tournament_calls[0]["shop_ids"], (1001, 1002))
+        self.assertEqual(fake_runner.tournament_calls[0]["run_id"], "run_tournament_cli")
+        self.assertEqual(
+            fake_runner.tournament_calls[0]["entrants"][0].entrant.entrant_id,
+            "mistral-medium",
+        )
 
 
 class TurnDecisionValidationTests(unittest.TestCase):

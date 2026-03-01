@@ -121,4 +121,45 @@ describe("Botique server control endpoints", () => {
     assert.equal(dayResponse.statusCode, 200);
     assert.equal(dayResponse.json().day, 3);
   });
+
+  test("replaces the world state through /control for repeatable runtime experiments", async () => {
+    const originalWorldStateResponse = await app.inject({
+      method: "GET",
+      url: "/control/world-state"
+    });
+
+    assert.equal(originalWorldStateResponse.statusCode, 200);
+    const replacementWorldState = originalWorldStateResponse.json();
+    replacementWorldState.simulation.current_day = {
+      day: 9,
+      date: "2026-03-06T00:00:00.000Z",
+      advanced_at: "2026-03-05T23:59:59.000Z"
+    };
+    replacementWorldState.marketplace.shops[0].announcement = "Tournament reset applied.";
+
+    const replaceResponse = await app.inject({
+      method: "POST",
+      url: "/control/world-state",
+      payload: replacementWorldState
+    });
+
+    assert.equal(replaceResponse.statusCode, 200);
+    assert.equal(replaceResponse.json().simulation.current_day.day, 9);
+    assert.equal(
+      replaceResponse.json().marketplace.shops[0].announcement,
+      "Tournament reset applied."
+    );
+
+    const [dayResponse, worldStateResponse] = await Promise.all([
+      app.inject({ method: "GET", url: "/control/simulation/day" }),
+      app.inject({ method: "GET", url: "/control/world-state" })
+    ]);
+
+    assert.equal(dayResponse.statusCode, 200);
+    assert.equal(dayResponse.json().day, 9);
+    assert.equal(
+      worldStateResponse.json().marketplace.shops[0].announcement,
+      "Tournament reset applied."
+    );
+  });
 });
