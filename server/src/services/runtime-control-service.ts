@@ -29,4 +29,8 @@ export class RuntimeControlService {
   async getWorldState(): Promise<StoredWorldState> {
     return this.simulation.getWorldState();
   }
+
+  async resetWorld(): Promise<StoredWorldState> {
+    return this.simulation.resetWorld();
+  }
 }

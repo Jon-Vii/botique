@@ -1,3 +1,5 @@
+import { createDefaultMarketplaceState } from "../default-marketplace-state";
+import { createWorldState } from "./state";
 import { resolveAdvanceDay } from "./day-resolution";
 import type {
   AdvanceDayResult,
@@ -13,6 +15,7 @@ import type {
 export interface SimulationStateStore {
   getMarketplaceState(): Promise<StoredMarketplaceState>;
   replaceWorldState(state: StoredWorldState): Promise<StoredWorldState>;
+  resetWorldState?(): Promise<StoredWorldState>;
   getSimulationState(): Promise<SimulationState>;
   setSimulationState(state: SimulationState): Promise<SimulationState>;
 }
@@ -24,6 +27,7 @@ export interface SimulationModule {
   getTrendState(): Promise<TrendState>;
   getSearchContext(): Promise<MarketplaceSearchContext>;
   advanceDay(): Promise<AdvanceDayResult>;
+  resetWorld(): Promise<StoredWorldState>;
 }
 
 export class WorldSimulation implements SimulationModule {
@@ -71,6 +75,13 @@ export class WorldSimulation implements SimulationModule {
       ...result,
       world: persistedWorld
     };
+  }
+
+  async resetWorld(): Promise<StoredWorldState> {
+    if (this.store.resetWorldState) {
+      return this.store.resetWorldState();
+    }
+    return this.store.replaceWorldState(createWorldState(createDefaultMarketplaceState()));
   }
 }
 

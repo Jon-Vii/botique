@@ -27,6 +27,7 @@ export type MutationMetadata = {
 export interface MarketplaceRepository {
   getMarketplaceState(): Promise<StoredMarketplaceState>;
   replaceWorldState(state: StoredWorldState): Promise<StoredWorldState>;
+  resetWorldState?(): Promise<StoredWorldState>;
   getSimulationState(): Promise<SimulationState>;
   setSimulationState(state: SimulationState): Promise<SimulationState>;
   getShop(shopId: number): Promise<Shop | null>;

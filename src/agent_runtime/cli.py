@@ -76,6 +76,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_day.add_argument("--turns-per-day", type=int, default=5)
     run_day.add_argument("--work-budget", type=int, help=argparse.SUPPRESS)
     run_day.add_argument("--max-turns", type=int, help=argparse.SUPPRESS)
+    run_day.add_argument("--reset-world", action="store_true")
     run_day.add_argument("--pretty", action="store_true")
 
     run_days = subparsers.add_parser(
@@ -97,6 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_days.add_argument("--turns-per-day", type=int, default=5)
     run_days.add_argument("--work-budget", type=int, help=argparse.SUPPRESS)
     run_days.add_argument("--max-turns", type=int, help=argparse.SUPPRESS)
+    run_days.add_argument("--reset-world", action="store_true")
     run_days.add_argument("--pretty", action="store_true")
     return parser
 
@@ -134,6 +136,7 @@ def main(argv: list[str] | None = None) -> int:
                 result = runner.run_live_day(
                     shop_id=_parse_shop_id_argument(namespace.shop_id),
                     run_id=namespace.run_id,
+                    reset_world=namespace.reset_world,
                 )
             else:
                 briefing = morning_briefing_from_payload(
@@ -145,6 +148,7 @@ def main(argv: list[str] | None = None) -> int:
                 shop_id=_parse_shop_id_argument(namespace.shop_id),
                 days=namespace.days,
                 run_id=namespace.run_id,
+                reset_world=namespace.reset_world,
             )
 
         _print_json({"ok": True, "result": jsonify(result)}, pretty=namespace.pretty)

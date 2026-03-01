@@ -210,12 +210,14 @@ class FakeRunner:
         self.received_briefings.append(briefing)
         return self.result
 
-    def run_live_day(self, *, shop_id, run_id=None):
-        self.live_day_calls.append({"shop_id": shop_id, "run_id": run_id})
+    def run_live_day(self, *, shop_id, run_id=None, reset_world=False):
+        self.live_day_calls.append({"shop_id": shop_id, "run_id": run_id, "reset_world": reset_world})
         return self.result
 
-    def run_live_days(self, *, shop_id, days, run_id=None):
-        self.live_days_calls.append({"shop_id": shop_id, "days": days, "run_id": run_id})
+    def run_live_days(self, *, shop_id, days, run_id=None, reset_world=False):
+        self.live_days_calls.append(
+            {"shop_id": shop_id, "days": days, "run_id": run_id, "reset_world": reset_world}
+        )
         return self.result
 
 
@@ -224,6 +226,7 @@ class FakeControlApiClient:
         self.market_states = list(market_states)
         self.index = 0
         self.advance_calls = 0
+        self.reset_calls = 0
 
     def get_global_market_state(self) -> GlobalMarketState:
         return self.market_states[self.index]
@@ -246,6 +249,10 @@ class FakeControlApiClient:
                 ),
             ),
         )
+
+    def reset_world(self) -> None:
+        self.reset_calls += 1
+        self.index = 0
 
 
 def build_market_state(day: int, date: str, *, label: str, taxonomy_id: int) -> GlobalMarketState:
@@ -1219,6 +1226,83 @@ class OwnerAgentRunnerTests(unittest.TestCase):
             [event.kind.value for event in result.events],
         )
 
+    def test_runner_can_reset_world_before_live_days(self) -> None:
+        seller_client = FakeLiveSellerCoreClient(
+            shop={
+                "shop_id": 1001,
+                "shop_name": "northwind-printables",
+                "currency_code": "USD",
+                "listing_active_count": 1,
+                "total_sales_count": 5,
+                "review_average": 4.8,
+                "review_count": 3,
+            },
+            listings=[
+                {
+                    "listing_id": 2001,
+                    "title": "Mushroom Cottage Printable Wall Art",
+                    "state": "active",
+                    "price": 14.0,
+                    "quantity": 999,
+                    "views": 140,
+                    "favorites": 36,
+                    "updated_at": "2026-02-28T08:00:00Z",
+                }
+            ],
+            orders=[],
+            reviews=[],
+            payments=[],
+        )
+        control_client = FakeControlApiClient(
+            [
+                build_market_state(3, "2026-02-28T00:00:00Z", label="Wall Art", taxonomy_id=9101),
+                build_market_state(4, "2026-03-01T00:00:00Z", label="Planner", taxonomy_id=9102),
+            ]
+        )
+        control_client.index = 1
+        provider = RecordingProvider(
+            [
+                ProviderResponse(
+                    content="",
+                    tool_calls=(
+                        ProviderToolCall(
+                            name=END_DAY_TOOL_NAME,
+                            arguments={"summary": "Done."},
+                        ),
+                    ),
+                ),
+                ProviderResponse(
+                    content="",
+                    tool_calls=(
+                        ProviderToolCall(
+                            name="save_end_of_day_note",
+                            arguments={"body": "Reset smoke note."},
+                        ),
+                    ),
+                ),
+            ]
+        )
+        runner = build_default_owner_agent_runner(
+            turns_per_day=4,
+            memory=InMemoryAgentMemory(),
+            event_log=InMemoryEventLog(),
+            policy_config=ProviderPolicyConfig(),
+            mistral_api_key="unused",
+        )
+        runner = type(runner)(
+            provider=provider,
+            seller_client=seller_client,
+            control_client=control_client,
+            memory=InMemoryAgentMemory(),
+            event_log=InMemoryEventLog(),
+        )
+
+        result = runner.run_live_days(shop_id=1001, days=1, run_id="run_reset", reset_world=True)
+
+        self.assertEqual(control_client.reset_calls, 1)
+        self.assertEqual(result.days[0].day, 3)
+        self.assertEqual(result.days[0].market_state_before.current_day.day, 3)
+
 
 class RuntimeCliTests(unittest.TestCase):
     def test_run_day_command_loads_briefing_and_emits_json(self) -> None:
@@ -1280,6 +1364,25 @@ class RuntimeCliTests(unittest.TestCase):
         self.assertEqual(payload["result"]["run_id"], "run_live_cli")
         self.assertEqual(fake_runner.live_days_calls[0]["shop_id"], 1001)
         self.assertEqual(fake_runner.live_days_calls[0]["days"], 2)
+
+    def test_run_days_command_can_request_world_reset(self) -> None:
+        fake_runner = FakeRunner(
+            {
+                "run_id": "run_reset_cli",
+                "days": [{"day": 1}],
+            }
+        )
+        stdout = StringIO()
+
+        with patch("agent_runtime.cli.build_default_owner_agent_runner", return_value=fake_runner):
+            with patch("sys.stdout", stdout):
+                exit_code = runtime_cli_main(
+                    ["run-days", "--shop-id", "1001", "--days", "1", "--reset-world"]
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(json.loads(stdout.getvalue())["ok"])
+        self.assertTrue(fake_runner.live_days_calls[0]["reset_world"])
 
 
 class TurnDecisionValidationTests(unittest.TestCase):

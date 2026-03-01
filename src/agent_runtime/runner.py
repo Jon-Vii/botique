@@ -122,8 +122,12 @@ class OwnerAgentRunner:
         run_id: str | None = None,
         previous_shop_state: ShopStateSnapshot | None = None,
         advance_day: bool = False,
+        reset_world: bool = False,
     ) -> LiveDayRunResult:
         active_run_id = run_id or f"run_{uuid4().hex[:12]}"
+        if reset_world:
+            self._require_control_client().reset_world()
+            previous_shop_state = None
         live_briefing = self.build_live_briefing(
             shop_id=shop_id,
             run_id=active_run_id,
@@ -182,6 +186,7 @@ class OwnerAgentRunner:
         shop_id: ShopId,
         days: int,
         run_id: str | None = None,
+        reset_world: bool = False,
     ) -> MultiDayRunResult:
         if days < 1:
             raise ValueError("days must be at least 1.")
@@ -190,12 +195,16 @@ class OwnerAgentRunner:
         previous_shop_state: ShopStateSnapshot | None = None
         live_days: list[LiveDayRunResult] = []
 
+        if reset_world:
+            self._require_control_client().reset_world()
+
         for index in range(days):
             live_day = self.run_live_day(
                 shop_id=shop_id,
                 run_id=active_run_id,
                 previous_shop_state=previous_shop_state,
                 advance_day=index < days - 1,
+                reset_world=False,
             )
             live_days.append(live_day)
             previous_shop_state = live_day.state_after

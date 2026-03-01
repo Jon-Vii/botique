@@ -97,4 +97,28 @@ describe("Botique server control endpoints", () => {
       advancePayload.current_day.advanced_at
     );
   });
+
+  test("resets the world state through /control back to the initial seeded snapshot", async () => {
+    const advanceResponse = await app.inject({
+      method: "POST",
+      url: "/control/simulation/advance-day"
+    });
+    assert.equal(advanceResponse.statusCode, 200);
+
+    const resetResponse = await app.inject({
+      method: "POST",
+      url: "/control/world/reset"
+    });
+    assert.equal(resetResponse.statusCode, 200);
+
+    const resetPayload = resetResponse.json();
+    assert.equal(resetPayload.simulation.current_day.day, 3);
+    assert.equal(resetPayload.simulation.current_day.date, "2026-02-28T00:00:00.000Z");
+    assert.equal(resetPayload.simulation.market_snapshot.active_listing_count, 4);
+    assert.equal(resetPayload.marketplace.orders.length, 7);
+
+    const dayResponse = await app.inject({ method: "GET", url: "/control/simulation/day" });
+    assert.equal(dayResponse.statusCode, 200);
+    assert.equal(dayResponse.json().day, 3);
+  });
 });

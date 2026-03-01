@@ -38,10 +38,12 @@ function mutationTimestamp(metadata?: MutationMetadata): string {
 }
 
 export class InMemoryMarketplaceRepository implements MarketplaceRepository {
+  private readonly initialState: StoredWorldState;
   private readonly state: StoredWorldState;
 
   constructor(seedState?: StoredMarketplaceState | StoredWorldState) {
-    this.state = normalizeWorldState(seedState ?? createDefaultMarketplaceState());
+    this.initialState = normalizeWorldState(seedState ?? createDefaultMarketplaceState());
+    this.state = clone(this.initialState);
   }
 
   async getMarketplaceState(): Promise<StoredMarketplaceState> {
@@ -56,6 +58,12 @@ export class InMemoryMarketplaceRepository implements MarketplaceRepository {
     const normalized = normalizeWorldState(state);
     this.state.marketplace = normalized.marketplace;
     this.state.simulation = normalized.simulation;
+    return clone(this.state);
+  }
+
+  async resetWorldState(): Promise<StoredWorldState> {
+    this.state.marketplace = clone(this.initialState.marketplace);
+    this.state.simulation = clone(this.initialState.simulation);
     return clone(this.state);
   }
 

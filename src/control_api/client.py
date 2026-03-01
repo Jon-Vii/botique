@@ -186,6 +186,9 @@ class ControlApiClient:
         payload = self._request("advance_day", "POST", "/simulation/advance-day")
         return _parse_advance_day_result(payload)
 
+    def reset_world(self) -> None:
+        self._request("reset_world", "POST", "/world/reset")
+
     def _request(
         self,
         endpoint_name: str,

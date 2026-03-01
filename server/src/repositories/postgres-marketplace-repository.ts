@@ -22,9 +22,10 @@ import type {
   TaxonomyNode
 } from "../schemas/domain";
 import { recalculateShopBacklog, syncListingInventoryState } from "../simulation/production";
-import { createSimulationState, normalizeWorldState } from "../simulation/state";
+import { createSimulationState, createWorldState, normalizeWorldState } from "../simulation/state";
 import type { SimulationState, StoredMarketplaceState, StoredWorldState } from "../simulation/state-types";
 import { isMarketplaceActiveListing } from "../listing-availability";
+import { createDefaultMarketplaceState } from "../default-marketplace-state";
 import type {
   CreateListingData,
   MarketplaceRepository,
@@ -345,6 +346,10 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
       marketplace: await this.getMarketplaceState(),
       simulation: await this.getSimulationState()
     };
+  }
+
+  async resetWorldState(): Promise<StoredWorldState> {
+    return this.replaceWorldState(createWorldState(createDefaultMarketplaceState()));
   }
 
   async getSimulationState(): Promise<SimulationState> {

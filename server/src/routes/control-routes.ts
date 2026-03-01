@@ -38,6 +38,10 @@ export async function registerControlRoutes(app: FastifyInstance, service: Runti
     sendValidated(reply, advanceDayResultSchema, await service.advanceDay())
   );
 
+  app.post("/world/reset", async (_request, reply) =>
+    sendValidated(reply, worldStateSchema, await service.resetWorld())
+  );
+
   app.get("/world-state", async (_request, reply) =>
     sendValidated(reply, worldStateSchema, await service.getWorldState())
   );
