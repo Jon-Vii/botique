@@ -193,13 +193,16 @@ Current CLI entry points:
 
 - `botique-agent-runtime run-day --briefing-file <path>`
 - `botique-agent-runtime run-day --shop-id <shop_id>`
+- `botique-agent-runtime run-day --shop-id <shop_id> --scenario <operate|bootstrap>`
 - `botique-agent-runtime run-day --shop-id <shop_id> --turns-per-day <n>`
 - `botique-agent-runtime run-days --shop-id <shop_id> --days <n>`
+- `botique-agent-runtime run-days --shop-id <shop_id> --days <n> --scenario <operate|bootstrap>`
 - `botique-agent-runtime run-tournament --entrants-file <path> --shop-ids <comma-list> --days <n> [--rounds <n>]`
 
 Notes:
 
 - `run-days` is the main reference-run path; it builds each morning briefing from live Botique state, executes the workday, advances the simulation, and persists an artifact bundle
+- `--scenario` is a deterministic world-reset selector for live runs; use `operate` for the default existing-business benchmark and `bootstrap` when the controlled shop should start with zero listings
 - the default provider wiring is Mistral through `MISTRAL_API_KEY` and optional `BOTIQUE_MISTRAL_*` settings, but the loop itself remains provider-agnostic
 - live runs accept `--output-dir`; if omitted, artifacts are written under `artifacts/agent-runtime/<timestamp>__shop-...__<run_id>`
 - `BOTIQUE_CONTROL_BASE_URL` is optional if the control surface lives next to the seller API; the runtime derives `/control` from `BOTIQUE_CORE_BASE_URL` when omitted
@@ -212,6 +215,7 @@ MISTRAL_API_KEY=your-key \
 botique-agent-runtime run-days \
   --shop-id 1001 \
   --days 5 \
+  --scenario operate \
   --run-id reference_baseline_01 \
   --turns-per-day 5 \
   --output-dir artifacts/agent-runtime/reference-baseline-01 \

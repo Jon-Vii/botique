@@ -16,6 +16,11 @@ export const simulationDaySchema = z.object({
   advanced_at: z.string().nullable()
 });
 
+export const simulationScenarioSchema = z.object({
+  scenario_id: z.enum(["operate", "bootstrap"]),
+  controlled_shop_ids: z.array(z.number().int().positive())
+});
+
 export const marketTrendSchema = z.object({
   trend_id: z.string(),
   label: z.string(),
@@ -90,6 +95,7 @@ export const storedMarketplaceStateSchema = z.object({
 
 export const simulationStateSchema = z.object({
   current_day: simulationDaySchema,
+  scenario: simulationScenarioSchema,
   market_snapshot: marketSnapshotSchema,
   trend_state: trendStateSchema,
   pending_reviews: z.array(pendingReviewSchema),
@@ -99,6 +105,13 @@ export const simulationStateSchema = z.object({
 export const worldStateSchema = z.object({
   marketplace: storedMarketplaceStateSchema,
   simulation: simulationStateSchema
+});
+
+export const worldStateInputSchema = z.object({
+  marketplace: storedMarketplaceStateSchema,
+  simulation: simulationStateSchema.extend({
+    scenario: simulationScenarioSchema.optional()
+  })
 });
 
 export const advanceDayStepSchema = z.object({
@@ -122,6 +135,11 @@ export const advanceDayResultSchema = z.object({
 });
 
 export const advanceDayRequestSchema = z.object({
+  controlled_shop_ids: z.array(z.number().int().positive()).optional()
+});
+
+export const resetWorldRequestSchema = z.object({
+  scenario_id: z.enum(["operate", "bootstrap"]).optional(),
   controlled_shop_ids: z.array(z.number().int().positive()).optional()
 });
 

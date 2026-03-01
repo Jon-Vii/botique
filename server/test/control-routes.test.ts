@@ -122,8 +122,9 @@ describe("Botique server control endpoints", () => {
   });
 
   test("reads simulation day, market snapshot, trend state, and debug world state from /control", async () => {
-    const [dayResponse, snapshotResponse, trendResponse, worldStateResponse] = await Promise.all([
+    const [dayResponse, scenarioResponse, snapshotResponse, trendResponse, worldStateResponse] = await Promise.all([
       app.inject({ method: "GET", url: "/control/simulation/day" }),
+      app.inject({ method: "GET", url: "/control/simulation/scenario" }),
       app.inject({ method: "GET", url: "/control/simulation/market-snapshot" }),
       app.inject({ method: "GET", url: "/control/simulation/trend-state" }),
       app.inject({ method: "GET", url: "/control/world-state" })
@@ -134,6 +135,12 @@ describe("Botique server control endpoints", () => {
       day: 3,
       date: "2026-02-28T00:00:00.000Z",
       advanced_at: null
+    });
+
+    assert.equal(scenarioResponse.statusCode, 200);
+    assert.deepEqual(scenarioResponse.json(), {
+      scenario_id: "operate",
+      controlled_shop_ids: [1001]
     });
 
     assert.equal(snapshotResponse.statusCode, 200);
@@ -155,6 +162,8 @@ describe("Botique server control endpoints", () => {
     assert.equal(worldState.marketplace.shops[0].shop_id, 1001);
     assert.equal("listing_active_count" in worldState.marketplace.shops[0], false);
     assert.equal(worldState.simulation.current_day.day, 3);
+    assert.equal(worldState.simulation.scenario.scenario_id, "operate");
+    assert.deepEqual(worldState.simulation.scenario.controlled_shop_ids, [1001]);
   });
 
   test("advances the simulation day through /control and persists the updated state", async () => {
@@ -232,12 +241,39 @@ describe("Botique server control endpoints", () => {
     const resetPayload = resetResponse.json();
     assert.equal(resetPayload.simulation.current_day.day, 3);
     assert.equal(resetPayload.simulation.current_day.date, "2026-02-28T00:00:00.000Z");
+    assert.equal(resetPayload.simulation.scenario.scenario_id, "operate");
     assert.equal(resetPayload.simulation.market_snapshot.active_listing_count, 4);
     assert.equal(resetPayload.marketplace.orders.length, 7);
 
     const dayResponse = await app.inject({ method: "GET", url: "/control/simulation/day" });
     assert.equal(dayResponse.statusCode, 200);
     assert.equal(dayResponse.json().day, 3);
+  });
+
+  test("supports deterministic bootstrap resets through /control", async () => {
+    const resetResponse = await app.inject({
+      method: "POST",
+      url: "/control/world/reset",
+      payload: {
+        scenario_id: "bootstrap",
+        controlled_shop_ids: [1001]
+      }
+    });
+
+    assert.equal(resetResponse.statusCode, 200);
+    const resetPayload = resetResponse.json();
+    assert.deepEqual(resetPayload.simulation.scenario, {
+      scenario_id: "bootstrap",
+      controlled_shop_ids: [1001]
+    });
+    assert.equal(
+      resetPayload.marketplace.listings.filter((listing: { shop_id: number }) => listing.shop_id === 1001).length,
+      0
+    );
+    assert.equal(resetPayload.marketplace.shops[0].production_queue.length, 0);
+    assert.equal(resetPayload.marketplace.orders.filter((order: { shop_id: number }) => order.shop_id === 1001).length, 1);
+    assert.equal(resetPayload.marketplace.payments.filter((payment: { shop_id: number }) => payment.shop_id === 1001).length, 1);
+    assert.equal(resetPayload.simulation.market_snapshot.active_listing_count, 3);
   });
 
   test("replaces the world state through /control for repeatable runtime experiments", async () => {
@@ -267,6 +303,7 @@ describe("Botique server control endpoints", () => {
       replaceResponse.json().marketplace.shops[0].announcement,
       "Tournament reset applied."
     );
+    assert.equal(replaceResponse.json().simulation.scenario.scenario_id, "operate");
 
     const [dayResponse, worldStateResponse] = await Promise.all([
       app.inject({ method: "GET", url: "/control/simulation/day" }),

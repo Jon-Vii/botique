@@ -7,6 +7,7 @@ import type {
   StoredShop,
   TaxonomyNode
 } from "../schemas/domain";
+import type { SimulationScenario } from "./scenario-types";
 
 export type StoredMarketplaceState = {
   shops: StoredShop[];
@@ -88,6 +89,7 @@ export type DayResolutionSummary = {
 
 export type SimulationState = {
   current_day: SimulationDay;
+  scenario: SimulationScenario;
   market_snapshot: MarketSnapshot;
   trend_state: TrendState;
   pending_reviews: PendingReview[];

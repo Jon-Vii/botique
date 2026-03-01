@@ -10,6 +10,7 @@ from .client import (
     MarketSnapshot,
     MarketTrend,
     SimulationDay,
+    SimulationScenario,
     TaxonomyMarketSnapshot,
     TrendState,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "MarketSnapshot",
     "MarketTrend",
     "SimulationDay",
+    "SimulationScenario",
     "TaxonomyMarketSnapshot",
     "TrendState",
 ]

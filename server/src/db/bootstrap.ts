@@ -387,6 +387,7 @@ export async function bootstrapDatabase(
       current_day integer not null,
       current_day_date timestamptz not null,
       advanced_at timestamptz,
+      scenario jsonb not null default '{"scenario_id":"operate","controlled_shop_ids":[1001]}'::jsonb,
       market_snapshot jsonb not null,
       trend_state jsonb not null,
       pending_reviews jsonb not null,
@@ -394,6 +395,12 @@ export async function bootstrapDatabase(
       updated_at timestamptz not null
     )
   `;
+  await client`alter table simulation_state add column if not exists scenario jsonb`;
+  await client`
+    update simulation_state
+    set scenario = coalesce(scenario, '{"scenario_id":"operate","controlled_shop_ids":[1001]}'::jsonb)
+  `;
+  await client`alter table simulation_state alter column scenario set not null`;
   await client`alter table simulation_state add column if not exists pending_reviews jsonb`;
   await client`alter table simulation_state add column if not exists last_resolution jsonb`;
   await client`update simulation_state set pending_reviews = coalesce(pending_reviews, '[]'::jsonb)`;

@@ -390,12 +390,14 @@ def _build_run_summary(
     ending_state = _shop_state_summary(
         normalized.days[-1].state_next_day or normalized.days[-1].state_after
     )
+    scenario = _scenario_summary(normalized.days[0])
 
     return {
         "generated_at": created_at.isoformat(),
         "run_id": normalized.run_id,
         "shop_id": jsonify(normalized.shop_id),
         "mode": "live" if normalized.is_live else "briefing_only",
+        "scenario": scenario,
         "day_count": len(normalized.days),
         "start_day": normalized.days[0].day,
         "end_day": normalized.days[-1].day,
@@ -534,12 +536,26 @@ def _render_run_summary(
         f"- Shop ID: `{normalized.shop_id}`",
         f"- Days captured: {summary_payload['day_count']}",
         f"- Mode: `{summary_payload['mode']}`",
-        "",
-        "## Totals",
-        "",
     ]
 
     totals = _mapping(summary_payload.get("totals"), "summary.totals")
+    raw_scenario = summary_payload.get("scenario")
+    if isinstance(raw_scenario, Mapping):
+        scenario = raw_scenario
+        controlled_shop_ids = scenario.get("controlled_shop_ids")
+        controlled_shop_ids_text = "none"
+        if isinstance(controlled_shop_ids, list) and controlled_shop_ids:
+            controlled_shop_ids_text = ", ".join(str(item) for item in controlled_shop_ids)
+        lines.extend(
+            [
+                "",
+                "## Scenario",
+                "",
+                f"- Scenario: `{scenario.get('scenario_id', 'unknown')}`",
+                f"- Controlled shop ids: `{controlled_shop_ids_text}`",
+            ]
+        )
+    lines.extend(["", "## Totals", ""])
     lines.extend(
         [
             f"- Turns executed: {totals.get('turn_count', 0)}",
@@ -894,6 +910,17 @@ def _day_simulation_date(day: _NormalizedDayArtifact) -> str | None:
     if day.state_before is not None:
         return day.state_before.simulation_date
     return None
+
+
+def _scenario_summary(day: _NormalizedDayArtifact) -> dict[str, JSONValue] | None:
+    if day.market_state_before is None:
+        return None
+
+    scenario = getattr(day.market_state_before, "scenario", None)
+    if scenario is None:
+        return None
+
+    return jsonify(scenario)  # type: ignore[return-value]
 
 
 def _write_json(path: Path, payload: Any) -> None:

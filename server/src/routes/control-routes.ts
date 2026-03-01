@@ -5,14 +5,18 @@ import {
   advanceDayRequestSchema,
   advanceDayResultSchema,
   marketSnapshotSchema,
+  resetWorldRequestSchema,
   simulationDaySchema,
+  simulationScenarioSchema,
   tournamentLaunchRequestSchema,
   tournamentLaunchResponseSchema,
   tournamentListSchema,
   tournamentResultSchema,
   trendStateSchema,
+  worldStateInputSchema,
   worldStateSchema
 } from "../schemas/control";
+import type { StoredWorldState } from "../simulation/state-types";
 import type { RuntimeControlService } from "../services/runtime-control-service";
 import type { TournamentControlService } from "../services/tournament-control-service";
 import { registerRouteErrorHandler } from "./error-handler";
@@ -36,6 +40,10 @@ export async function registerControlRoutes(
     sendValidated(reply, simulationDaySchema, await service.getCurrentDay())
   );
 
+  app.get("/simulation/scenario", async (_request, reply) =>
+    sendValidated(reply, simulationScenarioSchema, await service.getScenario())
+  );
+
   app.get("/simulation/market-snapshot", async (_request, reply) =>
     sendValidated(reply, marketSnapshotSchema, await service.getMarketSnapshot())
   );
@@ -52,8 +60,12 @@ export async function registerControlRoutes(
     )
   );
 
-  app.post("/world/reset", async (_request, reply) =>
-    sendValidated(reply, worldStateSchema, await service.resetWorld())
+  app.post("/world/reset", async (request, reply) =>
+    sendValidated(
+      reply,
+      worldStateSchema,
+      await service.resetWorld(resetWorldRequestSchema.parse(request.body ?? {}))
+    )
   );
 
   app.get("/world-state", async (_request, reply) =>
@@ -64,7 +76,7 @@ export async function registerControlRoutes(
     sendValidated(
       reply,
       worldStateSchema,
-      await service.replaceWorldState(worldStateSchema.parse(request.body))
+      await service.replaceWorldState(worldStateInputSchema.parse(request.body) as StoredWorldState)
     )
   );
 

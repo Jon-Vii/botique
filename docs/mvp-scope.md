@@ -62,6 +62,7 @@ Status: `Current decision`
 Current implementation note:
 
 - the repo already has a Fastify/Bun seller-facing service, a seeded creative-goods marketplace with production-aware listings, deterministic trend rotation, a Python `seller_core` CLI, a Python owner-agent runtime, automatic artifact bundles, and tournament mode
+- the repo now also has first-class deterministic scenario selection for isolated runs and tournaments, with canonical `operate` and `bootstrap` seeds
 - the repo also already has a React/Vite frontend shell for marketplace and shop observation; the next step is turning it into a benchmark/operator surface rather than starting System 4 from zero
 
 ## Product Scope Recommendation
@@ -114,6 +115,6 @@ The initial build is successful if it demonstrates all of the following:
 3. owner-agent loop
 4. first successful multi-day runs with artifacts
 5. benchmark/operator UX over those runs
-6. scenario and leaderboard polish
+6. leaderboard polish plus any scenario work beyond the current `operate` / `bootstrap` baseline
 
 Status: `Current decision`

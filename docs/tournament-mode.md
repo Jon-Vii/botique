@@ -37,11 +37,25 @@ Per tournament round:
 
 Current fairness defaults:
 
+- reset the shared world to a named scenario before round 1
 - rotate entrant turn order each simulated day
 - rotate entrant-to-shop assignments across rounds
 - reset the world state back to the captured round-start snapshot between rounds
 
 This keeps arena runs interesting without permanently biasing one entrant toward the strongest seeded shop or the first move every day.
+
+## Scenario Contract
+
+Tournament mode now accepts the same first-class scenario identifiers as isolated runs.
+
+Current canonical options:
+
+- `operate`: every entrant starts from the default seeded existing-business setup
+- `bootstrap`: every entrant-controlled shop starts with zero listings while the remaining background market stays active
+
+Current default:
+
+- tournament CLI runs default to `operate` so the opening shared world is deterministic without requiring a manual reset first
 
 ## Scoring
 
@@ -67,6 +81,7 @@ botique-agent-runtime run-tournament \
   --shop-ids 1001,1002 \
   --days 5 \
   --rounds 2 \
+  --scenario operate \
   --turns-per-day 5 \
   --pretty
 ```

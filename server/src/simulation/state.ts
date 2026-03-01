@@ -5,6 +5,7 @@ import {
   normalizeShopProduction,
   recalculateShopBacklog
 } from "./production";
+import { normalizeSimulationScenario, type ScenarioResetOptions } from "./scenario-types";
 import type {
   DayResolutionSummary,
   MarketSnapshot,
@@ -245,17 +246,23 @@ export function createSimulationState(
   marketplaceState: StoredMarketplaceState,
   options: {
     currentDay?: SimulationDay;
+    scenario?: ScenarioResetOptions;
     pendingReviews?: PendingReview[];
     lastResolution?: DayResolutionSummary | null;
   } = {}
 ): SimulationState {
   const normalizedMarketplaceState = normalizeMarketplaceState(marketplaceState);
   const currentDay = options.currentDay ?? createSimulationDay(1, inferCurrentDayDate(normalizedMarketplaceState));
+  const scenario = normalizeSimulationScenario(
+    options.scenario,
+    normalizedMarketplaceState.shops.map((shop) => shop.shop_id)
+  );
   const trendState = buildTrendState(normalizedMarketplaceState, currentDay);
   const marketSnapshot = buildMarketSnapshot(normalizedMarketplaceState, trendState);
 
   return {
     current_day: currentDay,
+    scenario,
     market_snapshot: marketSnapshot,
     trend_state: trendState,
     pending_reviews: (options.pendingReviews ?? []).map(normalizePendingReview),
@@ -267,6 +274,7 @@ export function createWorldState(
   marketplaceState: StoredMarketplaceState,
   options: {
     currentDay?: SimulationDay;
+    scenario?: ScenarioResetOptions;
     pendingReviews?: PendingReview[];
     lastResolution?: DayResolutionSummary | null;
   } = {}
@@ -288,6 +296,10 @@ export function normalizeWorldState(
       simulation: input.simulation
         ? {
             ...clone(input.simulation),
+            scenario: normalizeSimulationScenario(
+              input.simulation.scenario,
+              marketplace.shops.map((shop) => shop.shop_id)
+            ),
             pending_reviews: (input.simulation.pending_reviews ?? []).map(normalizePendingReview),
             last_resolution: normalizeLastResolution(input.simulation.last_resolution)
           }

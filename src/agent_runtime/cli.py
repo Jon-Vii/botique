@@ -70,6 +70,9 @@ def _print_json(payload: dict[str, Any], *, pretty: bool) -> None:
         print(json.dumps(payload, separators=(",", ":"), sort_keys=True))
 
 
+SCENARIO_CHOICES = ("operate", "bootstrap")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="botique-agent-runtime")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -101,6 +104,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_day.add_argument("--work-budget", type=int, help=argparse.SUPPRESS)
     run_day.add_argument("--max-turns", type=int, help=argparse.SUPPRESS)
     run_day.add_argument("--reset-world", action="store_true")
+    run_day.add_argument("--scenario", choices=SCENARIO_CHOICES)
     run_day.add_argument("--output-dir")
     run_day.add_argument("--pretty", action="store_true")
 
@@ -124,6 +128,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_days.add_argument("--work-budget", type=int, help=argparse.SUPPRESS)
     run_days.add_argument("--max-turns", type=int, help=argparse.SUPPRESS)
     run_days.add_argument("--reset-world", action="store_true")
+    run_days.add_argument("--scenario", choices=SCENARIO_CHOICES)
     run_days.add_argument("--output-dir")
     run_days.add_argument("--pretty", action="store_true")
 
@@ -146,6 +151,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_tournament.add_argument("--mistral-temperature", type=float)
     run_tournament.add_argument("--mistral-top-p", type=float)
     run_tournament.add_argument("--turns-per-day", type=int, default=5)
+    run_tournament.add_argument("--scenario", choices=SCENARIO_CHOICES, default="operate")
     run_tournament.add_argument("--output-dir")
     run_tournament.add_argument("--pretty", action="store_true")
     return parser
@@ -178,12 +184,17 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError(
                     "Pass either --shop-id or a briefing payload, not both."
                 )
+            if namespace.scenario and not namespace.shop_id:
+                raise ValueError(
+                    "--scenario is only supported for live runs built from --shop-id."
+                )
 
             if namespace.shop_id:
                 result = runner.run_live_day(
                     shop_id=_parse_shop_id_argument(namespace.shop_id),
                     run_id=namespace.run_id,
                     reset_world=namespace.reset_world,
+                    scenario_id=namespace.scenario,
                 )
             else:
                 briefing = morning_briefing_from_payload(
@@ -210,12 +221,14 @@ def main(argv: list[str] | None = None) -> int:
                 days=namespace.days,
                 run_id=namespace.run_id,
                 reset_world=namespace.reset_world,
+                scenario_id=namespace.scenario,
             )
         else:
             tournament_runner = build_default_tournament_runner(
                 days_per_round=namespace.days,
                 rounds=namespace.rounds,
                 turns_per_day=namespace.turns_per_day,
+                scenario_id=namespace.scenario,
                 base_url=namespace.base_url,
                 control_base_url=namespace.control_base_url,
                 api_key=namespace.api_key,

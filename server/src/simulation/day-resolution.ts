@@ -534,6 +534,7 @@ export function resolveAdvanceDay(
 
   const nextSimulation = {
     current_day: nextDay,
+    scenario: currentWorld.simulation.scenario,
     trend_state: nextTrendState,
     market_snapshot: buildMarketSnapshot(currentWorld.marketplace, nextTrendState, advancedAt),
     pending_reviews: unsettledReviews,

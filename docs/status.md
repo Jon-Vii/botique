@@ -22,6 +22,7 @@ These pieces already exist in the repo and are safe to build on.
 - System 1 seller-facing API service in `server/`
 - separate `/control` surface for runtime resets, world-state inspection, tournament orchestration, and day advancement
 - seeded creative-goods marketplace with production-aware listings, orders, reviews, payments, taxonomy, and trend state
+- first-class deterministic scenario seeding with canonical `operate` and `bootstrap` setups carried in world state and control/runtime reset flows
 - System 2 simulation with inspectable day resolution for views, favorites, orders, delayed payments, delayed reviews, and production queue release
 - controlled-shop day advancement that disables free stocked auto-replenishment for agent-managed shops while leaving baseline NPC stocking behavior available for background market shops
 - transparent marketplace ranking based on relevance, listing quality, reviews, price fit, recency, and trend bonus
@@ -52,8 +53,8 @@ Near-term work that should most improve the benchmark and demo.
 - build a comparison / leaderboard surface for single runs and tournament results
 - add a tournament-focused frontend/operator view for entrants, rounds, standings, and replay
 - add operator controls for reset, run launch, model selection, and artifact navigation
-- define a cleaner benchmark scorecard and scenario labeling scheme for presentation
 - keep making small trace-driven runtime refinements where the UI reveals real behavior problems
+- surface scenario labels and controlled-shop context more prominently in the operator/demo UI
 
 Note:
 
@@ -73,7 +74,7 @@ Likely expansions once the benchmark and operator surfaces are in place.
 ## Open Questions
 
 - what the primary public score should be for comparison and tournament standings
-- which scenario seeds should become the canonical benchmark set
+- which additional scenario seeds should join `operate` and `bootstrap`
 - how much scratchpad/journal/reminder context should be surfaced automatically versus pulled on demand
 - what the best benchmark-facing presentation is for production pressure, backlog, and inventory state
 - when to add stronger inter-shop competition beyond the current tournament/shared-world mechanics

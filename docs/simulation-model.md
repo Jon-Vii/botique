@@ -142,7 +142,10 @@ Current implementation note:
 - the current server seeds a small creative-goods market with four shops, production queues, listings, orders, reviews, payments, and taxonomy nodes
 - the in-memory repository starts with that default seed, and the Postgres bootstrap uses the same seed when the database is empty or partially seeded
 - the current simulation day is inferred from the latest seeded marketplace timestamp unless a world state provides an explicit day
-- the next meaningful scope step is not a product-space migration, but richer scenario seeding and benchmark-facing run setup on top of the current creative-goods world
+- the world now carries explicit scenario metadata and two canonical deterministic seeds:
+  - `operate`: the default existing-business benchmark with the controlled shop starting from an active catalog plus historical orders, reviews, and payments
+  - `bootstrap`: the controlled shop starts with zero listings and no active or draft catalog, but keeps a real shop identity, limited cash signal, and surrounding competitors
+- additional scenario work should build on this seeded creative-goods world rather than replacing it
 
 This gives the agent a business to run and a world to react to without making the orchestrator responsible for world setup.
 
@@ -156,6 +159,7 @@ Recommended initial world-state shape:
 
 - marketplace state: shops, listings, orders, reviews, payments, taxonomy
 - current day: explicit day index and canonical simulation date
+- scenario metadata: explicit scenario identifier plus the controlled shop ids the seed was built for
 - market snapshot: inspectable aggregate counts and demand context
 - trend state: active trend labels, taxonomy focus, and simple demand multipliers
 - pending events: delayed world-owned outcomes such as payment posting and review delivery

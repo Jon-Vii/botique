@@ -1,5 +1,6 @@
-import { createDefaultMarketplaceState } from "../default-marketplace-state";
-import { createWorldState } from "./state";
+import { buildScenarioWorldState } from "./scenarios";
+import { normalizeWorldState } from "./state";
+import type { ScenarioResetOptions, SimulationScenario } from "./scenario-types";
 import { resolveAdvanceDay } from "./day-resolution";
 import type {
   AdvanceDayResult,
@@ -16,10 +17,12 @@ export interface AdvanceDayOptions {
   controlled_shop_ids?: readonly number[];
 }
 
+export interface ResetWorldOptions extends ScenarioResetOptions {}
+
 export interface SimulationStateStore {
   getMarketplaceState(): Promise<StoredMarketplaceState>;
   replaceWorldState(state: StoredWorldState): Promise<StoredWorldState>;
-  resetWorldState?(): Promise<StoredWorldState>;
+  resetWorldState?(options?: ResetWorldOptions): Promise<StoredWorldState>;
   getSimulationState(): Promise<SimulationState>;
   setSimulationState(state: SimulationState): Promise<SimulationState>;
 }
@@ -28,11 +31,12 @@ export interface SimulationModule {
   getWorldState(): Promise<StoredWorldState>;
   replaceWorldState(state: StoredWorldState): Promise<StoredWorldState>;
   getCurrentDay(): Promise<SimulationDay>;
+  getScenario(): Promise<SimulationScenario>;
   getMarketSnapshot(): Promise<MarketSnapshot>;
   getTrendState(): Promise<TrendState>;
   getSearchContext(): Promise<MarketplaceSearchContext>;
   advanceDay(options?: AdvanceDayOptions): Promise<AdvanceDayResult>;
-  resetWorld(): Promise<StoredWorldState>;
+  resetWorld(options?: ResetWorldOptions): Promise<StoredWorldState>;
 }
 
 export class WorldSimulation implements SimulationModule {
@@ -44,10 +48,10 @@ export class WorldSimulation implements SimulationModule {
       this.store.getSimulationState()
     ]);
 
-    return {
+    return normalizeWorldState({
       marketplace,
       simulation
-    };
+    });
   }
 
   async replaceWorldState(state: StoredWorldState): Promise<StoredWorldState> {
@@ -56,6 +60,10 @@ export class WorldSimulation implements SimulationModule {
 
   async getCurrentDay(): Promise<SimulationDay> {
     return (await this.store.getSimulationState()).current_day;
+  }
+
+  async getScenario(): Promise<SimulationScenario> {
+    return (await this.getWorldState()).simulation.scenario;
   }
 
   async getMarketSnapshot(): Promise<MarketSnapshot> {
@@ -86,11 +94,11 @@ export class WorldSimulation implements SimulationModule {
     };
   }
 
-  async resetWorld(): Promise<StoredWorldState> {
+  async resetWorld(options: ResetWorldOptions = {}): Promise<StoredWorldState> {
     if (this.store.resetWorldState) {
-      return this.store.resetWorldState();
+      return this.store.resetWorldState(options);
     }
-    return this.store.replaceWorldState(createWorldState(createDefaultMarketplaceState()));
+    return this.store.replaceWorldState(buildScenarioWorldState(options));
   }
 }
 

@@ -69,6 +69,7 @@ from control_api import (
     MarketSnapshot,
     MarketTrend,
     SimulationDay,
+    SimulationScenario,
     TaxonomyMarketSnapshot,
     TrendState,
 )
@@ -258,13 +259,26 @@ class FakeRunner:
         self.received_briefings.append(briefing)
         return self.result
 
-    def run_live_day(self, *, shop_id, run_id=None, reset_world=False):
-        self.live_day_calls.append({"shop_id": shop_id, "run_id": run_id, "reset_world": reset_world})
+    def run_live_day(self, *, shop_id, run_id=None, reset_world=False, scenario_id=None):
+        self.live_day_calls.append(
+            {
+                "shop_id": shop_id,
+                "run_id": run_id,
+                "reset_world": reset_world,
+                "scenario_id": scenario_id,
+            }
+        )
         return self.result
 
-    def run_live_days(self, *, shop_id, days, run_id=None, reset_world=False):
+    def run_live_days(self, *, shop_id, days, run_id=None, reset_world=False, scenario_id=None):
         self.live_days_calls.append(
-            {"shop_id": shop_id, "days": days, "run_id": run_id, "reset_world": reset_world}
+            {
+                "shop_id": shop_id,
+                "days": days,
+                "run_id": run_id,
+                "reset_world": reset_world,
+                "scenario_id": scenario_id,
+            }
         )
         return self.result
 
@@ -282,6 +296,8 @@ class FakeControlApiClient:
         self.advance_calls = 0
         self.reset_calls = 0
         self.controlled_shop_ids_calls: list[tuple[int | str, ...]] = []
+        self.reset_controlled_shop_ids_calls: list[tuple[int | str, ...]] = []
+        self.reset_scenarios: list[str | None] = []
 
     def get_global_market_state(self) -> GlobalMarketState:
         return self.market_states[self.index]
@@ -306,8 +322,10 @@ class FakeControlApiClient:
             ),
         )
 
-    def reset_world(self) -> None:
+    def reset_world(self, *, scenario_id=None, controlled_shop_ids=()) -> None:
         self.reset_calls += 1
+        self.reset_scenarios.append(scenario_id)
+        self.reset_controlled_shop_ids_calls.append(tuple(controlled_shop_ids))
         self.index = 0
 
 
@@ -316,8 +334,11 @@ class FakeTournamentControlApiClient:
         self.market_states = list(market_states)
         self.index = 0
         self.advance_calls = 0
+        self.reset_calls = 0
         self.replace_calls = 0
         self.controlled_shop_ids_calls: list[tuple[int | str, ...]] = []
+        self.reset_controlled_shop_ids_calls: list[tuple[int | str, ...]] = []
+        self.reset_scenarios: list[str | None] = []
 
     def get_global_market_state(self) -> GlobalMarketState:
         return self.market_states[self.index]
@@ -344,6 +365,12 @@ class FakeTournamentControlApiClient:
 
     def get_world_state(self):
         return {"cursor": self.index}
+
+    def reset_world(self, *, scenario_id=None, controlled_shop_ids=()) -> None:
+        self.reset_calls += 1
+        self.reset_scenarios.append(scenario_id)
+        self.reset_controlled_shop_ids_calls.append(tuple(controlled_shop_ids))
+        self.index = 0
 
     def replace_world_state(self, state):
         self.replace_calls += 1
@@ -442,6 +469,10 @@ class TournamentStubProvider:
 def build_market_state(day: int, date: str, *, label: str, taxonomy_id: int) -> GlobalMarketState:
     return GlobalMarketState(
         current_day=SimulationDay(day=day, date=date, advanced_at=None),
+        scenario=SimulationScenario(
+            scenario_id="operate",
+            controlled_shop_ids=(1001,),
+        ),
         market_snapshot=MarketSnapshot(
             generated_at=date,
             active_listing_count=3,
@@ -1637,8 +1668,77 @@ class OwnerAgentRunnerTests(unittest.TestCase):
         result = runner.run_live_days(shop_id=1001, days=1, run_id="run_reset", reset_world=True)
 
         self.assertEqual(control_client.reset_calls, 1)
+        self.assertEqual(control_client.reset_scenarios, [None])
+        self.assertEqual(control_client.reset_controlled_shop_ids_calls, [(1001,)])
         self.assertEqual(result.days[0].day, 3)
         self.assertEqual(result.days[0].market_state_before.current_day.day, 3)
+
+    def test_runner_can_request_a_named_scenario_before_live_days(self) -> None:
+        seller_client = FakeLiveSellerCoreClient(
+            shop={
+                "shop_id": 1001,
+                "shop_name": "northwind-printables",
+                "currency_code": "USD",
+                "listing_active_count": 0,
+                "total_sales_count": 1,
+                "review_average": 5.0,
+                "review_count": 1,
+            },
+            listings=[],
+            orders=[],
+            reviews=[],
+            payments=[
+                {
+                    "payment_id": 7001,
+                    "receipt_id": 5001,
+                    "amount": 28.0,
+                    "currency_code": "USD",
+                }
+            ],
+        )
+        control_client = FakeControlApiClient(
+            [build_market_state(3, "2026-02-28T00:00:00Z", label="Wall Art", taxonomy_id=9101)]
+        )
+        provider = RecordingProvider(
+            [
+                ProviderResponse(
+                    content="",
+                    tool_calls=(
+                        ProviderToolCall(
+                            name=END_DAY_TOOL_NAME,
+                            arguments={"summary": "Bootstrap day done."},
+                        ),
+                    ),
+                ),
+                ProviderResponse(
+                    content="",
+                    tool_calls=(
+                        ProviderToolCall(
+                            name="save_end_of_day_scratchpad",
+                            arguments={"content": "Bootstrap scratchpad."},
+                        ),
+                    ),
+                ),
+            ]
+        )
+        runner = OwnerAgentRunner(
+            provider=provider,
+            seller_client=seller_client,
+            control_client=control_client,
+            memory=InMemoryAgentMemory(),
+            event_log=InMemoryEventLog(),
+        )
+
+        runner.run_live_days(
+            shop_id=1001,
+            days=1,
+            run_id="run_bootstrap",
+            scenario_id="bootstrap",
+        )
+
+        self.assertEqual(control_client.reset_calls, 1)
+        self.assertEqual(control_client.reset_scenarios, ["bootstrap"])
+        self.assertEqual(control_client.reset_controlled_shop_ids_calls, [(1001,)])
 
 class TournamentModeTests(unittest.TestCase):
     def test_tournament_runner_rotates_shops_resets_world_and_aggregates_standings(self) -> None:
@@ -1768,6 +1868,9 @@ class TournamentModeTests(unittest.TestCase):
         )
         self.assertEqual(result.rounds[0].days[0].turn_order, ("mistral-medium", "mistral-small"))
         self.assertEqual(result.rounds[0].days[1].turn_order, ("mistral-small", "mistral-medium"))
+        self.assertEqual(control_client.reset_calls, 1)
+        self.assertEqual(control_client.reset_scenarios, ["operate"])
+        self.assertEqual(control_client.reset_controlled_shop_ids_calls, [(1001, 1002)])
         self.assertEqual(control_client.advance_calls, 2)
         self.assertEqual(
             control_client.controlled_shop_ids_calls,
@@ -1994,6 +2097,7 @@ class RuntimeCliTests(unittest.TestCase):
         self.assertEqual(payload["result"]["run_id"], "run_live_cli")
         self.assertEqual(fake_runner.live_days_calls[0]["shop_id"], 1001)
         self.assertEqual(fake_runner.live_days_calls[0]["days"], 2)
+        self.assertIsNone(fake_runner.live_days_calls[0]["scenario_id"])
 
     def test_run_days_command_can_request_world_reset(self) -> None:
         fake_runner = FakeRunner(
@@ -2013,6 +2117,26 @@ class RuntimeCliTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertTrue(json.loads(stdout.getvalue())["ok"])
         self.assertTrue(fake_runner.live_days_calls[0]["reset_world"])
+        self.assertIsNone(fake_runner.live_days_calls[0]["scenario_id"])
+
+    def test_run_days_command_can_request_a_named_scenario(self) -> None:
+        fake_runner = FakeRunner(
+            {
+                "run_id": "run_bootstrap_cli",
+                "days": [{"day": 1}],
+            }
+        )
+        stdout = StringIO()
+
+        with patch("agent_runtime.cli.build_default_owner_agent_runner", return_value=fake_runner):
+            with patch("sys.stdout", stdout):
+                exit_code = runtime_cli_main(
+                    ["run-days", "--shop-id", "1001", "--days", "1", "--scenario", "bootstrap"]
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(json.loads(stdout.getvalue())["ok"])
+        self.assertEqual(fake_runner.live_days_calls[0]["scenario_id"], "bootstrap")
 
     def test_run_days_command_persists_artifacts_when_supported(self) -> None:
         fake_runner = FakeRunner(
@@ -2067,7 +2191,7 @@ class RuntimeCliTests(unittest.TestCase):
             json.dump(entrants_payload, handle)
             handle.flush()
 
-            with patch("agent_runtime.cli.build_default_tournament_runner", return_value=fake_runner):
+            with patch("agent_runtime.cli.build_default_tournament_runner", return_value=fake_runner) as build_runner:
                 with patch("sys.stdout", stdout):
                     exit_code = runtime_cli_main(
                         [
@@ -2091,6 +2215,7 @@ class RuntimeCliTests(unittest.TestCase):
         self.assertEqual(payload["result"]["run_id"], "run_tournament_cli")
         self.assertEqual(fake_runner.tournament_calls[0]["shop_ids"], (1001, 1002))
         self.assertEqual(fake_runner.tournament_calls[0]["run_id"], "run_tournament_cli")
+        self.assertEqual(build_runner.call_args.kwargs["scenario_id"], "operate")
         self.assertEqual(
             fake_runner.tournament_calls[0]["entrants"][0].entrant.entrant_id,
             "mistral-medium",

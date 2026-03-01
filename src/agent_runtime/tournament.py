@@ -55,6 +55,7 @@ class TournamentConfig:
     rounds: int = 1
     rotate_shop_assignments: bool = True
     rotate_turn_order: bool = True
+    scenario_id: str = "operate"
 
     def __post_init__(self) -> None:
         if self.days_per_round < 1:
@@ -177,6 +178,10 @@ class ArenaTournamentRunner:
         self._validate_unique_ids(normalized_entrants, normalized_shop_ids)
 
         active_run_id = run_id or f"tournament_{uuid4().hex[:12]}"
+        self.control_client.reset_world(
+            scenario_id=self.config.scenario_id,
+            controlled_shop_ids=tuple(int(shop_id) for shop_id in normalized_shop_ids),
+        )
         initial_world_state = self.control_client.get_world_state()
         rounds: list[TournamentRoundResult] = []
         standings_by_entrant: dict[str, list[TournamentStanding]] = {
@@ -502,6 +507,7 @@ def build_default_tournament_runner(
     days_per_round: int,
     rounds: int = 1,
     turns_per_day: int = 5,
+    scenario_id: str = "operate",
     base_url: str | None = None,
     control_base_url: str | None = None,
     api_key: str | None = None,
@@ -569,6 +575,7 @@ def build_default_tournament_runner(
         config=TournamentConfig(
             days_per_round=days_per_round,
             rounds=rounds,
+            scenario_id=scenario_id,
             rotate_shop_assignments=rotate_shop_assignments,
             rotate_turn_order=rotate_turn_order,
         ),

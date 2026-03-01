@@ -1,6 +1,7 @@
 import { integer, jsonb, numeric, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
 
 import type { ListingInventory, Order, Payment, ProductionQueueItem, Review, TaxonomyNode } from "../schemas/domain";
+import type { SimulationScenario } from "../simulation/scenario-types";
 import type { DayResolutionSummary, MarketSnapshot, PendingReview, TrendState } from "../simulation/state-types";
 
 export const shopsTable = pgTable("shops", {
@@ -110,6 +111,7 @@ export const simulationStateTable = pgTable("simulation_state", {
   currentDay: integer("current_day").notNull(),
   currentDayDate: timestamp("current_day_date", { withTimezone: true }).notNull(),
   advancedAt: timestamp("advanced_at", { withTimezone: true }),
+  scenario: jsonb("scenario").$type<SimulationScenario>().notNull(),
   marketSnapshot: jsonb("market_snapshot").$type<MarketSnapshot>().notNull(),
   trendState: jsonb("trend_state").$type<TrendState>().notNull(),
   pendingReviews: jsonb("pending_reviews").$type<PendingReview[]>().notNull(),

@@ -18,7 +18,10 @@ import type {
 import { createDefaultMarketplaceState } from "../default-marketplace-state";
 import { isMarketplaceActiveListing } from "../listing-availability";
 import { normalizeWorldState } from "../simulation/state";
+import { hasScenarioResetOptions } from "../simulation/scenario-types";
+import { buildScenarioWorldState } from "../simulation/scenarios";
 import { normalizeListingProduction, recalculateShopBacklog, syncListingInventoryState } from "../simulation/production";
+import type { ResetWorldOptions } from "../simulation/world-simulation";
 import type { SimulationState, StoredMarketplaceState, StoredWorldState } from "../simulation/state-types";
 
 function clone<T>(value: T): T {
@@ -61,9 +64,12 @@ export class InMemoryMarketplaceRepository implements MarketplaceRepository {
     return clone(this.state);
   }
 
-  async resetWorldState(): Promise<StoredWorldState> {
-    this.state.marketplace = clone(this.initialState.marketplace);
-    this.state.simulation = clone(this.initialState.simulation);
+  async resetWorldState(options: ResetWorldOptions = {}): Promise<StoredWorldState> {
+    const nextState = hasScenarioResetOptions(options)
+      ? buildScenarioWorldState(options, this.initialState)
+      : clone(this.initialState);
+    this.state.marketplace = clone(nextState.marketplace);
+    this.state.simulation = clone(nextState.simulation);
     return clone(this.state);
   }
 

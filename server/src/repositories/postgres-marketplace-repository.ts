@@ -22,10 +22,12 @@ import type {
   TaxonomyNode
 } from "../schemas/domain";
 import { recalculateShopBacklog, syncListingInventoryState } from "../simulation/production";
-import { createSimulationState, createWorldState, normalizeWorldState } from "../simulation/state";
+import { createSimulationState, normalizeWorldState } from "../simulation/state";
+import { normalizeSimulationScenario, type SimulationScenario } from "../simulation/scenario-types";
+import { buildScenarioWorldState } from "../simulation/scenarios";
+import type { ResetWorldOptions } from "../simulation/world-simulation";
 import type { SimulationState, StoredMarketplaceState, StoredWorldState } from "../simulation/state-types";
 import { isMarketplaceActiveListing } from "../listing-availability";
-import { createDefaultMarketplaceState } from "../default-marketplace-state";
 import type {
   CreateListingData,
   MarketplaceRepository,
@@ -315,6 +317,7 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
           current_day,
           current_day_date,
           advanced_at,
+          scenario,
           market_snapshot,
           trend_state,
           pending_reviews,
@@ -326,6 +329,7 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
           ${normalized.simulation.current_day.day},
           ${normalized.simulation.current_day.date},
           ${normalized.simulation.current_day.advanced_at},
+          ${JSON.stringify(normalized.simulation.scenario)}::jsonb,
           ${JSON.stringify(normalized.simulation.market_snapshot)}::jsonb,
           ${JSON.stringify(normalized.simulation.trend_state)}::jsonb,
           ${JSON.stringify(normalized.simulation.pending_reviews)}::jsonb,
@@ -348,8 +352,8 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
     };
   }
 
-  async resetWorldState(): Promise<StoredWorldState> {
-    return this.replaceWorldState(createWorldState(createDefaultMarketplaceState()));
+  async resetWorldState(options: ResetWorldOptions = {}): Promise<StoredWorldState> {
+    return this.replaceWorldState(buildScenarioWorldState(options));
   }
 
   async getSimulationState(): Promise<SimulationState> {
@@ -375,6 +379,7 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
         currentDay: state.current_day.day,
         currentDayDate: new Date(state.current_day.date),
         advancedAt: state.current_day.advanced_at ? new Date(state.current_day.advanced_at) : null,
+        scenario: state.scenario,
         marketSnapshot: state.market_snapshot,
         trendState: state.trend_state,
         pendingReviews: state.pending_reviews,
@@ -387,6 +392,7 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
           currentDay: state.current_day.day,
           currentDayDate: new Date(state.current_day.date),
           advancedAt: state.current_day.advanced_at ? new Date(state.current_day.advanced_at) : null,
+          scenario: state.scenario,
           marketSnapshot: state.market_snapshot,
           trendState: state.trend_state,
           pendingReviews: state.pending_reviews,
@@ -829,12 +835,14 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
   }
 
   private mapSimulationState(row: typeof simulationStateTable.$inferSelect): SimulationState {
+    const scenario = normalizeSimulationScenario(row.scenario as SimulationScenario | null | undefined);
     return {
       current_day: {
         day: row.currentDay,
         date: toIsoString(row.currentDayDate),
         advanced_at: row.advancedAt ? toIsoString(row.advancedAt) : null
       },
+      scenario,
       market_snapshot: row.marketSnapshot,
       trend_state: row.trendState,
       pending_reviews: row.pendingReviews,

@@ -18,6 +18,12 @@ class SimulationDay:
 
 
 @dataclass(frozen=True, slots=True)
+class SimulationScenario:
+    scenario_id: str
+    controlled_shop_ids: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class MarketTrend:
     trend_id: str
     label: str
@@ -53,6 +59,7 @@ class MarketSnapshot:
 @dataclass(frozen=True, slots=True)
 class GlobalMarketState:
     current_day: SimulationDay
+    scenario: SimulationScenario
     market_snapshot: MarketSnapshot
     trend_state: TrendState
 
@@ -168,6 +175,9 @@ class ControlApiClient:
             current_day=_parse_simulation_day(
                 self._request("get_current_day", "GET", "/simulation/day")
             ),
+            scenario=_parse_simulation_scenario(
+                self._request("get_scenario", "GET", "/simulation/scenario")
+            ),
             market_snapshot=_parse_market_snapshot(
                 self._request(
                     "get_market_snapshot",
@@ -215,8 +225,26 @@ class ControlApiClient:
         )
         return _parse_advance_day_result(payload)
 
-    def reset_world(self) -> None:
-        self._request("reset_world", "POST", "/world/reset")
+    def reset_world(
+        self,
+        *,
+        scenario_id: str | None = None,
+        controlled_shop_ids: tuple[int | str, ...] | list[int | str] = (),
+    ) -> ControlWorldState:
+        body: dict[str, Any] = {}
+        if scenario_id:
+            body["scenario_id"] = str(scenario_id)
+        if controlled_shop_ids:
+            body["controlled_shop_ids"] = [int(shop_id) for shop_id in controlled_shop_ids]
+        return _parse_control_world_state(
+            self._request(
+                "reset_world",
+                "POST",
+                "/world/reset",
+                body=body,
+                body_encoding=BodyEncoding.JSON,
+            )
+        )
 
     def _request(
         self,
@@ -254,6 +282,7 @@ def _parse_global_market_state(payload: Any) -> GlobalMarketState:
     value = _mapping(payload, "global_market_state")
     return GlobalMarketState(
         current_day=_parse_simulation_day(value.get("current_day")),
+        scenario=_parse_simulation_scenario(value.get("scenario")),
         market_snapshot=_parse_market_snapshot(value.get("market_snapshot")),
         trend_state=_parse_trend_state(value.get("trend_state")),
     )
@@ -295,6 +324,18 @@ def _parse_simulation_day(payload: Any) -> SimulationDay:
         day=int(value["day"]),
         date=str(value["date"]),
         advanced_at=None if value.get("advanced_at") is None else str(value["advanced_at"]),
+    )
+
+
+def _parse_simulation_scenario(payload: Any) -> SimulationScenario:
+    if payload is None:
+        return SimulationScenario(scenario_id="operate", controlled_shop_ids=())
+    value = _mapping(payload, "simulation_scenario")
+    return SimulationScenario(
+        scenario_id=str(value.get("scenario_id", "operate")),
+        controlled_shop_ids=tuple(
+            int(item) for item in value.get("controlled_shop_ids", ())
+        ),
     )
 
 

@@ -5,7 +5,12 @@ import type {
   StoredWorldState,
   TrendState
 } from "../simulation/state-types";
-import type { AdvanceDayOptions, SimulationModule } from "../simulation/world-simulation";
+import type { SimulationScenario } from "../simulation/scenario-types";
+import type {
+  AdvanceDayOptions,
+  ResetWorldOptions,
+  SimulationModule
+} from "../simulation/world-simulation";
 
 export class RuntimeControlService {
   constructor(private readonly simulation: SimulationModule) {}
@@ -16,6 +21,10 @@ export class RuntimeControlService {
 
   async getCurrentDay(): Promise<SimulationDay> {
     return this.simulation.getCurrentDay();
+  }
+
+  async getScenario(): Promise<SimulationScenario> {
+    return this.simulation.getScenario();
   }
 
   async getMarketSnapshot(): Promise<MarketSnapshot> {
@@ -34,7 +43,7 @@ export class RuntimeControlService {
     return this.simulation.getWorldState();
   }
 
-  async resetWorld(): Promise<StoredWorldState> {
-    return this.simulation.resetWorld();
+  async resetWorld(options: ResetWorldOptions = {}): Promise<StoredWorldState> {
+    return this.simulation.resetWorld(options);
   }
 }
