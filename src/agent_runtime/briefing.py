@@ -26,7 +26,7 @@ def _utcnow() -> datetime:
 DEFAULT_PRIORITIES_PROMPT = (
     "Set the highest-leverage priorities for this workday, use today's limited work slots "
     "carefully, act on inventory, backlog, production, and market signals when they "
-    "matter, use the workspace or reminders when they genuinely help, and stop once the "
+    "matter, use the scratchpad, journal, or reminders when they genuinely help, and stop once the "
     "important work is done."
 )
 DEFAULT_WORKSPACE_TEXT_MAX_CHARS = 4000
@@ -193,8 +193,8 @@ class MorningBriefing:
             lines.extend(
                 [
                     "",
-                    "## Workspace",
-                    f"- Current workspace ({', '.join(workspace_details)}):",
+                    "## Scratchpad",
+                    f"- Current scratchpad ({', '.join(workspace_details)}):",
                     "```text",
                     self.workspace.content,
                     "```",
@@ -202,7 +202,7 @@ class MorningBriefing:
             )
 
         if self.recent_workspace_entries:
-            lines.extend(["", "## Recent workspace history"])
+            lines.extend(["", "## Recent journal entries"])
             for entry in self.recent_workspace_entries:
                 details: list[str] = [entry.entry_id]
                 if entry.created_day is not None:

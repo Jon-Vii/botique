@@ -27,10 +27,10 @@ from .base import (
 
 END_DAY_TOOL_NAME = "end_day"
 SUPPORT_TOOL_NAMES = {
-    "read_workspace",
-    "update_workspace",
-    "add_workspace_entry",
-    "read_workspace_entries",
+    "read_scratchpad",
+    "update_scratchpad",
+    "add_journal_entry",
+    "read_journal_entries",
     "set_reminder",
     "complete_reminder",
 }
@@ -58,8 +58,8 @@ DEFAULT_SYSTEM_PROMPT = (
     "each day. Use them carefully. In each work slot, do one meaningful piece of work "
     "using one available action. End the day when further work is unlikely to improve "
     "outcomes. "
-    "You have one persistent workspace system for cross-day memory. The current "
-    "workspace is a mutable text block you can rewrite as needed. Workspace-history "
+    "You have one persistent memory system for cross-day work. The current "
+    "scratchpad is a mutable text block you can revise as needed. Journal "
     "entries are append-only log items for things worth remembering later. Reminders "
     "resurface on a future day. Use these tools when they help you think across time, "
     "not by reflex. "

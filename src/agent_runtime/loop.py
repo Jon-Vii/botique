@@ -305,7 +305,7 @@ class SingleShopDailyLoop:
                 },
             )
 
-            if tool_result.tool_name == "add_workspace_entry":
+            if tool_result.tool_name == "add_journal_entry":
                 self.event_log.append(
                     kind=EventKind.WORKSPACE_ENTRY_ADDED,
                     run_id=active_run_id,
@@ -314,7 +314,7 @@ class SingleShopDailyLoop:
                     turn_index=turn_index,
                     payload={"result": jsonify(tool_result.output)},
                 )
-            elif tool_result.tool_name == "update_workspace":
+            elif tool_result.tool_name == "update_scratchpad":
                 self.event_log.append(
                     kind=EventKind.WORKSPACE_UPDATED,
                     run_id=active_run_id,

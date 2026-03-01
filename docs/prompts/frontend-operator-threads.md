@@ -36,9 +36,9 @@ Scope:
   - work-slot actions
   - action arguments
   - tool results
-  - workspace text
-  - recent workspace-history entries
-  - end-of-day workspace-history entry
+  - scratchpad text
+  - recent journal entries
+  - end-of-day journal entry
   - cash / listing / sales / backlog / production deltas when available
 - Make it feel like an observatory / trace viewer, not a generic CRUD admin page
 

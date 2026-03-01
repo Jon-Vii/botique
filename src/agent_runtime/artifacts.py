@@ -425,10 +425,10 @@ def _render_readme(normalized: _NormalizedRunArtifact) -> str:
             "- `summary.json`: comparison-friendly aggregate metrics for the run.",
             "- `result.json`: full serialized runtime result payload.",
             "- `events.jsonl`: complete event stream across the run.",
-            "- `memory/workspace_entries.json`: final workspace-history entry snapshot after the run.",
+            "- `memory/workspace_entries.json`: final journal-entry snapshot after the run.",
             "- `memory/reminders.json`: final reminder snapshot after the run.",
-            "- `memory/workspace.json`: final current workspace text after the run.",
-            "- `memory/workspace_revisions.json`: workspace revision history across the run.",
+            "- `memory/workspace.json`: final current scratchpad text after the run.",
+            "- `memory/workspace_revisions.json`: scratchpad revision history across the run.",
             "- `days/day-####/briefing.md`: rendered morning briefing for a specific day.",
             "- `days/day-####/briefing.json`: structured briefing payload.",
             "- `days/day-####/summary.md`: day-level narrative with turn decisions, assistant output, and tool outputs.",
@@ -462,8 +462,8 @@ def _render_run_summary(
         [
             f"- Turns executed: {totals.get('turn_count', 0)}",
             f"- Tool calls: {totals.get('tool_call_count', 0)}",
-            f"- Workspace entries added: {totals.get('workspace_entries_added', 0)}",
-            f"- Workspace updates: {totals.get('workspace_updates', 0)}",
+            f"- Journal entries added: {totals.get('workspace_entries_added', 0)}",
+            f"- Scratchpad updates: {totals.get('workspace_updates', 0)}",
             f"- Reminders set/completed: {totals.get('reminders_set', 0)}/{totals.get('reminders_completed', 0)}",
             f"- Simulation advances: {totals.get('simulation_advances', 0)}",
             f"- Yesterday-order count across briefings: {totals.get('yesterday_order_count', 0)}",
@@ -471,10 +471,10 @@ def _render_run_summary(
             "",
             "## Memory",
             "",
-            f"- Workspace-history entries saved: {_mapping(summary_payload.get('memory'), 'summary.memory').get('workspace_entry_count', 0)}",
+            f"- Journal entries saved: {_mapping(summary_payload.get('memory'), 'summary.memory').get('workspace_entry_count', 0)}",
             f"- Pending reminders: {_mapping(summary_payload.get('memory'), 'summary.memory').get('pending_reminder_count', 0)}",
-            f"- Workspace revisions: {_mapping(summary_payload.get('memory'), 'summary.memory').get('workspace_revision_count', 0)}",
-            f"- Workspace has content: {_mapping(summary_payload.get('memory'), 'summary.memory').get('workspace_has_content', False)}",
+            f"- Scratchpad revisions: {_mapping(summary_payload.get('memory'), 'summary.memory').get('workspace_revision_count', 0)}",
+            f"- Scratchpad has content: {_mapping(summary_payload.get('memory'), 'summary.memory').get('workspace_has_content', False)}",
             "",
             "## Shop State",
             "",
@@ -624,7 +624,7 @@ def _render_briefing(briefing: MorningBriefing) -> str:
     else:
         lines.append("- No reminders due today.")
 
-    lines.extend(["", "## Workspace", ""])
+    lines.extend(["", "## Scratchpad", ""])
     if briefing.workspace is not None and briefing.workspace.content:
         details = [f"revision {briefing.workspace.revision}"]
         if briefing.workspace.updated_day is not None:
@@ -633,16 +633,16 @@ def _render_briefing(briefing: MorningBriefing) -> str:
             details.append("truncated to fit briefing")
         lines.extend(
             [
-                f"- Current workspace ({', '.join(details)}):",
+                f"- Current scratchpad ({', '.join(details)}):",
                 "```text",
                 briefing.workspace.content,
                 "```",
             ]
         )
     else:
-        lines.append("- No current workspace text saved.")
+        lines.append("- No current scratchpad text saved.")
 
-    lines.extend(["", "## Recent Workspace History", ""])
+    lines.extend(["", "## Recent Journal Entries", ""])
     if briefing.recent_workspace_entries:
         for entry in briefing.recent_workspace_entries:
             details = [entry.entry_id]
@@ -661,7 +661,7 @@ def _render_briefing(briefing: MorningBriefing) -> str:
                 ]
             )
     else:
-        lines.append("- No recent workspace-history entries attached.")
+        lines.append("- No recent journal entries attached.")
 
     lines.extend(["", "## Priorities Prompt", "", briefing.priorities_prompt])
     return "\n".join(lines).rstrip() + "\n"

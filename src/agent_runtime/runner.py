@@ -38,11 +38,11 @@ from .providers import (
 from .serialization import jsonify
 from .tools import build_owner_agent_tool_registry
 
-END_OF_DAY_WORKSPACE_ENTRY_TOOL_NAME = "save_end_of_day_workspace_entry"
+END_OF_DAY_WORKSPACE_ENTRY_TOOL_NAME = "save_end_of_day_journal_entry"
 END_OF_DAY_WORKSPACE_ENTRY_SYSTEM_PROMPT = (
-    "You are closing out a Botique shop workday. Write one workspace-history entry for "
+    "You are closing out a Botique shop workday. Write one journal entry for "
     "your future self about anything from today worth remembering. This entry is part of "
-    "your own workspace system for later days. No user is waiting for you. Do not "
+    "your own cross-day memory system for later days. No user is waiting for you. Do not "
     "explain the entry; just save it."
 )
 
@@ -288,13 +288,13 @@ class OwnerAgentRunner:
             tools=(
                 ProviderToolDefinition(
                     name=END_OF_DAY_WORKSPACE_ENTRY_TOOL_NAME,
-                    description="Save one workspace-history entry for later use after the day is over.",
+                    description="Save one journal entry for later use after the day is over.",
                     parameters_schema={
                         "type": "object",
                         "properties": {
                             "content": {
                                 "type": "string",
-                                "description": "The workspace-history entry content to save for later days.",
+                                "description": "The journal entry content to save for later days.",
                             },
                             "tags": {
                                 "type": "array",
@@ -362,13 +362,13 @@ class OwnerAgentRunner:
                     )
                     return content.strip(), tags
                 raise ProviderError(
-                    "End-of-day workspace entry content must be a non-empty string."
+                    "End-of-day journal entry content must be a non-empty string."
                 )
 
         content = getattr(response, "content", None)
         if isinstance(content, str) and content.strip():
             return content.strip(), ()
-        raise ProviderError("Provider returned no usable end-of-day workspace entry.")
+        raise ProviderError("Provider returned no usable end-of-day journal entry.")
 
     @staticmethod
     def _build_end_of_day_workspace_entry_message(
@@ -395,7 +395,7 @@ class OwnerAgentRunner:
             "work_done_today": turns_payload,
         }
         return (
-            "Write one workspace-history entry for later days based on today's seller-visible state and work.\n\n"
+            "Write one journal entry for later days based on today's seller-visible state and work.\n\n"
             "```json\n"
             f"{json.dumps(payload, indent=2)}\n"
             "```"

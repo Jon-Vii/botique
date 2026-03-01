@@ -27,9 +27,9 @@ These pieces already exist in the repo and are safe to build on.
 - Python `seller_core` client/CLI for the portability-aware seller surface
 - Python single-shop owner-agent runtime with live morning briefing generation from seller-visible state
 - turn-slot workday loop with one action per slot, runtime-owned day settlement, and resettable reference runs
-- unified owner-agent workspace memory with mutable current workspace text, append-only workspace-history entries, and reminders
+- unified owner-agent memory with mutable scratchpad text, append-only journal entries, and reminders
 - Mistral provider wiring for live tool-calling runs
-- artifact-rich single-run bundles with briefings, turns, workspace state, workspace history, reminders, and run summaries
+- artifact-rich single-run bundles with briefings, turns, scratchpad state, journal history, reminders, and run summaries
 - additive arena-style tournament orchestration with rotating entrant order, rotating shop assignments, and shared-world resets
 - a committed React/Vite frontend shell for marketplace, shop, listing, and simulation overview pages
 
@@ -38,7 +38,7 @@ These pieces already exist in the repo and are safe to build on.
 These are the current product priorities.
 
 - turn Botique into a human-legible benchmark and demo surface, not just a runtime
-- finish reconciling docs and operator-facing language with the current creative-goods / workspace / tournament reality
+- finish reconciling docs and operator-facing language with the current creative-goods / scratchpad / tournament reality
 - make run artifacts first-class inputs for exploration, comparison, and presentation
 - improve seller-facing briefings and tool ergonomics based on trace review when runs expose real issues
 - keep the seller-facing / control-plane boundary disciplined while tournament and operator features expand
@@ -73,7 +73,7 @@ Likely expansions once the benchmark and operator surfaces are in place.
 
 - what the primary public score should be for comparison and tournament standings
 - which scenario seeds should become the canonical benchmark set
-- how much workspace/reminder context should be surfaced automatically versus pulled on demand
+- how much scratchpad/journal/reminder context should be surfaced automatically versus pulled on demand
 - what the best benchmark-facing presentation is for production pressure, backlog, and inventory state
 - when to add stronger inter-shop competition beyond the current tournament/shared-world mechanics
 - how much demo value there is in the Etsy-portability story relative to the core Botique benchmark

@@ -78,14 +78,14 @@ def register_memory_tools(
 ) -> AgentToolRegistry:
     registry.register(
         ToolManifestEntry(
-            name="read_workspace",
-            description="Read the current persistent workspace text for the shop. This is the main mutable workspace you can carry across days.",
+            name="read_scratchpad",
+            description="Read the current persistent scratchpad text for the shop. This is the main mutable cross-day working context you can carry across days.",
             surface=ToolSurface.EXTENSION,
             work_cost=1,
             required_body_fields=("shop_id",),
             body_encoding="json",
             notes=(
-                "The workspace is freeform model-authored text, not a required template.",
+                "The scratchpad is freeform model-authored text, not a required template.",
             ),
             parameters_schema=_memory_parameters_schema(
                 properties={
@@ -96,7 +96,7 @@ def register_memory_tools(
             ),
         ),
         lambda arguments, *, store=memory: {
-            "workspace": (
+            "scratchpad": (
                 None
                 if (
                     workspace := store.read_workspace(
@@ -116,21 +116,21 @@ def register_memory_tools(
 
     registry.register(
         ToolManifestEntry(
-            name="update_workspace",
-            description="Replace the current persistent workspace text for the shop. Use this as a freeform workspace for plans, hypotheses, experiments, or anything else useful across days.",
+            name="update_scratchpad",
+            description="Replace the current persistent scratchpad text for the shop. Use this as a freeform mutable cross-day working context for plans, hypotheses, experiments, or anything else useful across days.",
             surface=ToolSurface.EXTENSION,
             work_cost=1,
             required_body_fields=("shop_id", "content"),
             body_encoding="json",
             notes=(
-                "This replaces the full workspace text. Use an empty string if you want to clear it.",
+                "This replaces the full scratchpad text. Use an empty string if you want to clear it.",
             ),
             parameters_schema=_memory_parameters_schema(
                 properties={
                     "shop_id": SHOP_ID_SCHEMA,
                     "content": {
                         "type": "string",
-                        "description": "New full workspace text. This may be empty if you want to clear it.",
+                        "description": "New full scratchpad text. This may be empty if you want to clear it.",
                     },
                     "day": {
                         "type": "integer",
@@ -142,7 +142,7 @@ def register_memory_tools(
             ),
         ),
         lambda arguments, *, store=memory: {
-            "workspace": store.update_workspace(
+            "scratchpad": store.update_workspace(
                 shop_id=_bound_shop_id(arguments, shop_id),
                 content=_require_text(arguments, "content"),
                 day=arguments.get("day"),
@@ -152,21 +152,21 @@ def register_memory_tools(
 
     registry.register(
         ToolManifestEntry(
-            name="add_workspace_entry",
-            description="Append a new workspace-history entry for the shop. Use this for durable journal/log items you want to review later.",
+            name="add_journal_entry",
+            description="Append a new journal entry for the shop. Use this for durable append-only notes about things you want to remember later.",
             surface=ToolSurface.EXTENSION,
             work_cost=1,
             required_body_fields=("shop_id", "content"),
             body_encoding="json",
             notes=(
-                "Workspace-history entries are append-only and stay inspectable in artifacts.",
+                "Journal entries are append-only and stay inspectable in artifacts.",
             ),
             parameters_schema=_memory_parameters_schema(
                 properties={
                     "shop_id": SHOP_ID_SCHEMA,
                     "content": {
                         "type": "string",
-                        "description": "Workspace-history entry text.",
+                        "description": "Journal entry text.",
                     },
                     "tags": {
                         "type": "array",
@@ -183,7 +183,7 @@ def register_memory_tools(
             ),
         ),
         lambda arguments, *, store=memory: {
-            "entry": store.add_workspace_entry(
+            "journal_entry": store.add_workspace_entry(
                 shop_id=_bound_shop_id(arguments, shop_id),
                 content=_require_text(arguments, "content"),
                 tags=tuple(arguments.get("tags", ())),
@@ -194,8 +194,8 @@ def register_memory_tools(
 
     registry.register(
         ToolManifestEntry(
-            name="read_workspace_entries",
-            description="Read a bounded set of recent workspace-history entries for the current shop. Use this when you want targeted recall from your journal/history.",
+            name="read_journal_entries",
+            description="Read a bounded set of recent journal entries for the current shop. Use this when you want targeted recall from your journal/history.",
             surface=ToolSurface.EXTENSION,
             work_cost=1,
             required_body_fields=("shop_id",),
@@ -229,7 +229,7 @@ def register_memory_tools(
                     since_day=arguments.get("since_day"),
                 )
             ),
-            "entries": [entry.to_payload() for entry in entries],
+            "journal_entries": [entry.to_payload() for entry in entries],
         },
     )
 
@@ -254,7 +254,7 @@ def register_memory_tools(
                     },
                     "workspace_entry_id": {
                         "type": "string",
-                        "description": "Optional related workspace-history entry id.",
+                        "description": "Optional related journal entry id.",
                     },
                     "day": {
                         "type": "integer",

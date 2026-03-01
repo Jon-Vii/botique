@@ -11,7 +11,7 @@ You are working on Botique, a hackathon project about autonomous AI agents runni
   - extension agent tools: seller-facing, Botique-only
   - control API: simulation/runtime/operator surface, not for normal seller agents
 - The main research frame is VendingBench-like: a business-owner agent operates inside an environment through tools and is evaluated through outcomes over time.
-- The current product scope is creative-goods-first with production constraints and explicit workspace/reminder memory.
+- The current product scope is creative-goods-first with production constraints and explicit scratchpad/journal/reminder memory.
 
 ## Your Task
 
@@ -57,8 +57,8 @@ Core first:
 Extension tools:
 
 - production scheduling
-- workspace
-- workspace-history entry recall
+- scratchpad
+- journal entry recall
 - reminders
 
 Later extensions:

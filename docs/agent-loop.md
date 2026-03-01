@@ -14,9 +14,9 @@ Status: `Current decision`
 - let the environment own outcomes, timing, and day settlement
 - keep one available action per work slot
 - use a visible daily work-slot limit instead of hidden action shaping
-- keep workspace and reminders available as ordinary support tools
+- keep scratchpad, journal, and reminders available as ordinary support tools
 - keep same-day context intact inside one workday window
-- keep cross-day memory explicit and inspectable through workspace, workspace-history entries, and reminders
+- keep cross-day memory explicit and inspectable through scratchpad text, journal entries, and reminders
 - avoid provider-specific hacks or hidden reasoning dependencies
 
 Status: `Current decision`
@@ -32,8 +32,8 @@ Per simulated day:
 5. each work slot allows exactly one action
 6. the agent may end the day early
 7. the runtime settles the day
-8. the runtime writes one end-of-day workspace-history entry
-9. logs, workspace state, workspace-history entries, reminders, and artifacts persist
+8. the runtime writes one end-of-day journal entry
+9. logs, scratchpad state, journal entries, reminders, and artifacts persist
 
 Status: `Current decision`
 
@@ -56,7 +56,7 @@ Recommended default for the current runtime:
 
 - turns per day: `5`
 - one action per work slot
-- workspace and reminders stay available without special cost shaping
+- scratchpad, journal, and reminders stay available without special cost shaping
 
 Status: `Recommended default`
 
@@ -78,8 +78,8 @@ Recommended sections:
 - yesterday order and revenue summary
 - listing movement worth noticing
 - new reviews or customer messages
-- current workspace text when non-empty, bounded to a reasonable size
-- a small recent workspace-history slice
+- current scratchpad text when non-empty, bounded to a reasonable size
+- a small recent journal slice
 - reminders due today
 - market watch items
 - short instruction to choose the highest-leverage work
@@ -94,9 +94,9 @@ Current implementation in `src/agent_runtime/briefing.py` provides both:
 Memory rule:
 
 - reminders due today should be surfaced automatically
-- current workspace text should be injected as-is when non-empty, bounded to a reasonable size
-- only a small recent workspace-history slice should be injected, not the full history
-- injected workspace content remains seller-visible and inspectable in artifacts
+- current scratchpad text should be injected as-is when non-empty, bounded to a reasonable size
+- only a small recent journal slice should be injected, not the full history
+- injected scratchpad content remains seller-visible and inspectable in artifacts
 
 ## Same-Day Context
 
@@ -111,7 +111,7 @@ Status: `Current decision`
 This is intentional:
 
 - same-day context should feel like a continuous work session
-- cross-day context should rely on workspace, workspace-history entries, reminders, and seller-visible state rather than on unbounded chat history
+- cross-day context should rely on scratchpad, journal entries, reminders, and seller-visible state rather than on unbounded chat history
 
 ## Work Session State
 
@@ -130,7 +130,7 @@ Current implementation in `src/agent_runtime/providers/policy.py` uses a plain-l
 
 - the rendered morning brief
 - a short work-session summary
-- explicit visibility of workspace/reminder tools
+- explicit visibility of scratchpad/journal/reminder tools
 - exact same-day arguments and tool results carried forward
 
 ## Turn Rules
@@ -157,13 +157,13 @@ Runtime note:
 
 ## End-Of-Day Memory
 
-At the end of each day, the runtime asks the model to write one workspace-history entry for later days.
+At the end of each day, the runtime asks the model to write one journal entry for later days.
 
 This entry:
 
 - does not consume a daytime work slot
 - is freeform rather than template-driven
-- is stored through the same workspace system used during the day
+- is stored through the same memory system used during the day
 - produces an inspectable longitudinal memory trace in artifacts
 
 Status: `Current decision`
@@ -176,7 +176,7 @@ The system prompt should frame the model as an autonomous business owner:
 - the goal is realized business performance over time
 - only seller-visible tools and memory surfaces are available
 - capacity, backlog, cash, reviews, and market shifts create delayed consequences
-- workspace and reminders are tools the agent may use when useful, not rituals
+- scratchpad, journal, and reminders are tools the agent may use when useful, not rituals
 
 The prompt should explain the environment clearly enough that:
 

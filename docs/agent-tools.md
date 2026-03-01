@@ -114,10 +114,10 @@ Direct seller tools:
 
 Botique support tools still remain:
 
-- `read_workspace`
-- `update_workspace`
-- `add_workspace_entry`
-- `read_workspace_entries`
+- `read_scratchpad`
+- `update_scratchpad`
+- `add_journal_entry`
+- `read_journal_entries`
 - `set_reminder`
 - `complete_reminder`
 
@@ -165,35 +165,35 @@ Boundary rules:
 
 ## Memory Tools
 
-Botique now exposes one coherent workspace system with three underlying semantics:
+Botique now exposes one coherent memory system with three underlying semantics:
 
-- `workspace`: one mutable current text block per shop/run
-- `workspace-history entries`: append-only journal/log items
+- `scratchpad`: one mutable current text block per shop/run
+- `journal entries`: append-only journal/log items
 - `reminders`: scheduled resurfacing
 
 Default owner-agent memory tools:
 
-- `read_workspace`
-- `update_workspace`
-- `add_workspace_entry`
-- `read_workspace_entries`
+- `read_scratchpad`
+- `update_scratchpad`
+- `add_journal_entry`
+- `read_journal_entries`
 - `set_reminder`
 - `complete_reminder`
 
-Workspace rules:
+Memory rules:
 
-- the workspace is intentionally freeform and model-authored
-- `update_workspace` replaces the full current workspace text, including clearing it with an empty string
-- `add_workspace_entry` appends one inspectable workspace-history entry without rewriting prior entries
-- `read_workspace_entries` stays simple and bounded with `limit`, optional `tag`, and optional `since_day`
+- the scratchpad is intentionally freeform and model-authored
+- `update_scratchpad` replaces the full current scratchpad text, including clearing it with an empty string
+- `add_journal_entry` appends one inspectable journal entry without rewriting prior entries
+- `read_journal_entries` stays simple and bounded with `limit`, optional `tag`, and optional `since_day`
 - reminders remain push-style resurfacing rather than hidden retrieval
 
 Boundary rules:
 
-- do not auto-copy raw external content or tool payloads into the workspace
-- do inject the current workspace text, due reminders, and only a small recent entry slice into the morning briefing
-- do not inject the full workspace-history every morning
-- keep the workspace seller-visible and inspectable in artifacts
+- do not auto-copy raw external content or tool payloads into the scratchpad
+- do inject the current scratchpad text, due reminders, and only a small recent journal slice into the morning briefing
+- do not inject the full journal every morning
+- keep the scratchpad seller-visible and inspectable in artifacts
 
 ## Tools Not Exposed By Default
 
@@ -318,7 +318,7 @@ Botique-only seller extensions:
 
 - production queue inspection
 - production scheduling
-- workspace and reminders
+- scratchpad, journal, and reminders
 - trend summaries or other simulation-rich seller aids
 
 Not seller-facing:

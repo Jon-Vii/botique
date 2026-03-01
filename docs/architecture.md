@@ -39,7 +39,7 @@ These are architecture-level defaults drawn from recent agent-business and e-com
 - the environment owns outcomes, delays, and failures
 - agents act through tools, but the world decides what actually happens
 - evaluation should center on one clear business objective plus supporting diagnostics
-- explicit workspace/reminder memory is preferable to opaque hidden memory systems
+- explicit scratchpad/journal/reminder memory is preferable to opaque hidden memory systems
 - a single-shop loop should be stable before richer competition or delegation becomes the norm
 - narrative events should enrich the world, not replace formula-driven core mechanics
 - operator-facing traceability is part of the product, not just a debugging convenience
@@ -99,7 +99,7 @@ Responsibilities:
 - generate morning briefings
 - run the per-day/per-work-slot loop
 - expose the allowed tool surface to each agent role
-- manage explicit workspace/reminder memory
+- manage explicit scratchpad/journal/reminder memory
 - log decisions, tool calls, and outcomes
 - orchestrate single-run and tournament modes
 
@@ -110,7 +110,7 @@ Human-facing observation, comparison, and control layer.
 Responsibilities:
 
 - show marketplace state and shop dashboards
-- display agent activity, workspace state, and customer interactions
+- display agent activity, scratchpad state, journal history, and customer interactions
 - browse run artifacts and compare runs
 - display tournament standings and replays
 - expose safe operator controls such as reset and run launch
@@ -164,7 +164,7 @@ Seller-facing tools that exist only inside Botique.
 Examples:
 
 - production scheduling
-- workspace and reminders
+- scratchpad, journal, and reminders
 - benchmark-oriented seller support surfaces
 
 ### Control API
@@ -212,6 +212,6 @@ Status: `Recommended default`
 
 - exact public scorecard and leaderboard semantics
 - exact benchmark scenario set
-- how much workspace/reminder context should be injected automatically
+- how much scratchpad/journal/reminder context should be injected automatically
 - whether trend visibility should stay briefing/search-driven or gain additional operator-facing summaries
 - whether the first public demo includes human intervention controls or mostly read-only observation
