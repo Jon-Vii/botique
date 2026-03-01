@@ -15,6 +15,7 @@ export const shopsTable = pgTable("shops", {
   productionCapacityPerDay: integer("production_capacity_per_day").notNull(),
   backlogUnits: integer("backlog_units").notNull(),
   materialCostsPaidTotal: numeric("material_costs_paid_total", { precision: 10, scale: 2 }).notNull(),
+  seedCapital: numeric("seed_capital", { precision: 10, scale: 2 }).notNull().default("0"),
   productionQueue: jsonb("production_queue").$type<ProductionQueueItem[]>().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull()

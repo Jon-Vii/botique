@@ -66,20 +66,30 @@ function buildQueueItem(input: {
   };
 }
 
+// ─── All shops compete in a single taxonomy: 3D Printed Goods ───────
+// One agent-controlled shop (1001) + three NPC shops, all in taxonomy 9101.
+// Fixed daily traffic is split by share-of-voice, so agents must outcompete
+// NPCs on listing quality, pricing, trend-fit, and catalog breadth.
+
 export function createDefaultMarketplaceState(): StoredMarketplaceState {
+  const TAXONOMY = 9101;
+  const DATE_BASE = "2026-02-27T00:00:00.000Z";
+
   const shops: StoredShop[] = [
+    // ── Agent-controlled shop ──
     {
       shop_id: 1001,
       shop_name: "layercake-labs",
       title: "Layer Cake Labs",
-      announcement: "Small-batch 3D printed planters and propagation tools for apartment growers.",
-      sale_message: "Restocked moss green trays and opened two custom marker slots.",
+      announcement: "Small-batch 3D printed planters, organizers, and accessories for everyday life.",
+      sale_message: "Restocked seed trays — two custom marker slots now open.",
       currency_code: "USD",
       digital_product_policy:
-        "Stocked trays ship in 1-2 business days; custom prints run in the next two-night print queue.",
+        "Stocked items ship in 1-2 business days; custom prints run in the next two-night print queue.",
       production_capacity_per_day: 10,
       backlog_units: 0,
       material_costs_paid_total: 38.5,
+      seed_capital: 0,
       production_queue: [
         buildQueueItem({
           jobId: "pq_layercake_01",
@@ -89,7 +99,6 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
           status: "in_progress",
           createdAt: "2026-02-27T05:30:00.000Z",
           startedAt: "2026-02-27T06:15:00.000Z",
-          readyAt: null,
           capacityUnitsRequired: 4,
           capacityUnitsRemaining: 2,
           materialCost: 12.4
@@ -98,51 +107,54 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       created_at: "2026-02-16T09:00:00.000Z",
       updated_at: "2026-02-27T08:30:00.000Z"
     },
+    // ── NPC shop: functional desk/office prints ──
     {
       shop_id: 1002,
-      shop_name: "sunline-cutworks",
-      title: "Sunline Cutworks",
-      announcement: "Laser-cut acrylic and plywood decor with layered color and family-name customization.",
-      sale_message: "Family signs are booking into next week's cut window.",
+      shop_name: "printform-studio",
+      title: "Printform Studio",
+      announcement: "Functional 3D printed desk accessories and cable management solutions.",
+      sale_message: "Headphone stands back in stock — monitor risers printing now.",
       currency_code: "USD",
       digital_product_policy:
-        "Ready ornaments ship in 1-2 days; personalized signs go through proofing plus a 4-day cut-and-finish queue.",
-      production_capacity_per_day: 6,
-      backlog_units: 1,
-      material_costs_paid_total: 114,
+        "Stocked items ship in 1-2 days; custom color runs take 3-4 days.",
+      production_capacity_per_day: 8,
+      backlog_units: 0,
+      material_costs_paid_total: 62,
+      seed_capital: 0,
       production_queue: [
         buildQueueItem({
-          jobId: "pq_sunline_01",
+          jobId: "pq_printform_01",
           listingId: 2003,
-          orderId: 5002,
-          kind: "customer_order",
+          orderId: null,
+          kind: "stock",
           status: "in_progress",
-          createdAt: "2026-02-27T12:20:00.000Z",
-          startedAt: "2026-02-27T13:10:00.000Z",
-          readyAt: null,
+          createdAt: "2026-02-27T06:00:00.000Z",
+          startedAt: "2026-02-27T06:30:00.000Z",
           capacityUnitsRequired: 3,
-          capacityUnitsRemaining: 2,
-          materialCost: 18
+          capacityUnitsRemaining: 1,
+          materialCost: 8.5
         })
       ],
-      created_at: "2026-02-12T08:00:00.000Z",
+      created_at: "2026-02-10T08:00:00.000Z",
       updated_at: "2026-02-27T07:15:00.000Z"
     },
+    // ── NPC shop: decorative/art prints ──
     {
       shop_id: 1003,
-      shop_name: "kiln-bloom-ceramics",
-      title: "Kiln Bloom Ceramics",
-      announcement: "Wheel-thrown kitchen ceramics glazed in quiet earth tones.",
-      sale_message: "Only one speckled espresso pair left before the next firing.",
+      shop_name: "filament-and-form",
+      title: "Filament & Form",
+      announcement: "Geometric vases, wall art, and decorative sculptures — all 3D printed in premium filaments.",
+      sale_message: "New twisted vase colorway just dropped.",
       currency_code: "USD",
       digital_product_policy:
-        "Finished small batches ship in 2-3 days; made-to-order pieces wait for the next bisque and glaze cycle.",
-      production_capacity_per_day: 5,
+        "Most pieces ship in 2-3 days; large sculptures may need a 5-day print window.",
+      production_capacity_per_day: 6,
       backlog_units: 0,
-      material_costs_paid_total: 126,
+      material_costs_paid_total: 94,
+      seed_capital: 0,
       production_queue: [
         buildQueueItem({
-          jobId: "pq_kiln_01",
+          jobId: "pq_filform_01",
           listingId: 2005,
           orderId: null,
           kind: "stock",
@@ -150,37 +162,40 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
           createdAt: "2026-02-26T09:00:00.000Z",
           startedAt: "2026-02-26T10:00:00.000Z",
           readyAt: "2026-02-28T15:00:00.000Z",
-          capacityUnitsRequired: 4,
+          capacityUnitsRequired: 5,
           capacityUnitsRemaining: 0,
-          materialCost: 27
+          materialCost: 14
         })
       ],
-      created_at: "2026-02-10T10:00:00.000Z",
+      created_at: "2026-02-12T10:00:00.000Z",
       updated_at: "2026-02-27T09:10:00.000Z"
     },
+    // ── NPC shop: kitchen/home utility prints ──
     {
       shop_id: 1004,
-      shop_name: "oak-and-orbit",
-      title: "Oak & Orbit",
-      announcement: "Solid-wood desk and entryway goods with hand-rubbed oil finishes.",
-      sale_message: "Bench time is tight this week, but custom entry rails are still open.",
+      shop_name: "nozzle-works",
+      title: "Nozzle Works",
+      announcement: "Practical 3D printed kitchen gadgets, container lids, and household fixes.",
+      sale_message: "Spice rack modules restocked. Custom lid sizes available.",
       currency_code: "USD",
       digital_product_policy:
-        "Finished desk pieces ship in 2 days; custom joinery runs on a limited weekly bench schedule.",
-      production_capacity_per_day: 4,
+        "Standard items ship in 1-2 days; custom-fit pieces need measurements and a 3-day queue.",
+      production_capacity_per_day: 8,
       backlog_units: 1,
-      material_costs_paid_total: 82,
+      material_costs_paid_total: 71,
+      seed_capital: 0,
       production_queue: [
         buildQueueItem({
-          jobId: "pq_oak_01",
+          jobId: "pq_nozzle_01",
           listingId: 2007,
           orderId: 5006,
           kind: "customer_order",
-          status: "queued",
+          status: "in_progress",
           createdAt: "2026-02-27T09:20:00.000Z",
-          capacityUnitsRequired: 4,
-          capacityUnitsRemaining: 4,
-          materialCost: 21
+          startedAt: "2026-02-27T09:45:00.000Z",
+          capacityUnitsRequired: 3,
+          capacityUnitsRemaining: 1,
+          materialCost: 5.5
         })
       ],
       created_at: "2026-02-08T11:00:00.000Z",
@@ -189,6 +204,7 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
   ];
 
   const listings: Listing[] = [
+    // ── Shop 1001: Layer Cake Labs (agent) ──
     {
       listing_id: 2001,
       shop_id: 1001,
@@ -205,7 +221,7 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       currency_code: "USD",
       who_made: "i_did",
       when_made: "2020_2025",
-      taxonomy_id: 9101,
+      taxonomy_id: TAXONOMY,
       tags: ["seed starter", "planter", "3d printed", "stackable"],
       materials: ["pla", "rubber feet"],
       material_cost_per_unit: 6.2,
@@ -235,7 +251,7 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       currency_code: "USD",
       who_made: "i_did",
       when_made: "2020_2025",
-      taxonomy_id: 9101,
+      taxonomy_id: TAXONOMY,
       tags: ["custom", "garden marker", "herb label", "3d printed"],
       materials: ["pla", "outdoor vinyl"],
       material_cost_per_unit: 4.5,
@@ -249,185 +265,188 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       updated_at: "2026-02-27T08:50:00.000Z",
       inventory: buildInventory(2002, "LCL-MARK-002", 32, 999)
     },
+    // ── Shop 1002: Printform Studio (NPC — desk/office) ──
     {
       listing_id: 2003,
       shop_id: 1002,
-      shop_name: "sunline-cutworks",
-      title: "Layered Birth Flower Family Sign",
-      description: "Personalized laser-cut wall sign with layered florals, painted lettering, and hanging hardware.",
+      shop_name: "printform-studio",
+      title: "Minimal Headphone Stand",
+      description: "Clean-line 3D printed headphone stand in matte PLA. Weighted base keeps it stable on any desk.",
       state: "active",
       type: "physical",
-      quantity: 999,
-      fulfillment_mode: "made_to_order",
-      quantity_on_hand: 0,
-      backlog_units: 1,
-      price: 64,
-      currency_code: "USD",
-      who_made: "i_did",
-      when_made: "2020_2025",
-      taxonomy_id: 9102,
-      tags: ["birth flower", "family sign", "laser cut", "custom"],
-      materials: ["birch plywood", "acrylic paint"],
-      material_cost_per_unit: 18,
-      capacity_units_per_item: 3,
-      lead_time_days: 4,
-      image_ids: [3201],
-      views: 221,
-      favorites: 67,
-      url: "https://botique.example/listings/2003",
-      created_at: "2026-02-18T10:00:00.000Z",
-      updated_at: "2026-02-27T07:30:00.000Z",
-      inventory: buildInventory(2003, "SLC-SIGN-004", 64, 999)
-    },
-    {
-      listing_id: 2004,
-      shop_id: 1002,
-      shop_name: "sunline-cutworks",
-      title: "Art Deco Suncatcher Ornament Set",
-      description: "Set of three mirrored acrylic ornaments cut and packed in small decorative batches.",
-      state: "draft",
-      type: "physical",
-      quantity: 8,
+      quantity: 5,
       fulfillment_mode: "stocked",
-      quantity_on_hand: 8,
+      quantity_on_hand: 5,
       backlog_units: 0,
       price: 24,
       currency_code: "USD",
       who_made: "i_did",
       when_made: "2020_2025",
-      taxonomy_id: 9102,
-      tags: ["suncatcher", "acrylic", "art deco", "laser cut"],
-      materials: ["mirror acrylic", "brass jump rings"],
-      material_cost_per_unit: 7,
-      capacity_units_per_item: 1,
+      taxonomy_id: TAXONOMY,
+      tags: ["headphone stand", "desk accessory", "3d printed", "minimal"],
+      materials: ["pla", "silicone pad"],
+      material_cost_per_unit: 5.5,
+      capacity_units_per_item: 3,
       lead_time_days: 2,
-      image_ids: [],
-      views: 58,
-      favorites: 12,
-      url: "https://botique.example/listings/2004",
-      created_at: "2026-02-24T13:00:00.000Z",
-      updated_at: "2026-02-27T07:40:00.000Z",
-      inventory: buildInventory(2004, "SLC-SUN-001", 24, 8)
+      image_ids: [3201],
+      views: 198,
+      favorites: 51,
+      url: "https://botique.example/listings/2003",
+      created_at: "2026-02-14T10:00:00.000Z",
+      updated_at: "2026-02-27T07:30:00.000Z",
+      inventory: buildInventory(2003, "PFS-HEAD-001", 24, 5)
     },
     {
-      listing_id: 2005,
-      shop_id: 1003,
-      shop_name: "kiln-bloom-ceramics",
-      title: "Speckled Espresso Cup Pair",
-      description: "Pair of wheel-thrown stoneware espresso cups with a warm speckled glaze and trimmed foot.",
+      listing_id: 2004,
+      shop_id: 1002,
+      shop_name: "printform-studio",
+      title: "Under-Desk Cable Clip Strip",
+      description: "Adhesive-backed cable management strip with six snap-fit channels. Printed in flexible TPU.",
       state: "active",
       type: "physical",
-      quantity: 2,
+      quantity: 12,
       fulfillment_mode: "stocked",
-      quantity_on_hand: 2,
+      quantity_on_hand: 12,
       backlog_units: 0,
-      price: 42,
+      price: 14,
       currency_code: "USD",
       who_made: "i_did",
       when_made: "2020_2025",
-      taxonomy_id: 9103,
-      tags: ["ceramics", "espresso cup", "speckled", "stoneware"],
-      materials: ["stoneware clay", "food-safe glaze"],
-      material_cost_per_unit: 13.5,
-      capacity_units_per_item: 4,
-      lead_time_days: 5,
+      taxonomy_id: TAXONOMY,
+      tags: ["cable management", "desk organizer", "3d printed", "tpu"],
+      materials: ["tpu", "3m adhesive strips"],
+      material_cost_per_unit: 3.2,
+      capacity_units_per_item: 1,
+      lead_time_days: 1,
+      image_ids: [3202],
+      views: 312,
+      favorites: 89,
+      url: "https://botique.example/listings/2004",
+      created_at: "2026-02-18T13:00:00.000Z",
+      updated_at: "2026-02-27T07:40:00.000Z",
+      inventory: buildInventory(2004, "PFS-CABLE-002", 14, 12)
+    },
+    // ── Shop 1003: Filament & Form (NPC — decorative/art) ──
+    {
+      listing_id: 2005,
+      shop_id: 1003,
+      shop_name: "filament-and-form",
+      title: "Twisted Geometric Vase",
+      description: "Spiral-twist vase printed in silk PLA with a smooth gradient finish. Watertight with internal liner.",
+      state: "active",
+      type: "physical",
+      quantity: 3,
+      fulfillment_mode: "stocked",
+      quantity_on_hand: 3,
+      backlog_units: 0,
+      price: 38,
+      currency_code: "USD",
+      who_made: "i_did",
+      when_made: "2020_2025",
+      taxonomy_id: TAXONOMY,
+      tags: ["vase", "geometric", "3d printed", "silk pla", "home decor"],
+      materials: ["silk pla", "petg liner"],
+      material_cost_per_unit: 9.5,
+      capacity_units_per_item: 5,
+      lead_time_days: 3,
       image_ids: [3301],
-      views: 187,
-      favorites: 54,
+      views: 245,
+      favorites: 72,
       url: "https://botique.example/listings/2005",
-      created_at: "2026-02-17T08:30:00.000Z",
+      created_at: "2026-02-13T08:30:00.000Z",
       updated_at: "2026-02-27T09:25:00.000Z",
-      inventory: buildInventory(2005, "KBC-ESP-003", 42, 2)
+      inventory: buildInventory(2005, "FF-VASE-001", 38, 3)
     },
     {
       listing_id: 2006,
       shop_id: 1003,
-      shop_name: "kiln-bloom-ceramics",
-      title: "Wheel-Thrown Garlic Keeper",
-      description: "Lidded stoneware garlic keeper made in the next firing cycle with carved ventilation slots.",
-      state: "draft",
+      shop_name: "filament-and-form",
+      title: "Honeycomb Wall Panel Set",
+      description: "Set of six interlocking hexagonal wall panels. Mount with included adhesive strips or screws.",
+      state: "active",
       type: "physical",
-      quantity: 999,
-      fulfillment_mode: "made_to_order",
-      quantity_on_hand: 0,
+      quantity: 4,
+      fulfillment_mode: "stocked",
+      quantity_on_hand: 4,
       backlog_units: 0,
-      price: 58,
+      price: 46,
       currency_code: "USD",
       who_made: "i_did",
       when_made: "2020_2025",
-      taxonomy_id: 9103,
-      tags: ["garlic keeper", "stoneware", "wheel thrown", "kitchen"],
-      materials: ["stoneware clay", "linen glaze"],
-      material_cost_per_unit: 16,
-      capacity_units_per_item: 5,
-      lead_time_days: 7,
-      image_ids: [],
-      views: 49,
-      favorites: 11,
+      taxonomy_id: TAXONOMY,
+      tags: ["wall art", "honeycomb", "3d printed", "geometric", "modular"],
+      materials: ["pla", "mounting hardware"],
+      material_cost_per_unit: 11,
+      capacity_units_per_item: 4,
+      lead_time_days: 3,
+      image_ids: [3302],
+      views: 178,
+      favorites: 43,
       url: "https://botique.example/listings/2006",
-      created_at: "2026-02-26T12:00:00.000Z",
+      created_at: "2026-02-20T12:00:00.000Z",
       updated_at: "2026-02-27T09:30:00.000Z",
-      inventory: buildInventory(2006, "KBC-GAR-001", 58, 999)
+      inventory: buildInventory(2006, "FF-HEX-002", 46, 4)
     },
+    // ── Shop 1004: Nozzle Works (NPC — kitchen/home utility) ──
     {
       listing_id: 2007,
       shop_id: 1004,
-      shop_name: "oak-and-orbit",
-      title: "Custom Oak Entryway Key Rail",
-      description: "Made-to-order solid oak key rail with three brass hooks and an optional engraved family name.",
+      shop_name: "nozzle-works",
+      title: "Modular Spice Rack Drawer Insert",
+      description: "Customizable 3D printed drawer insert with angled spice jar slots. Fits standard 15-inch drawers.",
+      state: "active",
+      type: "physical",
+      quantity: 4,
+      fulfillment_mode: "stocked",
+      quantity_on_hand: 4,
+      backlog_units: 0,
+      price: 22,
+      currency_code: "USD",
+      who_made: "i_did",
+      when_made: "2020_2025",
+      taxonomy_id: TAXONOMY,
+      tags: ["spice rack", "kitchen organizer", "3d printed", "drawer insert"],
+      materials: ["petg", "silicone feet"],
+      material_cost_per_unit: 5.5,
+      capacity_units_per_item: 3,
+      lead_time_days: 2,
+      image_ids: [3401],
+      views: 156,
+      favorites: 38,
+      url: "https://botique.example/listings/2007",
+      created_at: "2026-02-15T13:00:00.000Z",
+      updated_at: "2026-02-27T06:55:00.000Z",
+      inventory: buildInventory(2007, "NW-SPICE-001", 22, 4)
+    },
+    {
+      listing_id: 2008,
+      shop_id: 1004,
+      shop_name: "nozzle-works",
+      title: "Custom-Fit Container Lid",
+      description: "Made-to-order replacement lid for any round container. Send your diameter and we print to fit.",
       state: "active",
       type: "physical",
       quantity: 999,
       fulfillment_mode: "made_to_order",
       quantity_on_hand: 0,
       backlog_units: 1,
-      price: 72,
+      price: 16,
       currency_code: "USD",
       who_made: "i_did",
       when_made: "2020_2025",
-      taxonomy_id: 9104,
-      tags: ["oak", "entryway", "key rail", "custom"],
-      materials: ["white oak", "brass hooks", "hardwax oil"],
-      material_cost_per_unit: 21,
-      capacity_units_per_item: 4,
-      lead_time_days: 6,
-      image_ids: [3401],
-      views: 143,
-      favorites: 29,
-      url: "https://botique.example/listings/2007",
-      created_at: "2026-02-15T13:00:00.000Z",
-      updated_at: "2026-02-27T06:55:00.000Z",
-      inventory: buildInventory(2007, "OAO-KEY-002", 72, 999)
-    },
-    {
-      listing_id: 2008,
-      shop_id: 1004,
-      shop_name: "oak-and-orbit",
-      title: "Walnut Monitor Riser with Tray",
-      description: "Finished walnut riser with a routed tray sized for pens, earbuds, and charging cables.",
-      state: "draft",
-      type: "physical",
-      quantity: 1,
-      fulfillment_mode: "stocked",
-      quantity_on_hand: 1,
-      backlog_units: 0,
-      price: 84,
-      currency_code: "USD",
-      who_made: "i_did",
-      when_made: "2020_2025",
-      taxonomy_id: 9104,
-      tags: ["walnut", "monitor riser", "desk organizer", "woodwork"],
-      materials: ["walnut", "hardwax oil", "felt pads"],
-      material_cost_per_unit: 28,
-      capacity_units_per_item: 5,
-      lead_time_days: 4,
+      taxonomy_id: TAXONOMY,
+      tags: ["custom lid", "replacement", "3d printed", "kitchen", "made to order"],
+      materials: ["petg"],
+      material_cost_per_unit: 2.8,
+      capacity_units_per_item: 2,
+      lead_time_days: 3,
       image_ids: [],
-      views: 26,
-      favorites: 5,
+      views: 89,
+      favorites: 14,
       url: "https://botique.example/listings/2008",
-      created_at: "2026-02-26T09:00:00.000Z",
+      created_at: "2026-02-22T09:00:00.000Z",
       updated_at: "2026-02-27T07:00:00.000Z",
-      inventory: buildInventory(2008, "OAO-RISE-001", 84, 1)
+      inventory: buildInventory(2008, "NW-LID-002", 16, 999)
     }
   ];
 
@@ -443,12 +462,7 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       total_price: 28,
       currency_code: "USD",
       line_items: [
-        {
-          listing_id: 2001,
-          title: "Stackable Seed Starter Tray Set",
-          quantity: 1,
-          price: 28
-        }
+        { listing_id: 2001, title: "Stackable Seed Starter Tray Set", quantity: 1, price: 28 }
       ],
       created_at: "2026-02-26T14:10:00.000Z",
       updated_at: "2026-02-26T18:40:00.000Z"
@@ -457,22 +471,17 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       receipt_id: 5002,
       shop_id: 1002,
       buyer_name: "Leo Ramirez",
-      status: "paid",
+      status: "fulfilled",
       was_paid: true,
-      was_shipped: false,
-      was_delivered: false,
-      total_price: 64,
+      was_shipped: true,
+      was_delivered: true,
+      total_price: 24,
       currency_code: "USD",
       line_items: [
-        {
-          listing_id: 2003,
-          title: "Layered Birth Flower Family Sign",
-          quantity: 1,
-          price: 64
-        }
+        { listing_id: 2003, title: "Minimal Headphone Stand", quantity: 1, price: 24 }
       ],
-      created_at: "2026-02-27T12:04:00.000Z",
-      updated_at: "2026-02-27T12:04:00.000Z"
+      created_at: "2026-02-25T12:04:00.000Z",
+      updated_at: "2026-02-26T10:30:00.000Z"
     },
     {
       receipt_id: 5003,
@@ -482,15 +491,10 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       was_paid: true,
       was_shipped: true,
       was_delivered: true,
-      total_price: 64,
+      total_price: 14,
       currency_code: "USD",
       line_items: [
-        {
-          listing_id: 2003,
-          title: "Layered Birth Flower Family Sign",
-          quantity: 1,
-          price: 64
-        }
+        { listing_id: 2004, title: "Under-Desk Cable Clip Strip", quantity: 1, price: 14 }
       ],
       created_at: "2026-02-23T15:20:00.000Z",
       updated_at: "2026-02-24T11:35:00.000Z"
@@ -503,15 +507,10 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       was_paid: true,
       was_shipped: true,
       was_delivered: true,
-      total_price: 42,
+      total_price: 38,
       currency_code: "USD",
       line_items: [
-        {
-          listing_id: 2005,
-          title: "Speckled Espresso Cup Pair",
-          quantity: 1,
-          price: 42
-        }
+        { listing_id: 2005, title: "Twisted Geometric Vase", quantity: 1, price: 38 }
       ],
       created_at: "2026-02-25T16:30:00.000Z",
       updated_at: "2026-02-26T13:20:00.000Z"
@@ -524,18 +523,13 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       was_paid: true,
       was_shipped: true,
       was_delivered: true,
-      total_price: 42,
+      total_price: 46,
       currency_code: "USD",
       line_items: [
-        {
-          listing_id: 2005,
-          title: "Speckled Espresso Cup Pair",
-          quantity: 1,
-          price: 42
-        }
+        { listing_id: 2006, title: "Honeycomb Wall Panel Set", quantity: 1, price: 46 }
       ],
-      created_at: "2026-02-27T11:20:00.000Z",
-      updated_at: "2026-02-27T18:15:00.000Z"
+      created_at: "2026-02-24T11:20:00.000Z",
+      updated_at: "2026-02-25T18:15:00.000Z"
     },
     {
       receipt_id: 5006,
@@ -545,15 +539,10 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       was_paid: true,
       was_shipped: false,
       was_delivered: false,
-      total_price: 72,
+      total_price: 16,
       currency_code: "USD",
       line_items: [
-        {
-          listing_id: 2007,
-          title: "Custom Oak Entryway Key Rail",
-          quantity: 1,
-          price: 72
-        }
+        { listing_id: 2008, title: "Custom-Fit Container Lid", quantity: 1, price: 16 }
       ],
       created_at: "2026-02-27T09:15:00.000Z",
       updated_at: "2026-02-27T09:15:00.000Z"
@@ -566,15 +555,10 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       was_paid: true,
       was_shipped: true,
       was_delivered: true,
-      total_price: 72,
+      total_price: 22,
       currency_code: "USD",
       line_items: [
-        {
-          listing_id: 2007,
-          title: "Custom Oak Entryway Key Rail",
-          quantity: 1,
-          price: 72
-        }
+        { listing_id: 2007, title: "Modular Spice Rack Drawer Insert", quantity: 1, price: 22 }
       ],
       created_at: "2026-02-22T10:10:00.000Z",
       updated_at: "2026-02-24T14:00:00.000Z"
@@ -596,36 +580,45 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       shop_id: 1002,
       listing_id: 2003,
       rating: 4,
-      review: "Beautiful layering and finish. Proofing took a bit longer, but the sign looks great.",
-      buyer_name: "Morgan Lee",
+      review: "Clean design and solid build. Slight layer lines but looks good on the desk.",
+      buyer_name: "Leo Ramirez",
       created_at: "2026-02-26T10:25:00.000Z"
     },
     {
       review_id: 7003,
-      shop_id: 1003,
-      listing_id: 2005,
+      shop_id: 1002,
+      listing_id: 2004,
       rating: 5,
-      review: "Exactly the kind of small-batch cup pair I hoped for.",
-      buyer_name: "Mina Patel",
-      created_at: "2026-02-26T17:00:00.000Z"
+      review: "Finally solved my cable mess. The TPU flex is perfect for routing.",
+      buyer_name: "Morgan Lee",
+      created_at: "2026-02-25T10:00:00.000Z"
     },
     {
       review_id: 7004,
       shop_id: 1003,
       listing_id: 2005,
       rating: 5,
-      review: "Beautiful glaze, careful packaging, and a lovely weight in hand.",
-      buyer_name: "Noah Kim",
-      created_at: "2026-02-27T19:10:00.000Z"
+      review: "The silk PLA finish catches light beautifully. Exactly what I wanted.",
+      buyer_name: "Mina Patel",
+      created_at: "2026-02-26T17:00:00.000Z"
     },
     {
       review_id: 7005,
+      shop_id: 1003,
+      listing_id: 2006,
+      rating: 4,
+      review: "Panels look great on the wall. One was slightly warped but still mounted fine.",
+      buyer_name: "Noah Kim",
+      created_at: "2026-02-26T11:40:00.000Z"
+    },
+    {
+      review_id: 7006,
       shop_id: 1004,
       listing_id: 2007,
-      rating: 3,
-      review: "Finish is lovely, but production ran a couple days longer than I expected.",
+      rating: 4,
+      review: "Fits my drawer perfectly. The angled slots are a nice touch.",
       buyer_name: "Jordan Bell",
-      created_at: "2026-02-26T11:40:00.000Z"
+      created_at: "2026-02-25T14:00:00.000Z"
     }
   ];
 
@@ -644,17 +637,17 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       payment_id: 8002,
       shop_id: 1002,
       receipt_id: 5002,
-      amount: 64,
+      amount: 24,
       currency_code: "USD",
-      status: "pending",
-      available_at: "2026-03-03T12:04:30.000Z",
-      posted_at: "2026-02-27T12:04:30.000Z"
+      status: "posted",
+      available_at: "2026-02-26T10:31:00.000Z",
+      posted_at: "2026-02-26T10:31:00.000Z"
     },
     {
       payment_id: 8003,
       shop_id: 1002,
       receipt_id: 5003,
-      amount: 64,
+      amount: 14,
       currency_code: "USD",
       status: "posted",
       available_at: "2026-02-24T11:36:00.000Z",
@@ -664,7 +657,7 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       payment_id: 8004,
       shop_id: 1003,
       receipt_id: 5004,
-      amount: 42,
+      amount: 38,
       currency_code: "USD",
       status: "posted",
       available_at: "2026-02-26T13:21:00.000Z",
@@ -674,27 +667,27 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       payment_id: 8005,
       shop_id: 1003,
       receipt_id: 5005,
-      amount: 42,
+      amount: 46,
       currency_code: "USD",
       status: "posted",
-      available_at: "2026-02-27T18:16:00.000Z",
-      posted_at: "2026-02-27T18:16:00.000Z"
+      available_at: "2026-02-25T18:16:00.000Z",
+      posted_at: "2026-02-25T18:16:00.000Z"
     },
     {
       payment_id: 8006,
       shop_id: 1004,
       receipt_id: 5006,
-      amount: 72,
+      amount: 16,
       currency_code: "USD",
       status: "pending",
-      available_at: "2026-03-04T09:15:30.000Z",
+      available_at: "2026-03-02T09:15:30.000Z",
       posted_at: "2026-02-27T09:15:30.000Z"
     },
     {
       payment_id: 8007,
       shop_id: 1004,
       receipt_id: 5007,
-      amount: 72,
+      amount: 22,
       currency_code: "USD",
       status: "posted",
       available_at: "2026-02-24T14:01:00.000Z",
@@ -715,27 +708,6 @@ export function createDefaultMarketplaceState(): StoredMarketplaceState {
       parent_taxonomy_id: 9000,
       name: "3D Printed Goods",
       full_path: "Creative Goods > 3D Printed Goods",
-      level: 1
-    },
-    {
-      taxonomy_id: 9102,
-      parent_taxonomy_id: 9000,
-      name: "Laser Cut Decor",
-      full_path: "Creative Goods > Laser Cut Decor",
-      level: 1
-    },
-    {
-      taxonomy_id: 9103,
-      parent_taxonomy_id: 9000,
-      name: "Ceramics",
-      full_path: "Creative Goods > Ceramics",
-      level: 1
-    },
-    {
-      taxonomy_id: 9104,
-      parent_taxonomy_id: 9000,
-      name: "Woodwork",
-      full_path: "Creative Goods > Woodwork",
       level: 1
     }
   ];

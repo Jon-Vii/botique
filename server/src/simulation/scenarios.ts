@@ -5,7 +5,7 @@ import {
   type ScenarioResetOptions,
   type SimulationScenario
 } from "./scenario-types";
-import type { PendingReview, StoredMarketplaceState, StoredWorldState } from "./state-types";
+import type { StoredMarketplaceState, StoredWorldState } from "./state-types";
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -23,20 +23,6 @@ function assertControlledShopsExist(
   }
 }
 
-function filterBootstrapPendingReviews(
-  pendingReviews: readonly PendingReview[],
-  controlledShopIds: readonly number[]
-): PendingReview[] {
-  if (controlledShopIds.length === 0) {
-    return pendingReviews.map((review) => clone(review));
-  }
-
-  const controlledShopIdSet = new Set(controlledShopIds);
-  return pendingReviews
-    .filter((review) => !controlledShopIdSet.has(review.shop_id))
-    .map((review) => clone(review));
-}
-
 export function buildScenarioMarketplaceState(
   baseMarketplaceState: StoredMarketplaceState,
   scenario: SimulationScenario
@@ -49,24 +35,27 @@ export function buildScenarioMarketplaceState(
       return marketplaceState;
     case "bootstrap": {
       const controlledShopIds = new Set(scenario.controlled_shop_ids);
+      const seedCapital = scenario.seed_capital ?? 500;
       return {
         ...marketplaceState,
-        shops: marketplaceState.shops.map((shop) =>
-          controlledShopIds.has(shop.shop_id)
-            ? {
-                ...shop,
-                announcement:
-                  "The shop has completed a few pilot sales, but the main public catalog still needs to be launched.",
-                sale_message:
-                  "Pilot work is complete. The first public listings still need to be drafted and activated.",
-                digital_product_policy:
-                  "Capacity is limited. New stocked listings need queued production, and made-to-order launches should use realistic lead times from day one.",
-                backlog_units: 0,
-                production_queue: []
-              }
-            : shop
-        ),
-        listings: marketplaceState.listings.filter((listing) => !controlledShopIds.has(listing.shop_id))
+        shops: marketplaceState.shops.map((shop) => ({
+          ...shop,
+          seed_capital: seedCapital,
+          announcement: controlledShopIds.has(shop.shop_id)
+            ? "This shop is brand new. Browse the marketplace, study trends, and create your first original listings."
+            : shop.announcement,
+          title: controlledShopIds.has(shop.shop_id) ? "New Shop" : shop.title,
+          sale_message: "",
+          digital_product_policy:
+            "Capacity is limited. New stocked listings need queued production, and made-to-order launches should use realistic lead times from day one.",
+          backlog_units: 0,
+          material_costs_paid_total: 0,
+          production_queue: []
+        })),
+        listings: [],
+        orders: [],
+        reviews: [],
+        payments: []
       };
     }
     default: {
@@ -88,10 +77,7 @@ export function buildScenarioWorldState(
   const marketplace = buildScenarioMarketplaceState(normalizedBaseWorld.marketplace, scenario);
   const pendingReviews =
     scenario.scenario_id === "bootstrap"
-      ? filterBootstrapPendingReviews(
-          normalizedBaseWorld.simulation.pending_reviews ?? [],
-          scenario.controlled_shop_ids
-        )
+      ? []
       : (normalizedBaseWorld.simulation.pending_reviews ?? []).map((review) => clone(review));
 
   return createWorldState(marketplace, {

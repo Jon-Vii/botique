@@ -1,5 +1,6 @@
 import type {
   Listing,
+  ListingInventory,
   Order,
   Payment,
   ProductionQueueItem,
@@ -19,6 +20,7 @@ import {
 } from "./production";
 import { addUtcDays, buildMarketSnapshot, buildTrendState, nextSimulationDay, normalizeWorldState } from "./state";
 import { isMarketplaceActiveListing } from "../listing-availability";
+import { NPC_PRODUCT_POOL, type NpcProductTemplate } from "./npc-product-pool";
 import type {
   AdvanceDayResult,
   DayResolutionSummary,
@@ -143,10 +145,10 @@ function taxonomyDailyTraffic(
   taxonomyId: number,
   currentDate: string,
   trendState: TrendState,
-  activeListingCount: number
+  _activeListingCount: number
 ): number {
-  const listingScale = 1 + 0.3 * Math.log(1 + activeListingCount);
-
+  // Fixed traffic per taxonomy — no listing-count scaling.
+  // This makes traffic a finite resource that agents compete for via share-of-voice.
   let trendMultiplier = trendState.baseline_multiplier;
   for (const trend of trendState.active_trends) {
     if (trend.taxonomy_id === taxonomyId) {
@@ -156,7 +158,7 @@ function taxonomyDailyTraffic(
 
   const noise = 0.85 + 0.30 * stableUnitInterval(`traffic:${currentDate}:${taxonomyId}`);
 
-  return Math.max(1, Math.round(BASE_TAXONOMY_TRAFFIC * listingScale * trendMultiplier * noise));
+  return Math.max(1, Math.round(BASE_TAXONOMY_TRAFFIC * trendMultiplier * noise));
 }
 
 // ─── Stage 2: Discoverability Score ─────────────────────────────────
@@ -373,6 +375,96 @@ function settleDelayedEvents(
   }
 
   return remainingReviews;
+}
+
+function buildNewListingInventory(listingId: number, sku: string, price: number, quantity: number): ListingInventory {
+  return {
+    listing_id: listingId,
+    products: [
+      {
+        sku,
+        property_values: [],
+        offerings: [
+          {
+            offering_id: listingId * 10,
+            price,
+            quantity,
+            is_enabled: true
+          }
+        ]
+      }
+    ],
+    price_on_property: [],
+    quantity_on_property: [],
+    sku_on_property: []
+  };
+}
+
+function ensureNpcListings(
+  world: StoredWorldState,
+  currentDate: string,
+  controlledShopIds: ReadonlySet<number>
+) {
+  for (const shop of world.marketplace.shops) {
+    if (controlledShopIds.has(shop.shop_id)) {
+      continue;
+    }
+
+    const pool = NPC_PRODUCT_POOL[shop.shop_id];
+    if (!pool || pool.length === 0) {
+      continue;
+    }
+
+    const existingCount = world.marketplace.listings.filter(
+      (listing) => listing.shop_id === shop.shop_id
+    ).length;
+
+    if (existingCount >= pool.length) {
+      continue;
+    }
+
+    let shouldCreate = false;
+    if (existingCount === 0) {
+      // Day 1: always create the first listing
+      shouldCreate = true;
+    } else {
+      // ~70% chance to add the next listing
+      shouldCreate = stableUnitInterval(`npc-listing:${shop.shop_id}:${currentDate}:${existingCount}`) < 0.7;
+    }
+
+    if (!shouldCreate) {
+      continue;
+    }
+
+    const template = pool[existingCount];
+    const nextListingId = nextNumericId(world.marketplace.listings.map((l) => l.listing_id));
+    const sku = `NPC-${shop.shop_id}-${nextListingId}`;
+
+    const newListing: Listing = {
+      ...template,
+      listing_id: nextListingId,
+      shop_id: shop.shop_id,
+      shop_name: shop.shop_name,
+      views: 0,
+      favorites: 0,
+      url: `https://botique.example/listings/${nextListingId}`,
+      created_at: currentDate,
+      updated_at: currentDate,
+      inventory: buildNewListingInventory(nextListingId, sku, template.price, template.quantity)
+    };
+
+    world.marketplace.listings.push(newListing);
+
+    // Queue initial stock production for stocked listings
+    if (template.fulfillment_mode === "stocked") {
+      const jobSequence = world.marketplace.shops.reduce(
+        (sum, s) => sum + s.production_queue.length, 0
+      ) + 1;
+      shop.production_queue.push(
+        createProductionQueueJob(newListing, currentDate, jobSequence, "stock", null)
+      );
+    }
+  }
 }
 
 function ensureStockJobs(
@@ -654,6 +746,7 @@ export function resolveAdvanceDay(
 
   releaseCompletedProduction(currentWorld, nextDay.date, resolutions, pendingReviews);
   const unsettledReviews = settleDelayedEvents(currentWorld, nextDay.date, resolutions, pendingReviews);
+  ensureNpcListings(currentWorld, nextDay.date, controlledShopIds);
   resolveMarketSales(currentWorld, nextDay.date, nextTrendState, resolutions, unsettledReviews);
   ensureStockJobs(currentWorld, nextDay.date, nextTrendState, controlledShopIds);
   allocateProduction(currentWorld, nextDay.date, resolutions);

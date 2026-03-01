@@ -15,6 +15,10 @@ import type {
 export class RuntimeControlService {
   constructor(private readonly simulation: SimulationModule) {}
 
+  getSimulationModule(): SimulationModule {
+    return this.simulation;
+  }
+
   async replaceWorldState(state: StoredWorldState): Promise<StoredWorldState> {
     return this.simulation.replaceWorldState(state);
   }

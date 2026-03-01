@@ -80,6 +80,7 @@ export const storedShopSchema = z.object({
   production_capacity_per_day: z.number().int().nonnegative(),
   backlog_units: z.number().int().nonnegative(),
   material_costs_paid_total: z.number().nonnegative(),
+  seed_capital: z.number().nonnegative().default(0),
   production_queue: z.array(productionQueueItemSchema),
   created_at: z.string(),
   updated_at: z.string()

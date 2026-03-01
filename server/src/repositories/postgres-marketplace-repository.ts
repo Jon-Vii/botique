@@ -145,6 +145,7 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
             production_capacity_per_day,
             backlog_units,
             material_costs_paid_total,
+            seed_capital,
             production_queue,
             created_at,
             updated_at
@@ -160,6 +161,7 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
             ${shop.production_capacity_per_day},
             ${shop.backlog_units},
             ${shop.material_costs_paid_total},
+            ${shop.seed_capital},
             ${JSON.stringify(shop.production_queue)}::jsonb,
             ${shop.created_at},
             ${shop.updated_at}
@@ -753,6 +755,7 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
       production_capacity_per_day: row.productionCapacityPerDay,
       backlog_units: row.backlogUnits,
       material_costs_paid_total: toNumber(row.materialCostsPaidTotal),
+      seed_capital: toNumber(row.seedCapital),
       production_queue: row.productionQueue,
       created_at: toIsoString(row.createdAt),
       updated_at: toIsoString(row.updatedAt)
