@@ -1,120 +1,61 @@
-# Initial Scope
+# Scope
 
 ## Goal
 
 Produce a benchmark and demo where at least one shop-owner agent can:
 
-1. read a morning briefing
-2. inspect the market and its own shop
-3. manage constrained production and listings
-4. receive orders, delayed outcomes, and feedback
-5. adapt over multiple simulated days
-6. leave behind traces a human can inspect and compare
+1. Read a morning briefing
+2. Inspect the market and its own shop
+3. Manage constrained production and listings
+4. Receive orders, delayed outcomes, and feedback
+5. Adapt over multiple simulated days
+6. Leave behind traces a human can inspect and compare
 
-The original milestone was “make one believable run work in a terminal.” That now exists. The active milestone is turning those runs into a compelling benchmark and demo surface.
-
-Status: `Current decision`
+The active milestone is turning working runs into a compelling benchmark and demo surface.
 
 ## Capability Framing
 
-Botique should evaluate autonomous-organization capability, not just tool calling or seller roleplay.
+Botique evaluates autonomous-organization capability, not just tool calling or seller roleplay.
 
-The environment should be strong enough to reveal:
+The environment reveals:
 
-- operational capability: can the agent reprioritize, publish, price, produce, and respond to feedback
-- strategic capability: can it form a direction, test ideas, and shift based on evidence
-- organizational memory: can it preserve useful scratchpad text, journal entries, reminders, and plans across days
-- adaptive capability: can it expand into adjacent opportunities or begin a pivot when the current lane weakens
-- resource governance: can it manage cash, capacity, inventory, backlog, and risk instead of simply doing more actions
+- **Operational capability**: reprioritize, publish, price, produce, and respond to feedback
+- **Strategic capability**: form a direction, test ideas, and shift based on evidence
+- **Organizational memory**: preserve useful context and plans across days
+- **Adaptive capability**: expand into adjacent opportunities or pivot when the current lane weakens
+- **Resource governance**: manage cash, capacity, inventory, backlog, and risk
 
-Recommended evaluation layers:
+Evaluation layers:
 
-1. in-lane optimization
-2. adjacent expansion
-3. gradual strategic pivot
+1. In-lane optimization
+2. Adjacent expansion
+3. Gradual strategic pivot
 
-Status: `Current decision`
+## Product Scope
 
-## Initial Build Priorities
-
-### Must Have
-
-- seller-facing HTTP service for marketplace state and compatibility endpoints
-- one owner agent running against an allowed tool set
-- day-based simulation loop
-- production-aware listings, search, shop info, orders, reviews, and payments
-- structured logs and persisted artifacts for decisions and tool calls
-
-### Should Have
-
-- creative-goods-first product space with trendable attributes and production constraints
-- unified scratchpad/journal/reminder memory
-- run explorer, comparison view, and tournament/demo surfaces built over the same runtime artifacts
-
-### Can Wait
-
-- persistent sub-agents
-- image generation
-- complex shipping or carrier flows
-- real-time sockets if polling is enough for the first demo
-- full Etsy endpoint breadth
-
-Current implementation note:
-
-- the repo already has a Fastify/Bun seller-facing service, a seeded creative-goods marketplace with production-aware listings, deterministic trend rotation, a Python `seller_core` CLI, a Python owner-agent runtime, automatic artifact bundles, and tournament mode
-- the repo now also has first-class deterministic scenario selection for isolated runs and tournaments, with canonical `operate` and `bootstrap` seeds
-- the repo also already has a React/Vite frontend shell for marketplace and shop observation; the next step is turning it into a benchmark/operator surface rather than starting System 4 from zero
-
-## Product Scope Recommendation
-
-Start creative-goods-first:
+Creative-goods-first:
 
 - 3D-printed decor and organizers
-- laser-cut decor and accessories
-- ceramics
-- woodwork
+- Laser-cut decor and accessories
+- Ceramics
+- Woodwork
 
 Shared simplifying abstraction:
 
-- `fulfillment_mode`: `stocked` or `made_to_order`
-- finite daily production capacity
-- stock depletion or backlog growth after sales
-- material cost and lead time, without full shipping-carrier complexity
+- `stocked` or `made_to_order` fulfillment modes
+- Finite daily production capacity
+- Stock depletion or backlog growth after sales
+- Material cost and lead time, without full shipping-carrier complexity
 
-Why:
-
-- creates real resource tradeoffs without requiring full logistics simulation
-- makes pricing, replenishment, and catalog strategy legible
-- lets the agent exhibit organizational capability instead of only copywriting behavior
-
-Status: `Current decision`
+This creates real resource tradeoffs and makes pricing, replenishment, and catalog strategy legible.
 
 ## Success Criteria
 
-The initial build is successful if it demonstrates all of the following:
+The build is successful if:
 
-- the agent takes actions through tools rather than freeform narration
-- the market resolves outcomes externally
-- the agent changes behavior based on results
-- the agent operates under meaningful cash/capacity/inventory constraints
-- traces and artifacts make the strategy legible to a human observer
-- runs can be compared and presented cleanly through an operator-facing surface
-
-## Non-Goals For The Initial Build
-
-- exact Etsy parity
-- a complete academic benchmark suite
-- perfect customer realism
-- polished multi-agent company structures
-- full physical-commerce fulfillment realism
-
-## Implementation Order
-
-1. simulation state and core endpoints
-2. agent tool wrappers
-3. owner-agent loop
-4. first successful multi-day runs with artifacts
-5. benchmark/operator UX over those runs
-6. leaderboard polish plus any scenario work beyond the current `operate` / `bootstrap` baseline
-
-Status: `Current decision`
+- The agent takes actions through tools rather than freeform narration
+- The market resolves outcomes externally
+- The agent changes behavior based on results
+- The agent operates under meaningful cash/capacity/inventory constraints
+- Traces and artifacts make the strategy legible to a human observer
+- Runs can be compared and presented cleanly through an operator-facing surface
