@@ -183,7 +183,7 @@ Default owner-agent memory tools:
 Memory rules:
 
 - the scratchpad is intentionally freeform and model-authored
-- `update_scratchpad` replaces the full current scratchpad text, including clearing it with an empty string
+- `update_scratchpad` saves the next full version of the current scratchpad text, so the agent can keep useful parts, remove stale parts, and add new ones; clearing it with an empty string is optional, not required
 - `add_journal_entry` appends one inspectable journal entry without rewriting prior entries
 - `read_journal_entries` stays simple and bounded with `limit`, optional `tag`, and optional `since_day`
 - reminders remain push-style resurfacing rather than hidden retrieval

@@ -94,7 +94,7 @@ Current implementation in `src/agent_runtime/briefing.py` provides both:
 Memory rule:
 
 - reminders due today should be surfaced automatically
-- current scratchpad text should be injected as-is when non-empty, bounded to a reasonable size
+- current scratchpad text should be injected as-is when non-empty, bounded to a reasonable size, so the agent can revise it for later days without losing the existing text
 - only a small recent journal slice should be injected, not the full history
 - injected scratchpad content remains seller-visible and inspectable in artifacts
 

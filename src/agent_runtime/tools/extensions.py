@@ -79,7 +79,7 @@ def register_memory_tools(
     registry.register(
         ToolManifestEntry(
             name="read_scratchpad",
-            description="Read the current persistent scratchpad text for the shop. This is the main mutable cross-day working context you can carry across days.",
+            description="Read the current persistent scratchpad text for the shop. This is the main mutable cross-day working context you can carry across days and revise for future days.",
             surface=ToolSurface.EXTENSION,
             work_cost=1,
             required_body_fields=("shop_id",),
@@ -117,20 +117,20 @@ def register_memory_tools(
     registry.register(
         ToolManifestEntry(
             name="update_scratchpad",
-            description="Replace the current persistent scratchpad text for the shop. Use this as a freeform mutable cross-day working context for plans, hypotheses, experiments, or anything else useful across days.",
+            description="Revise the current persistent scratchpad text for the shop. Use it as a freeform mutable cross-day working context for plans, hypotheses, experiments, or anything else useful across days.",
             surface=ToolSurface.EXTENSION,
             work_cost=1,
             required_body_fields=("shop_id", "content"),
             body_encoding="json",
             notes=(
-                "This replaces the full scratchpad text. Use an empty string if you want to clear it.",
+                "Write the next full version of the scratchpad: keep anything still useful, remove stale parts, and add anything new. Use an empty string only if you intentionally want to clear it.",
             ),
             parameters_schema=_memory_parameters_schema(
                 properties={
                     "shop_id": SHOP_ID_SCHEMA,
                     "content": {
                         "type": "string",
-                        "description": "New full scratchpad text. This may be empty if you want to clear it.",
+                        "description": "The next full scratchpad text after your revision. Keep any parts that still matter, remove stale parts, and add anything new. This may be empty only if you intentionally want to clear it.",
                     },
                     "day": {
                         "type": "integer",
