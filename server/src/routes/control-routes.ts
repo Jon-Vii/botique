@@ -241,5 +241,11 @@ export async function registerControlRoutes(
     )
   );
 
+  app.get("/tournaments/:tournamentId/status", async (request, reply) => {
+    const { tournamentId } = request.params as { tournamentId: string };
+    const info = tournamentService.getTournamentStatusInfo(tournamentId);
+    return { tournament_id: tournamentId, ...info };
+  });
+
   registerRouteErrorHandler(app);
 }

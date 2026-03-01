@@ -1,8 +1,7 @@
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { access, mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { promisify } from "node:util";
 
 import { z } from "zod";
 
@@ -13,8 +12,6 @@ import {
   tournamentListItemSchema,
   tournamentResultSchema
 } from "../schemas/control";
-
-const execFileAsync = promisify(execFile);
 
 type TournamentLaunchRequest = z.infer<typeof tournamentLaunchRequestSchema>;
 type TournamentLaunchResponse = z.infer<typeof tournamentLaunchResponseSchema>;
@@ -33,6 +30,16 @@ export class TournamentControlService {
   private readonly runtimeCliPath: string;
   private readonly applicationBaseUrl: string;
   private readonly controlBaseUrl: string;
+  private activeTournaments = new Map<string, {
+    status: "running" | "completed" | "failed";
+    error?: string;
+    entrant_count: number;
+    round_count: number;
+    days_per_round: number;
+    scenario_id?: string;
+    entrants?: z.infer<typeof tournamentLaunchRequestSchema>["entrants"];
+    created_at: string;
+  }>();
 
   constructor(options: TournamentControlServiceOptions) {
     this.artifactsRoot = resolve(options.artifactsRoot ?? join(process.cwd(), "artifacts", "agent-runtime"));
@@ -41,10 +48,17 @@ export class TournamentControlService {
     this.controlBaseUrl = options.controlBaseUrl;
   }
 
+  getTournamentStatusInfo(tournamentId: string): { status: string; error?: string } {
+    const info = this.activeTournaments.get(tournamentId);
+    if (!info) return { status: "unknown" };
+    return { status: info.status, ...(info.error ? { error: info.error } : {}) };
+  }
+
   async listTournaments(): Promise<TournamentListItem[]> {
     await mkdir(this.artifactsRoot, { recursive: true });
     const entries = await readdir(this.artifactsRoot, { withFileTypes: true });
     const items: TournamentListItem[] = [];
+    const seenIds = new Set<string>();
 
     for (const entry of entries) {
       if (!entry.isDirectory()) {
@@ -55,6 +69,29 @@ export class TournamentControlService {
         continue;
       }
       items.push(artifact.listItem);
+      seenIds.add(artifact.listItem.run_id);
+    }
+
+    // Include active tournaments that haven't written artifacts yet
+    for (const [id, info] of this.activeTournaments) {
+      if (!seenIds.has(id)) {
+        const entrants = info.entrants?.map((e) => ({
+          entrant_id: e.entrant_id,
+          display_name: e.display_name,
+          provider: e.provider,
+          model: e.model,
+        }));
+        items.push(tournamentListItemSchema.parse({
+          run_id: id,
+          scenario: { scenario_id: info.scenario_id ?? "operate", controlled_shop_ids: [] },
+          entrant_count: info.entrant_count,
+          round_count: info.round_count,
+          days_per_round: info.days_per_round,
+          created_at: info.created_at,
+          status: info.status,
+          entrants,
+        }));
+      }
     }
 
     return items.sort((left, right) => right.created_at.localeCompare(left.created_at));
@@ -74,86 +111,99 @@ export class TournamentControlService {
     const tempDir = await mkdtemp(join(tmpdir(), "botique-tournament-"));
     const entrantsPath = join(tempDir, "entrants.json");
 
-    try {
-      await writeFile(entrantsPath, JSON.stringify({ entrants: payload.entrants }, null, 2), "utf-8");
+    await writeFile(entrantsPath, JSON.stringify({ entrants: payload.entrants }, null, 2), "utf-8");
 
-      const args = [
-        "run-tournament",
-        "--entrants-file",
-        entrantsPath,
-        "--shop-ids",
-        payload.shop_ids.join(","),
-        "--days",
-        String(payload.days_per_round),
-        "--rounds",
-        String(payload.rounds),
-        "--turns-per-day",
-        String(payload.turns_per_day),
-        "--run-id",
-        tournamentId,
-        "--base-url",
-        this.applicationBaseUrl,
-        "--control-base-url",
-        this.controlBaseUrl,
-        "--output-dir",
-        outputDir,
-      ];
+    const args = [
+      "run-tournament",
+      "--entrants-file",
+      entrantsPath,
+      "--shop-ids",
+      payload.shop_ids.join(","),
+      "--days",
+      String(payload.days_per_round),
+      "--rounds",
+      String(payload.rounds),
+      "--turns-per-day",
+      String(payload.turns_per_day),
+      "--run-id",
+      tournamentId,
+      "--base-url",
+      this.applicationBaseUrl,
+      "--control-base-url",
+      this.controlBaseUrl,
+      "--output-dir",
+      outputDir,
+    ];
 
-      if (payload.scenario_id) {
-        args.push("--scenario", payload.scenario_id);
+    if (payload.scenario_id) {
+      args.push("--scenario", payload.scenario_id);
+    }
+
+    const env = { ...process.env };
+    if (payload.api_key) {
+      env.MISTRAL_API_KEY = payload.api_key;
+    }
+
+    // Fire-and-forget: spawn the process in the background, return immediately
+    this.activeTournaments.set(tournamentId, {
+      status: "running",
+      entrant_count: payload.entrants.length,
+      round_count: payload.rounds,
+      days_per_round: payload.days_per_round,
+      scenario_id: payload.scenario_id,
+      entrants: payload.entrants,
+      created_at: new Date().toISOString(),
+    });
+
+    const child = spawn(this.runtimeCliPath, args, {
+      cwd: process.cwd(),
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: false,
+    });
+
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+    child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+
+    const updateStatus = (update: { status: "completed" | "failed"; error?: string }) => {
+      const existing = this.activeTournaments.get(tournamentId);
+      if (existing) {
+        Object.assign(existing, update);
       }
+    };
 
-      const env = { ...process.env };
-      if (payload.api_key) {
-        env.MISTRAL_API_KEY = payload.api_key;
-      }
+    child.on("close", (code) => {
+      rm(tempDir, { recursive: true, force: true }).catch(() => {});
 
-      const { stdout, stderr } = await execFileAsync(this.runtimeCliPath, args, {
-        cwd: process.cwd(),
-        env,
-        encoding: "utf-8",
-        maxBuffer: 10 * 1024 * 1024,
-      });
-
-      const raw = stdout.trim();
-      if (!raw) {
-        throw new BadRequestError(`Tournament runtime produced no output.${stderr ? ` ${stderr}` : ""}`);
-      }
-
-      const response = JSON.parse(raw) as { ok?: boolean; error?: { message?: string } };
-      if (!response.ok) {
-        throw new BadRequestError(response.error?.message ?? "Tournament launch failed.");
-      }
-
-      await access(join(outputDir, "result.json"));
-      return tournamentLaunchResponseSchema.parse({ tournament_id: tournamentId });
-    } catch (error) {
-      if (error instanceof BadRequestError) {
-        throw error;
-      }
-      // execFileAsync errors carry stdout/stderr with the real error details
-      const execError = error as { stdout?: string; stderr?: string; message?: string };
-      let message = "Tournament launch failed.";
-      if (execError.stdout) {
+      if (code === 0) {
         try {
-          const parsed = JSON.parse(execError.stdout.trim()) as { ok?: boolean; error?: { message?: string } };
-          if (parsed.error?.message) {
-            message = parsed.error.message;
+          const response = JSON.parse(stdout.trim()) as { ok?: boolean; error?: { message?: string } };
+          if (response.ok) {
+            updateStatus({ status: "completed" });
+          } else {
+            updateStatus({ status: "failed", error: response.error?.message ?? "Tournament returned non-ok" });
           }
         } catch {
-          // stdout wasn't valid JSON — fall through
+          updateStatus({ status: "completed" });
         }
+      } else {
+        let errorMsg = stderr.trim().slice(0, 500) || `Process exited with code ${code}`;
+        try {
+          const parsed = JSON.parse(stdout.trim());
+          if (parsed?.error?.message) errorMsg = parsed.error.message;
+        } catch { /* ignore */ }
+        updateStatus({ status: "failed", error: errorMsg });
       }
-      if (message === "Tournament launch failed." && execError.stderr) {
-        message = execError.stderr.trim().slice(0, 500) || message;
-      }
-      if (message === "Tournament launch failed." && execError.message) {
-        message = execError.message;
-      }
-      throw new BadRequestError(message);
-    } finally {
-      await rm(tempDir, { recursive: true, force: true });
-    }
+    });
+
+    child.on("error", (err) => {
+      updateStatus({ status: "failed", error: err.message });
+      rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    });
+
+    return tournamentLaunchResponseSchema.parse({ tournament_id: tournamentId });
   }
 
   private async findTournamentArtifactDir(tournamentId: string): Promise<string> {
