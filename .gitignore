@@ -32,6 +32,15 @@ coverage/
 .env
 .env.*
 
+# Generated runtime artifacts
+artifacts/
+
+# Local UI iteration exports
+dashboard-geist-fonts.png
+dashboard-geist-v2.png
+listing-detail.png
+marketplace-geist.png
+
 # Editor / OS
 .DS_Store
 .idea/
