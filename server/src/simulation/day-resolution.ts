@@ -10,6 +10,7 @@ import {
   computeListingQuality
 } from "./ranking";
 import {
+  createProductionQueueJob,
   isMadeToOrderListing,
   isStockedListing,
   queueUnitsForListing,
@@ -162,28 +163,6 @@ function buildReviewText(listing: Listing, rating: number): string {
   return `${listing.title} was good overall, but the turnaround felt a bit slow.`;
 }
 
-function createProductionJob(
-  listing: Listing,
-  currentDate: string,
-  sequence: number,
-  kind: ProductionQueueItem["kind"],
-  orderId: number | null
-): ProductionQueueItem {
-  return {
-    job_id: `${kind}-${listing.shop_id}-${listing.listing_id}-${Date.parse(currentDate)}-${sequence}`,
-    listing_id: listing.listing_id,
-    order_id: orderId,
-    kind,
-    status: "queued",
-    created_at: currentDate,
-    started_at: null,
-    ready_at: null,
-    capacity_units_required: listing.capacity_units_per_item,
-    capacity_units_remaining: listing.capacity_units_per_item,
-    material_cost: listing.material_cost_per_unit
-  };
-}
-
 function finalizeShopMetrics(world: StoredWorldState, resolutions: Map<number, ShopDayResolution>) {
   world.marketplace.shops = world.marketplace.shops.map((shop) => {
     const listings = world.marketplace.listings.filter((listing) => listing.shop_id === shop.shop_id);
@@ -320,7 +299,7 @@ function ensureStockJobs(world: StoredWorldState, currentDate: string, trendStat
 
       for (let index = 0; index < missingUnits; index += 1) {
         sequence += 1;
-        shop.production_queue.push(createProductionJob(listing, currentDate, sequence, "stock", null));
+        shop.production_queue.push(createProductionQueueJob(listing, currentDate, sequence, "stock", null));
       }
     }
   }
@@ -421,7 +400,9 @@ function resolveMarketSales(
       listing.updated_at = currentDate;
       resolution.made_to_order_units_sold += 1;
       jobSequence += 1;
-      shop.production_queue.unshift(createProductionJob(listing, currentDate, jobSequence, "customer_order", orderId));
+      shop.production_queue.unshift(
+        createProductionQueueJob(listing, currentDate, jobSequence, "customer_order", orderId)
+      );
     }
 
     orderId += 1;

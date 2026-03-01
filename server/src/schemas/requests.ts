@@ -186,6 +186,11 @@ export const inventoryBodySchema = z.object({
   sku_on_property: z.array(intField()).default([])
 });
 
+export const queueProductionBodySchema = z.object({
+  listing_id: positiveIntField(),
+  units: positiveIntField().max(100)
+});
+
 export const taxonomyQuerySchema = z.object({
   taxonomy_id: positiveIntField().optional()
 });
@@ -202,3 +207,4 @@ export type GetShopListingsQuery = z.infer<typeof getShopListingsQuerySchema>;
 export type GetOrdersQuery = z.infer<typeof getOrdersQuerySchema>;
 export type GetReviewsQuery = z.infer<typeof getReviewsQuerySchema>;
 export type InventoryBody = z.infer<typeof inventoryBodySchema>;
+export type QueueProductionBody = z.infer<typeof queueProductionBodySchema>;

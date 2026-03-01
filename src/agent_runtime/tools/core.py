@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Iterable
 
 from seller_core.client import SellerCoreClient
@@ -16,11 +17,18 @@ DEFAULT_OWNER_AGENT_CORE_TOOLS: tuple[str, ...] = (
     "get_shop_listings",
     "search_marketplace",
     "get_shop_info",
-    "update_shop",
     "get_orders",
     "get_order_details",
     "get_reviews",
     "get_taxonomy_nodes",
+)
+DEFAULT_OWNER_AGENT_EXTENSION_TOOLS: tuple[str, ...] = (
+    "queue_production",
+    "get_capacity_status",
+)
+DEFAULT_OWNER_AGENT_SELLER_TOOLS: tuple[str, ...] = (
+    *DEFAULT_OWNER_AGENT_CORE_TOOLS,
+    *DEFAULT_OWNER_AGENT_EXTENSION_TOOLS,
 )
 
 
@@ -51,9 +59,22 @@ def _tool_parameters_schema(
     *,
     shop_id: int | str | None,
 ) -> dict[str, JSONValue]:
-    properties: dict[str, JSONValue] = {}
-    visible_path_params = [field for field in item["path_params"] if not (field == "shop_id" and shop_id is not None)]
+    existing_schema = item.get("parameters_schema")
+    if isinstance(existing_schema, dict):
+        schema = deepcopy(existing_schema)
+        if shop_id is not None:
+            properties = schema.get("properties")
+            if isinstance(properties, dict):
+                properties.pop("shop_id", None)
+            required = schema.get("required")
+            if isinstance(required, list):
+                schema["required"] = [field for field in required if field != "shop_id"]
+        return schema
 
+    properties: dict[str, JSONValue] = {}
+    visible_path_params = [
+        field for field in item["path_params"] if not (field == "shop_id" and shop_id is not None)
+    ]
     for field_name in visible_path_params:
         properties[field_name] = {
             "description": f"Required path parameter `{field_name}`.",
@@ -78,16 +99,16 @@ def _tool_parameters_schema(
     }
 
 
-def register_seller_core_tools(
+def register_seller_tools(
     registry: AgentToolRegistry,
     client: SellerCoreClient,
     *,
-    tool_names: Iterable[str] = DEFAULT_OWNER_AGENT_CORE_TOOLS,
+    tool_names: Iterable[str] = DEFAULT_OWNER_AGENT_SELLER_TOOLS,
     shop_id: int | str | None = None,
 ) -> AgentToolRegistry:
     manifest_by_name = {
         item["tool_name"]: item
-        for item in client.manifest()
+        for item in client.tool_manifest()
     }
 
     for tool_name in tool_names:
@@ -100,7 +121,7 @@ def register_seller_core_tools(
             ToolManifestEntry(
                 name=item["tool_name"],
                 description=item["description"],
-                surface=ToolSurface.CORE,
+                surface=ToolSurface(item.get("surface", ToolSurface.CORE.value)),
                 operation_id=item["operation_id"],
                 path_params=tuple(item["path_params"]),
                 query_params=tuple(item["query_params"]),
@@ -121,3 +142,6 @@ def register_seller_core_tools(
         )
 
     return registry
+
+
+register_seller_core_tools = register_seller_tools

@@ -22,6 +22,11 @@ class BodyEncoding(StrEnum):
     JSON = "json"
 
 
+class SellerToolSurface(StrEnum):
+    CORE = "core"
+    EXTENSION = "extension"
+
+
 @dataclass(frozen=True)
 class EndpointSpec:
     tool_name: str
@@ -29,12 +34,14 @@ class EndpointSpec:
     method: str
     path_template: str
     description: str
+    surface: SellerToolSurface = SellerToolSurface.CORE
     scopes: tuple[str, ...] = ()
     path_params: tuple[str, ...] = ()
     query_params: tuple[str, ...] = ()
     body_encoding: BodyEncoding = BodyEncoding.NONE
     required_body_fields: tuple[str, ...] = ()
     notes: tuple[str, ...] = ()
+    parameters_schema: dict[str, JSONValue] | None = None
 
 
 @dataclass(frozen=True)

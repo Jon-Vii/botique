@@ -118,3 +118,25 @@ export function isStockedListing(listing: Listing): boolean {
 export function isMadeToOrderListing(listing: Listing): boolean {
   return listing.fulfillment_mode === "made_to_order";
 }
+
+export function createProductionQueueJob(
+  listing: Listing,
+  currentDate: string,
+  sequence: number,
+  kind: ProductionQueueItem["kind"],
+  orderId: number | null
+): ProductionQueueItem {
+  return {
+    job_id: `${kind}-${listing.shop_id}-${listing.listing_id}-${Date.parse(currentDate)}-${sequence}`,
+    listing_id: listing.listing_id,
+    order_id: orderId,
+    kind,
+    status: "queued",
+    created_at: currentDate,
+    started_at: null,
+    ready_at: null,
+    capacity_units_required: listing.capacity_units_per_item,
+    capacity_units_remaining: listing.capacity_units_per_item,
+    material_cost: listing.material_cost_per_unit
+  };
+}

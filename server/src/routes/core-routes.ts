@@ -3,12 +3,14 @@ import { ZodError, type ZodTypeAny, z } from "zod";
 
 import { BadRequestError } from "../errors";
 import {
+  capacityStatusSchema,
   inventorySchema,
   listingSchema,
   operationStatusSchema,
   orderSchema,
   paginatedResultsSchema,
   paymentSchema,
+  queueProductionResultSchema,
   reviewSchema,
   shopSchema,
   taxonomyNodeSchema
@@ -22,6 +24,7 @@ import {
   inventoryBodySchema,
   legacyQuerySchema,
   listingIdParamsSchema,
+  queueProductionBodySchema,
   receiptParamsSchema,
   searchMarketplaceQuerySchema,
   shopIdParamsSchema,
@@ -118,6 +121,19 @@ export async function registerCoreRoutes(app: FastifyInstance, service: Marketpl
     const body = parseValue(inventoryBodySchema, request.body ?? {}, "request body");
     const inventory = await service.updateListingInventory(params.listing_id, body);
     return sendValidated(reply, inventorySchema, inventory);
+  });
+
+  app.get("/shops/:shop_id/production-status", async (request: FastifyRequest, reply) => {
+    const params = parseValue(shopIdParamsSchema, request.params, "path parameters");
+    const status = await service.getCapacityStatus(params.shop_id);
+    return sendValidated(reply, capacityStatusSchema, status);
+  });
+
+  app.post("/shops/:shop_id/production-queue", async (request: FastifyRequest, reply) => {
+    const params = parseValue(shopIdParamsSchema, request.params, "path parameters");
+    const body = parseValue(queueProductionBodySchema, request.body ?? {}, "request body");
+    const result = await service.queueProduction(params.shop_id, body);
+    return sendValidated(reply, queueProductionResultSchema, result, 201);
   });
 
   app.get("/shops/:shop_id", async (request: FastifyRequest, reply) => {

@@ -1,10 +1,12 @@
 import { BadRequestError, NotFoundError } from "../errors";
 import type {
+  CapacityStatus,
   Listing,
   ListingInventory,
   OperationStatus,
   Order,
   Payment,
+  QueueProductionResult,
   Review,
   Shop,
   TaxonomyNode
@@ -15,12 +17,14 @@ import type {
   GetReviewsQuery,
   GetShopListingsQuery,
   InventoryBody,
+  QueueProductionBody,
   SearchMarketplaceQuery,
   UpdateListingBody,
   UpdateShopBody
 } from "../schemas/requests";
 import type { MarketplaceRepository } from "../repositories/types";
 import type { SimulationModule } from "../simulation/world-simulation";
+import { createProductionQueueJob, isMadeToOrderListing, queueUnitsForListing } from "../simulation/production";
 import { computeKeywordRelevance, scoreMarketplaceListing } from "../simulation/ranking";
 
 type PaginatedResults<T> = {
@@ -135,6 +139,18 @@ function compareSimpleDateDesc<T extends { created_at?: string; posted_at?: stri
   const leftTime = Date.parse(left.created_at ?? left.posted_at ?? "");
   const rightTime = Date.parse(right.created_at ?? right.posted_at ?? "");
   return rightTime - leftTime;
+}
+
+function estimateDaysUntilUnitsReady(
+  capacityUnitsAhead: number,
+  capacityPerDay: number,
+  leadTimeDays: number
+): number | null {
+  if (capacityPerDay <= 0) {
+    return null;
+  }
+
+  return Math.ceil(capacityUnitsAhead / capacityPerDay) + leadTimeDays;
 }
 
 export class MarketplaceService {
@@ -370,6 +386,106 @@ export class MarketplaceService {
       throw new NotFoundError(`Listing ${listingId} not found.`);
     }
     return updated;
+  }
+
+  async queueProduction(shopId: number, body: QueueProductionBody): Promise<QueueProductionResult> {
+    const world = await this.simulation.getWorldState();
+    const shop = world.marketplace.shops.find((item) => item.shop_id === shopId);
+    if (!shop) {
+      throw new NotFoundError(`Shop ${shopId} not found.`);
+    }
+
+    const listing = world.marketplace.listings.find(
+      (item) => item.shop_id === shopId && item.listing_id === body.listing_id
+    );
+    if (!listing) {
+      throw new NotFoundError(`Listing ${body.listing_id} not found in shop ${shopId}.`);
+    }
+    if (isMadeToOrderListing(listing)) {
+      throw new BadRequestError(
+        "queue_production is only available for stocked listings in v1. Made-to-order sales automatically create backlog and customer-order production jobs."
+      );
+    }
+
+    const currentDay = await this.simulation.getCurrentDay();
+    const queueDepthBefore = shop.production_queue.length;
+    const capacityUnitsAhead =
+      shop.production_queue.reduce((sum, job) => sum + Math.max(0, job.capacity_units_remaining), 0) +
+      body.units * listing.capacity_units_per_item;
+    let sequence = queueDepthBefore;
+    for (let index = 0; index < body.units; index += 1) {
+      sequence += 1;
+      shop.production_queue.push(
+        createProductionQueueJob(listing, currentDay.date, sequence, "stock", null)
+      );
+    }
+
+    shop.updated_at = currentDay.date;
+    listing.updated_at = currentDay.date;
+
+    await this.repository.replaceWorldState(world);
+
+    return {
+      ok: true,
+      shop_id: shopId,
+      listing_id: listing.listing_id,
+      fulfillment_mode: listing.fulfillment_mode,
+      units_queued: body.units,
+      queue_depth_before: queueDepthBefore,
+      queue_depth_after: shop.production_queue.length,
+      queued_stock_units_for_listing: queueUnitsForListing(
+        shop.production_queue,
+        listing.listing_id,
+        "stock"
+      ),
+      production_capacity_per_day: shop.production_capacity_per_day,
+      capacity_units_requested: body.units * listing.capacity_units_per_item,
+      material_cost_total: Number((body.units * listing.material_cost_per_unit).toFixed(2)),
+      estimated_days_until_units_ready: estimateDaysUntilUnitsReady(
+        capacityUnitsAhead,
+        shop.production_capacity_per_day,
+        listing.lead_time_days
+      )
+    };
+  }
+
+  async getCapacityStatus(shopId: number): Promise<CapacityStatus> {
+    const world = await this.simulation.getWorldState();
+    const shop = world.marketplace.shops.find((item) => item.shop_id === shopId);
+    if (!shop) {
+      throw new NotFoundError(`Shop ${shopId} not found.`);
+    }
+
+    const listings = world.marketplace.listings
+      .filter((item) => item.shop_id === shopId)
+      .sort((left, right) => left.listing_id - right.listing_id)
+      .map((listing) => ({
+        listing_id: listing.listing_id,
+        title: listing.title,
+        state: listing.state,
+        fulfillment_mode: listing.fulfillment_mode,
+        quantity_on_hand: listing.quantity_on_hand,
+        backlog_units: listing.backlog_units,
+        queued_stock_units: queueUnitsForListing(shop.production_queue, listing.listing_id, "stock"),
+        queued_customer_order_units: queueUnitsForListing(
+          shop.production_queue,
+          listing.listing_id,
+          "customer_order"
+        ),
+        capacity_units_per_item: listing.capacity_units_per_item,
+        lead_time_days: listing.lead_time_days
+      }));
+
+    return {
+      shop_id: shopId,
+      generated_at: (await this.simulation.getCurrentDay()).date,
+      production_capacity_per_day: shop.production_capacity_per_day,
+      backlog_units: shop.backlog_units,
+      queue_depth: shop.production_queue.length,
+      queued_stock_units: shop.production_queue.filter((job) => job.kind === "stock").length,
+      queued_customer_order_units: shop.production_queue.filter((job) => job.kind === "customer_order").length,
+      listings
+    };
   }
 
   async getShopInfo(shopId: number): Promise<Shop> {

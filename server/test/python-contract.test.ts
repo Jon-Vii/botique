@@ -36,7 +36,7 @@ describe("Python SellerCoreClient contract", () => {
     await app.close();
   });
 
-  test("SellerCoreClient can create and fetch a listing over HTTP", async (t) => {
+  test("SellerCoreClient can create listings, inspect capacity, and queue stocked production over HTTP", async (t) => {
     if (listenError) {
       t.skip(`Local HTTP listen is unavailable in this environment: ${String(listenError)}`);
       return;
@@ -69,10 +69,16 @@ created = client.create_draft_listing(
     lead_time_days=4,
 )
 fetched = client.get_listing(listing_id=created["listing_id"])
+capacity_before = client.get_capacity_status(shop_id=1001)
+queued = client.queue_production(shop_id=1001, listing_id=2001, units=2)
+capacity_after = client.get_capacity_status(shop_id=1001)
 print(json.dumps({
     "listing_id": created["listing_id"],
     "state": created["state"],
     "title": fetched["title"],
+    "queue_depth_before": capacity_before["queue_depth"],
+    "queued_units": queued["units_queued"],
+    "queue_depth_after": capacity_after["queue_depth"],
 }))
         `
       ],
@@ -89,5 +95,8 @@ print(json.dumps({
     const payload = JSON.parse(python.stdout.trim());
     assert.equal(payload.state, "draft");
     assert.equal(payload.title, "Python Contract Hook Rail");
+    assert.equal(payload.queue_depth_before, 1);
+    assert.equal(payload.queued_units, 2);
+    assert.equal(payload.queue_depth_after, 3);
   });
 });

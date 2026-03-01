@@ -37,7 +37,11 @@ from agent_runtime import (
 )
 from agent_runtime.cli import main as runtime_cli_main
 from agent_runtime.providers.policy import END_DAY_TOOL_NAME
-from agent_runtime.tools import DEFAULT_OWNER_AGENT_CORE_TOOLS
+from agent_runtime.tools import (
+    DEFAULT_OWNER_AGENT_CORE_TOOLS,
+    DEFAULT_OWNER_AGENT_EXTENSION_TOOLS,
+    DEFAULT_OWNER_AGENT_SELLER_TOOLS,
+)
 from control_api import (
     AdvanceDayResult,
     AdvanceDayStep,
@@ -65,11 +69,12 @@ class FakeSellerCoreClient:
 
     def manifest(self) -> list[dict[str, object]]:
         manifest = []
-        for name in DEFAULT_OWNER_AGENT_CORE_TOOLS:
+        for name in DEFAULT_OWNER_AGENT_SELLER_TOOLS:
             entry = {
                 "tool_name": name,
                 "operation_id": name,
                 "description": f"Stub manifest entry for {name}.",
+                "surface": "core" if name in DEFAULT_OWNER_AGENT_CORE_TOOLS else "extension",
                 "path_params": [],
                 "query_params": [],
                 "required_body_fields": [],
@@ -79,10 +84,20 @@ class FakeSellerCoreClient:
             }
             if name == "search_marketplace":
                 entry["query_params"] = ["keywords", "limit", "offset"]
-            elif name == "get_shop_info":
+            elif name in {"get_shop_info", "get_capacity_status"}:
                 entry["path_params"] = ["shop_id"]
+            elif name == "queue_production":
+                entry["path_params"] = ["shop_id"]
+                entry["required_body_fields"] = ["listing_id", "units"]
             manifest.append(entry)
         return manifest
+
+    def tool_manifest(self, *, surfaces=None):
+        manifest = self.manifest()
+        if surfaces is None:
+            return manifest
+        surface_names = {surface.value if hasattr(surface, "value") else surface for surface in surfaces}
+        return [item for item in manifest if item["surface"] in surface_names]
 
     def call(self, tool_name: str, arguments: dict[str, object]) -> dict[str, object]:
         copied = dict(arguments)
@@ -501,12 +516,23 @@ class ToolRegistryTests(unittest.TestCase):
 
         tool_names = {entry.name for entry in registry.manifest()}
         self.assertIn("search_marketplace", tool_names)
+        self.assertIn("queue_production", tool_names)
+        self.assertIn("get_capacity_status", tool_names)
         self.assertIn("write_note", tool_names)
         self.assertIn("set_reminder", tool_names)
         self.assertIn("complete_reminder", tool_names)
+        self.assertNotIn("update_shop", tool_names)
 
         core_result = registry.invoke("search_marketplace", {"keywords": "mushroom planner"})
         shop_result = registry.invoke("get_shop_info", {})
+        capacity_result = registry.invoke("get_capacity_status", {})
+        production_result = registry.invoke(
+            "queue_production",
+            {
+                "listing_id": 2001,
+                "units": 2,
+            },
+        )
         note_result = registry.invoke(
             "write_note",
             {
@@ -531,10 +557,14 @@ class ToolRegistryTests(unittest.TestCase):
             [
                 ("search_marketplace", {"keywords": "mushroom planner"}),
                 ("get_shop_info", {"shop_id": 7}),
+                ("get_capacity_status", {"shop_id": 7}),
+                ("queue_production", {"listing_id": 2001, "units": 2, "shop_id": 7}),
             ],
         )
         self.assertEqual(core_result.output["tool_name"], "search_marketplace")
         self.assertEqual(shop_result.output["arguments"]["shop_id"], 7)
+        self.assertEqual(capacity_result.output["tool_name"], "get_capacity_status")
+        self.assertEqual(production_result.output["arguments"]["units"], 2)
         self.assertEqual(note_result.output["note"]["title"], "Today's angle")
         self.assertEqual(note_result.output["note"]["shop_id"], 7)
         self.assertEqual(reminder_result.output["reminder"]["due_day"], 4)
@@ -572,6 +602,14 @@ class ToolRegistryTests(unittest.TestCase):
         )
         self.assertNotIn("shop_id", manifests["write_note"].parameters_schema["properties"])
         self.assertNotIn("shop_id", manifests["get_shop_info"].parameters_schema["properties"])
+        self.assertEqual(
+            manifests["queue_production"].surface,
+            "extension",
+        )
+        self.assertEqual(
+            manifests["queue_production"].parameters_schema["required"],
+            ["listing_id", "units"],
+        )
 
     def test_completed_reminders_stop_showing_up_in_future_briefings(self) -> None:
         memory = InMemoryAgentMemory()

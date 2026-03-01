@@ -168,6 +168,71 @@ describe("Botique server core endpoints", () => {
     assert.equal(inventoryResponse.json().listing_id, 2001);
   });
 
+  test("reports seller-visible production capacity and queues stocked production jobs", async () => {
+    const beforeResponse = await app.inject({
+      method: "GET",
+      url: "/v3/application/shops/1001/production-status"
+    });
+
+    assert.equal(beforeResponse.statusCode, 200);
+    const before = beforeResponse.json();
+    assert.equal(before.shop_id, 1001);
+    assert.equal(before.production_capacity_per_day, 10);
+    assert.equal(before.queue_depth, 1);
+    assert.equal(before.listings[0].listing_id, 2001);
+
+    const queueResponse = await app.inject({
+      method: "POST",
+      url: "/v3/application/shops/1001/production-queue",
+      headers: {
+        "content-type": "application/json"
+      },
+      payload: JSON.stringify({
+        listing_id: 2001,
+        units: 2
+      })
+    });
+
+    assert.equal(queueResponse.statusCode, 201);
+    const queued = queueResponse.json();
+    assert.equal(queued.ok, true);
+    assert.equal(queued.listing_id, 2001);
+    assert.equal(queued.units_queued, 2);
+    assert.equal(queued.queue_depth_before, 1);
+    assert.equal(queued.queue_depth_after, 3);
+    assert.equal(queued.queued_stock_units_for_listing, 3);
+
+    const afterResponse = await app.inject({
+      method: "GET",
+      url: "/v3/application/shops/1001/production-status"
+    });
+    assert.equal(afterResponse.statusCode, 200);
+    const after = afterResponse.json();
+    assert.equal(after.queue_depth, 3);
+    assert.equal(after.queued_stock_units, 3);
+    assert.equal(after.listings[0].queued_stock_units, 3);
+  });
+
+  test("rejects manual production queueing for made-to-order listings", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v3/application/shops/1001/production-queue",
+      headers: {
+        "content-type": "application/json"
+      },
+      payload: JSON.stringify({
+        listing_id: 2002,
+        units: 1
+      })
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.match(
+      response.json().error.message,
+      /made-to-order sales automatically create backlog/i
+    );
+  });
+
   test("filters receipts and returns receipt details", async () => {
     const ordersResponse = await app.inject({
       method: "GET",

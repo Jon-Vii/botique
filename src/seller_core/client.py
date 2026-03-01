@@ -3,8 +3,15 @@ from __future__ import annotations
 import os
 from typing import Any, Mapping
 
+from .compat.botique import BOTIQUE_EXTENSION_TOOL_INDEX, BOTIQUE_EXTENSION_TOOL_SPECS
 from .compat.etsy_v3 import CORE_TOOL_INDEX, CORE_TOOL_SPECS, ETSY_V3_BASE_URL
-from .models import BodyEncoding, ClientConfig, EndpointSpec, RequestPlan
+from .models import (
+    BodyEncoding,
+    ClientConfig,
+    EndpointSpec,
+    RequestPlan,
+    SellerToolSurface,
+)
 from .transport import HttpTransport
 
 
@@ -73,22 +80,24 @@ class SellerCoreClient:
         return cls(config=config)
 
     def manifest(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "tool_name": spec.tool_name,
-                "operation_id": spec.operation_id,
-                "method": spec.method,
-                "path_template": spec.path_template,
-                "description": spec.description,
-                "path_params": list(spec.path_params),
-                "query_params": list(spec.query_params),
-                "required_body_fields": list(spec.required_body_fields),
-                "body_encoding": spec.body_encoding.value,
-                "scopes": list(spec.scopes),
-                "notes": list(spec.notes),
-            }
-            for spec in CORE_TOOL_SPECS
+        return self.tool_manifest(surfaces=(SellerToolSurface.CORE,))
+
+    def tool_manifest(
+        self,
+        *,
+        surfaces: tuple[SellerToolSurface, ...] | None = None,
+    ) -> list[dict[str, Any]]:
+        selected_surfaces = (
+            set(surfaces)
+            if surfaces is not None
+            else {SellerToolSurface.CORE, SellerToolSurface.EXTENSION}
+        )
+        specs = [
+            spec
+            for spec in (*CORE_TOOL_SPECS, *BOTIQUE_EXTENSION_TOOL_SPECS)
+            if spec.surface in selected_surfaces
         ]
+        return [self._serialize_spec(spec) for spec in specs]
 
     def prepare(self, tool_name: str, arguments: Mapping[str, Any]) -> RequestPlan:
         spec = self._get_spec(tool_name)
@@ -160,12 +169,41 @@ class SellerCoreClient:
     def get_taxonomy_nodes(self, **arguments: Any) -> Any:
         return self.call("get_taxonomy_nodes", arguments)
 
+    def queue_production(self, **arguments: Any) -> Any:
+        return self.call("queue_production", arguments)
+
+    def get_capacity_status(self, **arguments: Any) -> Any:
+        return self.call("get_capacity_status", arguments)
+
     @staticmethod
     def _get_spec(tool_name: str) -> EndpointSpec:
         try:
             return CORE_TOOL_INDEX[tool_name]
-        except KeyError as exc:
-            raise ToolValidationError(f"Unknown core tool {tool_name!r}.") from exc
+        except KeyError:
+            try:
+                return BOTIQUE_EXTENSION_TOOL_INDEX[tool_name]
+            except KeyError as exc:
+                raise ToolValidationError(f"Unknown seller tool {tool_name!r}.") from exc
+
+    @staticmethod
+    def _serialize_spec(spec: EndpointSpec) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "tool_name": spec.tool_name,
+            "operation_id": spec.operation_id,
+            "method": spec.method,
+            "path_template": spec.path_template,
+            "description": spec.description,
+            "surface": spec.surface.value,
+            "path_params": list(spec.path_params),
+            "query_params": list(spec.query_params),
+            "required_body_fields": list(spec.required_body_fields),
+            "body_encoding": spec.body_encoding.value,
+            "scopes": list(spec.scopes),
+            "notes": list(spec.notes),
+        }
+        if spec.parameters_schema is not None:
+            payload["parameters_schema"] = spec.parameters_schema
+        return payload
 
     def _build_headers(self) -> dict[str, str]:
         headers = dict(self.config.extra_headers)

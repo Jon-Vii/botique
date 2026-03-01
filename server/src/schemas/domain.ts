@@ -149,6 +149,45 @@ export const operationStatusSchema = z.object({
   listing_id: z.number().int().positive()
 });
 
+export const queueProductionResultSchema = z.object({
+  ok: z.literal(true),
+  shop_id: z.number().int().positive(),
+  listing_id: z.number().int().positive(),
+  fulfillment_mode: fulfillmentModeSchema,
+  units_queued: z.number().int().positive(),
+  queue_depth_before: z.number().int().nonnegative(),
+  queue_depth_after: z.number().int().nonnegative(),
+  queued_stock_units_for_listing: z.number().int().nonnegative(),
+  production_capacity_per_day: z.number().int().nonnegative(),
+  capacity_units_requested: z.number().int().positive(),
+  material_cost_total: z.number().nonnegative(),
+  estimated_days_until_units_ready: z.number().int().positive().nullable()
+});
+
+export const capacityStatusListingSchema = z.object({
+  listing_id: z.number().int().positive(),
+  title: z.string(),
+  state: z.enum(["draft", "active", "inactive", "sold_out"]),
+  fulfillment_mode: fulfillmentModeSchema,
+  quantity_on_hand: z.number().int().nonnegative(),
+  backlog_units: z.number().int().nonnegative(),
+  queued_stock_units: z.number().int().nonnegative(),
+  queued_customer_order_units: z.number().int().nonnegative(),
+  capacity_units_per_item: z.number().int().positive(),
+  lead_time_days: z.number().int().positive()
+});
+
+export const capacityStatusSchema = z.object({
+  shop_id: z.number().int().positive(),
+  generated_at: z.string(),
+  production_capacity_per_day: z.number().int().nonnegative(),
+  backlog_units: z.number().int().nonnegative(),
+  queue_depth: z.number().int().nonnegative(),
+  queued_stock_units: z.number().int().nonnegative(),
+  queued_customer_order_units: z.number().int().nonnegative(),
+  listings: z.array(capacityStatusListingSchema)
+});
+
 export function paginatedResultsSchema<T extends z.ZodTypeAny>(itemSchema: T) {
   return z.object({
     count: z.number().int().nonnegative(),
@@ -169,3 +208,6 @@ export type Review = z.infer<typeof reviewSchema>;
 export type Payment = z.infer<typeof paymentSchema>;
 export type TaxonomyNode = z.infer<typeof taxonomyNodeSchema>;
 export type OperationStatus = z.infer<typeof operationStatusSchema>;
+export type QueueProductionResult = z.infer<typeof queueProductionResultSchema>;
+export type CapacityStatus = z.infer<typeof capacityStatusSchema>;
+export type CapacityStatusListing = z.infer<typeof capacityStatusListingSchema>;

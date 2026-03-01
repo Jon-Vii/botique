@@ -95,6 +95,23 @@ class CoreToolsClientTests(unittest.TestCase):
         self.assertEqual(plan.url, "https://api.example.test/listings/123/inventory")
         self.assertEqual(plan.body["products"][0]["sku"], "SKU-1")
 
+    def test_prepare_queue_production_uses_json_body(self) -> None:
+        client = SellerCoreClient(config=ClientConfig(base_url="https://api.example.test"))
+
+        plan = client.prepare(
+            "queue_production",
+            {
+                "shop_id": 42,
+                "listing_id": 123,
+                "units": 4,
+            },
+        )
+
+        self.assertEqual(plan.method, "POST")
+        self.assertEqual(plan.body_encoding.value, "json")
+        self.assertEqual(plan.url, "https://api.example.test/shops/42/production-queue")
+        self.assertEqual(plan.body, {"listing_id": 123, "units": 4})
+
     def test_call_search_marketplace_forwards_query_params(self) -> None:
         transport = RecordingTransport(response_data={"results": []})
         client = SellerCoreClient(
@@ -137,6 +154,18 @@ class CliTests(unittest.TestCase):
         self.assertIn("get_orders", tool_names)
         self.assertIn("delete_listing", tool_names)
         self.assertIn("update_listing_inventory", tool_names)
+        self.assertNotIn("queue_production", tool_names)
+
+    def test_tool_manifest_can_include_botique_extensions(self) -> None:
+        client = SellerCoreClient.from_env(base_url="https://api.example.test")
+
+        payload = client.tool_manifest()
+        tool_names = {tool["tool_name"] for tool in payload}
+
+        self.assertIn("queue_production", tool_names)
+        self.assertIn("get_capacity_status", tool_names)
+        queue_spec = next(tool for tool in payload if tool["tool_name"] == "queue_production")
+        self.assertEqual(queue_spec["surface"], "extension")
 
     def test_main_prepare_command_emits_json(self) -> None:
         from io import StringIO
