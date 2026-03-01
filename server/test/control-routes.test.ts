@@ -9,6 +9,10 @@ describe("Botique server control endpoints", () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
   const tournamentResult = {
     run_id: "tournament_demo_01",
+    scenario: {
+      scenario_id: "bootstrap",
+      controlled_shop_ids: [1001, 1002]
+    },
     days_per_round: 5,
     round_count: 2,
     entrants: [
@@ -103,6 +107,7 @@ describe("Botique server control endpoints", () => {
         listTournaments: async () => [
           {
             run_id: "tournament_demo_01",
+            scenario: tournamentResult.scenario,
             entrant_count: 2,
             round_count: 2,
             days_per_round: 5,
@@ -330,16 +335,19 @@ describe("Botique server control endpoints", () => {
           shop_ids: [1001, 1002],
           days_per_round: 5,
           rounds: 2,
-          turns_per_day: 5
+          turns_per_day: 5,
+          scenario_id: "bootstrap"
         }
       })
     ]);
 
     assert.equal(listResponse.statusCode, 200);
     assert.equal(listResponse.json()[0].run_id, "tournament_demo_01");
+    assert.equal(listResponse.json()[0].scenario.scenario_id, "bootstrap");
 
     assert.equal(detailResponse.statusCode, 200);
     assert.equal(detailResponse.json().run_id, "tournament_demo_01");
+    assert.equal(detailResponse.json().scenario.scenario_id, "bootstrap");
     assert.equal(detailResponse.json().rounds[0].run_id, "tournament_demo_01_round_01");
 
     assert.equal(launchResponse.statusCode, 201);

@@ -9,6 +9,10 @@ import {
 } from "@phosphor-icons/react";
 import { BackendNotice } from "../components/BackendNotice";
 import { Badge } from "../components/Badge";
+import {
+  ControlledShopsBadge,
+  ScenarioBadge,
+} from "../components/ScenarioBadge";
 import { EmptyState } from "../components/EmptyState";
 import { Stat } from "../components/Stat";
 import { Skeleton } from "../components/Skeleton";
@@ -25,6 +29,11 @@ import {
   useRunSummary,
 } from "../hooks/useApi";
 import { formatCurrency, formatDateMedium } from "../lib/format";
+import {
+  buildRunIdentityTokens,
+  getRunIdentity,
+  getRunScenario,
+} from "../lib/run-identity";
 
 export function RunDetail() {
   const { runId } = useParams<{ runId: string }>();
@@ -37,6 +46,7 @@ export function RunDetail() {
   const notesQuery = useRunMemoryNotes(id);
 
   const summary = summaryQuery.data;
+  const manifest = manifestQuery.data;
   const daySnapshots = daySnapshotsQuery.data ?? [];
   const requestedDay = Number(searchParams.get("day"));
   const selectedDay = daySnapshots.some((day) => day.day === requestedDay)
@@ -60,6 +70,9 @@ export function RunDetail() {
   const notesForSelectedDay = (notesQuery.data ?? []).filter(
     (note) => note.created_day === selectedDay,
   );
+  const scenario = getRunScenario({ summary, manifest });
+  const identity = getRunIdentity({ summary, manifest });
+  const identityTokens = buildRunIdentityTokens(identity);
 
   if (summaryQuery.isLoading) {
     return (
@@ -121,23 +134,47 @@ export function RunDetail() {
               <Badge variant={summary.mode === "live" ? "emerald" : "gray"}>
                 {summary.mode}
               </Badge>
+              {scenario ? <ScenarioBadge scenario={scenario} /> : null}
+              {scenario ? (
+                <ControlledShopsBadge shopIds={scenario.controlled_shop_ids} />
+              ) : null}
               <Badge variant="teal">
                 {summary.day_count} day{summary.day_count !== 1 ? "s" : ""}
               </Badge>
               <Badge variant="gray" subtle>
                 days {summary.start_day}-{summary.end_day}
               </Badge>
+              {identityTokens.map((token) => (
+                <Badge key={token} variant="gray" subtle>
+                  {token}
+                </Badge>
+              ))}
             </div>
           </div>
 
-          {manifestQuery.data ? (
+          {manifest ? (
             <div className="tech-card min-w-[280px] p-4">
               <div className="mb-2 text-[10px] font-mono font-semibold uppercase tracking-wider text-muted">
-                Invocation
+                Run Identity
               </div>
-              <p className="text-sm text-secondary">
-                {manifestQuery.data.invocation.command}
-              </p>
+              {identityTokens.length > 0 ? (
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {identityTokens.map((token) => (
+                    <Badge key={token} variant="gray" subtle>
+                      {token}
+                    </Badge>
+                  ))}
+                </div>
+              ) : null}
+              {manifest.invocation.command ? (
+                <p className="text-sm text-secondary">
+                  {manifest.invocation.command}
+                </p>
+              ) : (
+                <p className="text-sm text-muted">
+                  Invocation metadata loaded without a command string.
+                </p>
+              )}
             </div>
           ) : null}
         </div>

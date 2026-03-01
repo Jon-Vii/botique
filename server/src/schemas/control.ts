@@ -156,6 +156,7 @@ export const tournamentLaunchRequestSchema = z.object({
   days_per_round: z.number().int().positive(),
   rounds: z.number().int().positive(),
   turns_per_day: z.number().int().positive(),
+  scenario_id: z.enum(["operate", "bootstrap"]).optional(),
   run_id: z.string().min(1).optional()
 });
 
@@ -227,6 +228,7 @@ export const tournamentAggregateStandingSchema = z.object({
 
 export const tournamentResultSchema = z.object({
   run_id: z.string().min(1),
+  scenario: simulationScenarioSchema,
   days_per_round: z.number().int().positive(),
   round_count: z.number().int().positive(),
   entrants: z.array(tournamentEntrantSchema),
@@ -237,6 +239,7 @@ export const tournamentResultSchema = z.object({
 
 export const tournamentListItemSchema = z.object({
   run_id: z.string().min(1),
+  scenario: simulationScenarioSchema,
   entrant_count: z.number().int().nonnegative(),
   round_count: z.number().int().positive(),
   days_per_round: z.number().int().positive(),

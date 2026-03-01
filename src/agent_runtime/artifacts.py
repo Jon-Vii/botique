@@ -336,6 +336,7 @@ def _build_run_summary(
             "generated_at": created_at.isoformat(),
             "run_id": tournament.run_id,
             "mode": "tournament",
+            "scenario": jsonify(tournament.scenario),
             "entrant_count": len(tournament.entrants),
             "round_count": tournament.round_count,
             "days_per_round": tournament.days_per_round,

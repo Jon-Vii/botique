@@ -7,6 +7,10 @@ import {
 } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
 import { Badge } from "../components/Badge";
+import {
+  ControlledShopsBadge,
+  ScenarioBadge,
+} from "../components/ScenarioBadge";
 import { EmptyState } from "../components/EmptyState";
 import { Skeleton } from "../components/Skeleton";
 import type { TournamentListItem } from "../types/api";
@@ -35,7 +39,10 @@ function TournamentCard({ item }: { item: TournamentListItem }) {
           }}
         />
         <div className="absolute top-2 right-3">
-          <Badge variant={statusVariant}>{item.status}</Badge>
+          <div className="flex items-center gap-2">
+            <ScenarioBadge scenario={item.scenario} subtle />
+            <Badge variant={statusVariant}>{item.status}</Badge>
+          </div>
         </div>
         <div className="absolute bottom-2 left-3 flex items-center gap-1.5">
           <Sword size={13} weight="duotone" className="text-orange" />
@@ -54,6 +61,11 @@ function TournamentCard({ item }: { item: TournamentListItem }) {
           <span className="text-[10px] font-mono text-muted">
             {formatDateTimeShort(item.created_at)}
           </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <ScenarioBadge scenario={item.scenario} subtle />
+          <ControlledShopsBadge shopIds={item.scenario.controlled_shop_ids} />
         </div>
 
         <div className="grid grid-cols-3 gap-2">

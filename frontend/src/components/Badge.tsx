@@ -10,6 +10,8 @@ type BadgeVariant =
   | "sky"
   | "amber";
 
+export type { BadgeVariant };
+
 const styles: Record<BadgeVariant, { base: string; subtle: string }> = {
   gray: {
     base: "bg-gray-3 text-gray-9 border-gray-a3",

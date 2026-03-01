@@ -5,8 +5,11 @@ import { BackendNotice } from "../BackendNotice";
 import { LoadingDots } from "../LoadingDots";
 import { Badge } from "../Badge";
 import { Snippet } from "../Snippet";
+import { ScenarioPicker } from "./ScenarioPicker";
 import { frontendFeatures } from "../../config/features";
 import { useLaunchRun, useWorldState } from "../../hooks/useApi";
+import { DEFAULT_SCENARIO_ID, getScenarioMeta } from "../../lib/scenarios";
+import type { ScenarioId } from "../../types/api";
 
 const MODEL_OPTIONS = [
   { label: "Mistral Medium", value: "mistral-medium-latest" },
@@ -33,7 +36,9 @@ export function RunLaunchPanel({
   const [turnsPerDay, setTurnsPerDay] = useState(5);
   const [runId, setRunId] = useState("");
   const [model, setModel] = useState<string>(MODEL_OPTIONS[0].value);
+  const [scenarioId, setScenarioId] = useState<ScenarioId>(DEFAULT_SCENARIO_ID);
   const [launchedRunId, setLaunchedRunId] = useState<string | null>(null);
+  const selectedScenario = getScenarioMeta(scenarioId);
 
   const handleLaunch = () => {
     const sid = shopId ? Number(shopId) : shops[0]?.shop_id;
@@ -55,6 +60,7 @@ export function RunLaunchPanel({
         run_id: rid,
         model,
         provider: "mistral",
+        scenario_id: scenarioId,
       },
       {
         onSuccess: (data) => {
@@ -82,7 +88,23 @@ export function RunLaunchPanel({
         </Badge>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-4">
+        <ScenarioPicker
+          value={scenarioId}
+          onChange={setScenarioId}
+          tone="orange"
+        />
+
+        <div className="rounded-[3px] border border-orange/15 bg-orange-1/50 px-3 py-2">
+          <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-orange">
+            Launch posture
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-secondary">
+            {selectedScenario.description}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
         {/* Shop */}
         <div className="space-y-1.5">
           <label className="text-[10px] font-mono font-semibold text-muted uppercase tracking-wider">
@@ -166,6 +188,7 @@ export function RunLaunchPanel({
             className="w-full border border-rule bg-white px-3 py-2 text-sm font-mono text-ink placeholder:text-muted/40 transition-[border-color,box-shadow] focus:outline-none focus:border-orange/40 focus:shadow-[0_0_0_2px_rgba(255,112,0,0.08)]"
           />
         </div>
+        </div>
       </div>
 
       {/* Launch */}
@@ -212,6 +235,7 @@ export function RunLaunchPanel({
                 `  --shop-id ${(shopId || shops[0]?.shop_id || 1001).toString()} \\`,
                 `  --days ${days} \\`,
                 `  --turns-per-day ${turnsPerDay} \\`,
+                `  --scenario ${scenarioId} \\`,
                 `  --run-id ${runId.trim() || "reference_baseline_01"} \\`,
                 `  --mistral-model ${model}`,
               ]}

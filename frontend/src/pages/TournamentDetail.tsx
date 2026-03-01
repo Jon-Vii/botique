@@ -5,6 +5,7 @@ import {
   CaretRight,
   Crown,
   CurrencyDollar,
+  FlagBanner,
   Lightning,
   ListNumbers,
   Package,
@@ -16,12 +17,17 @@ import {
 } from "@phosphor-icons/react";
 import { BackendNotice } from "../components/BackendNotice";
 import { Badge } from "../components/Badge";
+import {
+  ControlledShopsBadge,
+  ScenarioBadge,
+} from "../components/ScenarioBadge";
 import { EmptyState } from "../components/EmptyState";
 import { Skeleton } from "../components/Skeleton";
 import { Stat } from "../components/Stat";
 import { StatSkeleton } from "../components/Skeleton";
 import { useTournamentResult } from "../hooks/useApi";
 import { formatCurrency } from "../lib/format";
+import { getScenarioLabel } from "../lib/scenarios";
 import type {
   TournamentAggregateStanding,
   TournamentResult,
@@ -503,6 +509,10 @@ export function TournamentDetail() {
                 </span>
               </h1>
               <div className="flex items-center gap-3 mt-3">
+                <ScenarioBadge scenario={tournament.scenario} />
+                <ControlledShopsBadge
+                  shopIds={tournament.scenario.controlled_shop_ids}
+                />
                 <Badge variant="orange">
                   {tournament.entrants.length} entrants
                 </Badge>
@@ -545,7 +555,7 @@ export function TournamentDetail() {
       </div>
 
       {/* Quick stats */}
-      <section className="grid grid-cols-4 gap-3 stagger">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-5 stagger">
         <Stat
           label="Total Rounds"
           value={tournament.round_count}
@@ -563,6 +573,12 @@ export function TournamentDetail() {
           value={tournament.entrants.length}
           icon={<Robot size={12} weight="duotone" />}
           accent="teal"
+        />
+        <Stat
+          label="Scenario"
+          value={getScenarioLabel(tournament.scenario)}
+          icon={<FlagBanner size={12} weight="duotone" />}
+          accent="violet"
         />
         <Stat
           label="Shop Pool"

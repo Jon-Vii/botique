@@ -180,9 +180,9 @@ export const api = {
   /* ── Benchmark / Runs ──
    * NOTE: Backend endpoints under /control/runs/... do not exist yet.
    * These methods define the expected contract. The backend needs to:
-   *   GET /control/runs              -> RunListEntry[]
-   *   GET /control/runs/:runId/summary   -> RunSummary
-   *   GET /control/runs/:runId/manifest  -> RunManifest
+   *   GET /control/runs                  -> RunListEntry[] including scenario metadata
+   *   GET /control/runs/:runId/summary   -> RunSummary including scenario metadata
+   *   GET /control/runs/:runId/manifest  -> RunManifest with invocation settings
    *   GET /control/runs/:runId/days      -> DaySnapshot[]
    */
 
@@ -278,6 +278,7 @@ export const api = {
     run_id: string;
     model: string;
     provider: string;
+    scenario_id: "operate" | "bootstrap";
   }): Promise<{ run_id: string }> {
     return requestJSON<{ run_id: string }>("/runs/launch", {
       base: CONTROL,
@@ -300,6 +301,8 @@ export const api = {
     days_per_round: number;
     rounds: number;
     turns_per_day: number;
+    scenario_id?: "operate" | "bootstrap";
+    run_id?: string;
   }): Promise<{ tournament_id: string }> {
     return requestJSON<{ tournament_id: string }>("/tournaments/launch", {
       base: CONTROL,

@@ -2,7 +2,10 @@ import { useState } from "react";
 import { Trophy, Plus, Trash } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
 import { LoadingDots } from "../LoadingDots";
+import { ScenarioPicker } from "./ScenarioPicker";
 import { useLaunchTournament, useWorldState } from "../../hooks/useApi";
+import { DEFAULT_SCENARIO_ID, getScenarioMeta } from "../../lib/scenarios";
+import type { ScenarioId } from "../../types/api";
 
 const PRESET_ENTRANTS = [
   { entrant_id: "mistral-medium", display_name: "Mistral Medium", provider: "mistral", model: "mistral-medium-latest" },
@@ -38,7 +41,9 @@ export function TournamentLaunchPanel({
   const [daysPerRound, setDaysPerRound] = useState(5);
   const [rounds, setRounds] = useState(2);
   const [turnsPerDay, setTurnsPerDay] = useState(5);
+  const [scenarioId, setScenarioId] = useState<ScenarioId>(DEFAULT_SCENARIO_ID);
   const [launchedId, setLaunchedId] = useState<string | null>(null);
+  const selectedScenario = getScenarioMeta(scenarioId);
 
   const addEntrant = () => {
     const unused = PRESET_ENTRANTS.find(
@@ -76,6 +81,7 @@ export function TournamentLaunchPanel({
         days_per_round: daysPerRound,
         rounds,
         turns_per_day: turnsPerDay,
+        scenario_id: scenarioId,
       },
       {
         onSuccess: (data) => {
@@ -97,6 +103,17 @@ export function TournamentLaunchPanel({
             Tournament
           </span>
         </div>
+      </div>
+
+      <div className="mb-4">
+        <ScenarioPicker
+          value={scenarioId}
+          onChange={setScenarioId}
+          tone="violet"
+        />
+        <p className="mt-2 text-xs leading-relaxed text-secondary">
+          {selectedScenario.description}
+        </p>
       </div>
 
       {/* Entrants */}
