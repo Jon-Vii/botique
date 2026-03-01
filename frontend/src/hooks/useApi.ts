@@ -122,6 +122,16 @@ export function useRunProgress(runId: string) {
   });
 }
 
+export function useRunStatus(runId: string) {
+  return useQuery({
+    queryKey: ["runs", runId, "status"],
+    queryFn: () => api.getRunStatus(runId),
+    enabled: !!runId,
+    refetchInterval: 3000,
+    retry: false,
+  });
+}
+
 export function useRunSummary(runId: string) {
   return useQuery({
     queryKey: ["runs", runId, "summary"],

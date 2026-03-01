@@ -16,24 +16,10 @@ SHOP_ID_SCHEMA = {
 }
 
 
-def _require_str(arguments: Mapping[str, Any], key: str) -> str:
-    value = arguments.get(key)
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{key} must be a non-empty string.")
-    return value
-
-
 def _require_text(arguments: Mapping[str, Any], key: str) -> str:
     value = arguments.get(key)
     if not isinstance(value, str):
         raise ValueError(f"{key} must be a string.")
-    return value
-
-
-def _require_day(arguments: Mapping[str, Any], key: str) -> int:
-    value = arguments.get(key)
-    if not isinstance(value, int):
-        raise ValueError(f"{key} must be an integer simulation day.")
     return value
 
 
@@ -82,9 +68,9 @@ def register_memory_tools(
         registry.register(
             ToolManifestEntry(
                 name="read_scratchpad",
-                description="Read the current persistent scratchpad text for the shop. This is the main mutable cross-day working context you can carry across days and revise for future days.",
+                description="Read the current persistent scratchpad text. Free action — does not consume a work slot.",
                 surface=ToolSurface.EXTENSION,
-                work_cost=1,
+                work_cost=0,
                 required_body_fields=("shop_id",),
                 body_encoding="json",
                 notes=(
@@ -120,9 +106,9 @@ def register_memory_tools(
         registry.register(
             ToolManifestEntry(
                 name="update_scratchpad",
-                description="Revise the current persistent scratchpad text for the shop. Use it as a freeform mutable cross-day working context for plans, hypotheses, experiments, or anything else useful across days.",
+                description="Revise the persistent scratchpad text. Free action — does not consume a work slot. Use it to track plans, observations, and anything you want to remember tomorrow.",
                 surface=ToolSurface.EXTENSION,
-                work_cost=1,
+                work_cost=0,
                 required_body_fields=("shop_id", "content"),
                 body_encoding="json",
                 notes=(
@@ -236,82 +222,5 @@ def register_memory_tools(
                 "journal_entries": [entry.to_payload() for entry in entries],
             },
         )
-
-    registry.register(
-        ToolManifestEntry(
-            name="set_reminder",
-            description="Create a simple reminder tied to a future simulation day.",
-            surface=ToolSurface.EXTENSION,
-            work_cost=1,
-            required_body_fields=("shop_id", "content", "due_day"),
-            body_encoding="json",
-            parameters_schema=_memory_parameters_schema(
-                properties={
-                    "shop_id": SHOP_ID_SCHEMA,
-                    "content": {
-                        "type": "string",
-                        "description": "Reminder text visible in future briefings.",
-                    },
-                    "due_day": {
-                        "type": "integer",
-                        "description": "Simulation day when the reminder becomes due.",
-                    },
-                    "tags": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Optional tags for your own organization and later filtering.",
-                    },
-                    "workspace_entry_id": {
-                        "type": "string",
-                        "description": "Optional related journal entry id.",
-                    },
-                    "day": {
-                        "type": "integer",
-                        "description": "Current simulation day.",
-                    },
-                },
-                required=["shop_id", "content", "due_day"],
-                shop_id=shop_id,
-            ),
-        ),
-        lambda arguments, *, store=memory: {
-            "reminder": store.set_reminder(
-                shop_id=_bound_shop_id(arguments, shop_id),
-                content=_require_str(arguments, "content"),
-                due_day=_require_day(arguments, "due_day"),
-                tags=tuple(arguments.get("tags", ())),
-                workspace_entry_id=arguments.get("workspace_entry_id"),
-                day=arguments.get("day"),
-            ).to_payload()
-        },
-    )
-
-    registry.register(
-        ToolManifestEntry(
-            name="complete_reminder",
-            description="Mark a reminder as completed so it stops appearing in future briefings.",
-            surface=ToolSurface.EXTENSION,
-            work_cost=1,
-            required_body_fields=("shop_id", "reminder_id"),
-            body_encoding="json",
-            parameters_schema=_memory_parameters_schema(
-                properties={
-                    "shop_id": SHOP_ID_SCHEMA,
-                    "reminder_id": {
-                        "type": "string",
-                        "description": "Reminder identifier returned by set_reminder or a briefing.",
-                    },
-                },
-                required=["shop_id", "reminder_id"],
-                shop_id=shop_id,
-            ),
-        ),
-        lambda arguments, *, store=memory: {
-            "reminder": store.complete_reminder(
-                shop_id=_bound_shop_id(arguments, shop_id),
-                reminder_id=_require_str(arguments, "reminder_id"),
-            ).to_payload()
-        },
-    )
 
     return registry

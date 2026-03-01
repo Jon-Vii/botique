@@ -113,8 +113,8 @@ def _default_client_factory(api_key: str) -> Any:
     return Mistral(api_key=api_key)
 
 
-def _message_to_payload(message: ProviderMessage) -> dict[str, str]:
-    payload: dict[str, str] = {
+def _message_to_payload(message: ProviderMessage) -> dict[str, Any]:
+    payload: dict[str, Any] = {
         "role": message.role.value,
         "content": message.content,
     }
@@ -122,6 +122,18 @@ def _message_to_payload(message: ProviderMessage) -> dict[str, str]:
         payload["name"] = message.name
     if message.tool_call_id:
         payload["tool_call_id"] = message.tool_call_id
+    if message.tool_calls:
+        payload["tool_calls"] = [
+            {
+                "id": tc.call_id or f"call_{id(tc)}",
+                "type": "function",
+                "function": {
+                    "name": tc.name,
+                    "arguments": json.dumps(tc.arguments),
+                },
+            }
+            for tc in message.tool_calls
+        ]
     return payload
 
 

@@ -315,8 +315,8 @@ export const api = {
     );
   },
 
-  getRunStatus(runId: string): Promise<{ run_id: string; status: string }> {
-    return requestJSON<{ run_id: string; status: string }>(
+  getRunStatus(runId: string): Promise<{ run_id: string; status: string; error?: string }> {
+    return requestJSON<{ run_id: string; status: string; error?: string }>(
       `/runs/${encodeURIComponent(runId)}/status`,
       { base: CONTROL },
     );

@@ -20,9 +20,7 @@ def _utcnow() -> datetime:
 
 
 class DayEndReason(StrEnum):
-    AGENT_ENDED_DAY = "agent_ended_day"
     TURNS_EXHAUSTED = "turns_exhausted"
-    WORK_BUDGET_EXHAUSTED = "turns_exhausted"
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,18 +36,16 @@ class DailyLoopConfig:
 class ToolCall:
     name: str
     arguments: dict[str, object]
+    call_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class AgentTurnDecision:
     summary: str
-    tool_call: ToolCall | None = None
-    end_day: bool = False
+    tool_call: ToolCall
+    model_content: str = ""
 
     def __post_init__(self) -> None:
-        has_tool_call = self.tool_call is not None
-        if has_tool_call == self.end_day:
-            raise ValueError("Each turn must either call exactly one tool or end the day.")
         if not self.summary.strip():
             raise ValueError("summary must be non-empty.")
 
@@ -64,6 +60,7 @@ class TurnRecord:
     tool_call: ToolCall | None = None
     tool_result: ToolExecutionResult | None = None
     state_changes: dict[str, JSONValue] | None = None
+    model_content: str = ""
 
     @property
     def work_cost(self) -> int:
@@ -242,22 +239,11 @@ class SingleShopDailyLoop:
                 turn_index=turn_index,
                 payload={
                     "summary": decision.summary,
-                    "action": "end_day" if decision.end_day else "tool_call",
-                    "tool_name": None if decision.tool_call is None else decision.tool_call.name,
+                    "action": "tool_call",
+                    "tool_name": decision.tool_call.name,
                     "turns_remaining": turns_remaining,
                 },
             )
-
-            if decision.end_day:
-                return self._finish_day(
-                    briefing=briefing,
-                    run_id=active_run_id,
-                    turns=turns,
-                    end_reason=DayEndReason.AGENT_ENDED_DAY,
-                )
-
-            if decision.tool_call is None:
-                raise ValueError("tool_call must be present when end_day is false.")
 
             self.event_log.append(
                 kind=EventKind.TOOL_CALLED,
@@ -318,34 +304,6 @@ class SingleShopDailyLoop:
                 },
             )
 
-            if tool_result.tool_name == "add_journal_entry":
-                self.event_log.append(
-                    kind=EventKind.WORKSPACE_ENTRY_ADDED,
-                    run_id=active_run_id,
-                    shop_id=briefing.shop_id,
-                    day=briefing.day,
-                    turn_index=turn_index,
-                    payload={"result": jsonify(tool_result.output)},
-                )
-            elif tool_result.tool_name == "set_reminder":
-                self.event_log.append(
-                    kind=EventKind.REMINDER_SET,
-                    run_id=active_run_id,
-                    shop_id=briefing.shop_id,
-                    day=briefing.day,
-                    turn_index=turn_index,
-                    payload={"result": jsonify(tool_result.output)},
-                )
-            elif tool_result.tool_name == "complete_reminder":
-                self.event_log.append(
-                    kind=EventKind.REMINDER_COMPLETED,
-                    run_id=active_run_id,
-                    shop_id=briefing.shop_id,
-                    day=briefing.day,
-                    turn_index=turn_index,
-                    payload={"result": jsonify(tool_result.output)},
-                )
-
             turns.append(
                 TurnRecord(
                     turn_index=turn_index,
@@ -355,6 +313,7 @@ class SingleShopDailyLoop:
                     turn_cost=tool_result.tool.work_cost if tool_result else 1,
                     tool_call=decision.tool_call,
                     tool_result=tool_result,
+                    model_content=decision.model_content,
                 )
             )
             turn_index += 1

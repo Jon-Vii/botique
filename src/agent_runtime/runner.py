@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from uuid import uuid4
 
 from control_api import AdvanceDayResult, ControlApiClient, GlobalMarketState
@@ -28,7 +27,6 @@ from .memory import (
 from .providers import (
     MistralProviderConfig,
     MistralToolCallingProvider,
-    ProviderError,
     ProviderPolicyConfig,
     ProviderMessage,
     ProviderMessageRole,
@@ -36,16 +34,7 @@ from .providers import (
     ToolCallingAgentPolicy,
     ToolCallingProvider,
 )
-from .serialization import jsonify
 from .tools import build_owner_agent_tool_registry
-
-END_OF_DAY_SCRATCHPAD_TOOL_NAME = "save_end_of_day_scratchpad"
-END_OF_DAY_SCRATCHPAD_SYSTEM_PROMPT = (
-    "You are closing out a Botique shop workday. Revise your persistent scratchpad for "
-    "future days. Keep anything still useful, remove stale parts, and add anything new. "
-    "The scratchpad is your mutable cross-day working context. No user is waiting for "
-    "you. Do not explain your process; just save the next full scratchpad text."
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,11 +101,7 @@ class OwnerAgentRunner:
             event_log=self.event_log,
             config=DailyLoopConfig(turns_per_day=self.config.turns_per_day),
         )
-        day_result = loop.run_day(briefing=briefing, policy=self.policy)
-        return self._write_end_of_day_scratchpad(
-            briefing=briefing,
-            day_result=day_result,
-        )
+        return loop.run_day(briefing=briefing, policy=self.policy)
 
     def build_live_briefing(
         self,
@@ -348,133 +333,6 @@ class OwnerAgentRunner:
             },
         )
         return name
-
-    def _write_end_of_day_scratchpad(
-        self,
-        *,
-        briefing: MorningBriefing,
-        day_result: DayRunResult,
-    ) -> DayRunResult:
-        response = self.provider.complete(
-            messages=(
-                ProviderMessage(
-                    role=ProviderMessageRole.SYSTEM,
-                    content=END_OF_DAY_SCRATCHPAD_SYSTEM_PROMPT,
-                ),
-                ProviderMessage(
-                    role=ProviderMessageRole.USER,
-                    content=self._build_end_of_day_scratchpad_message(
-                        briefing=briefing,
-                        day_result=day_result,
-                    ),
-                ),
-            ),
-            tools=(
-                ProviderToolDefinition(
-                    name=END_OF_DAY_SCRATCHPAD_TOOL_NAME,
-                    description="Save the next full scratchpad text for future days after the current workday is over.",
-                    parameters_schema={
-                        "type": "object",
-                        "properties": {
-                            "content": {
-                                "type": "string",
-                                "description": "The next full scratchpad text. Keep anything still useful, remove stale parts, and add anything new. This may be empty if you intentionally want to clear the scratchpad.",
-                            },
-                        },
-                        "required": ["content"],
-                        "additionalProperties": False,
-                    },
-                ),
-            ),
-            tool_choice="any",
-            allow_parallel_tool_calls=False,
-        )
-
-        content = self._extract_end_of_day_scratchpad(response)
-        scratchpad = self.memory.update_workspace(
-            shop_id=briefing.shop_id,
-            content=content,
-            day=briefing.day,
-        )
-        self.event_log.append(
-            kind=EventKind.WORKSPACE_UPDATED,
-            run_id=day_result.run_id,
-            shop_id=briefing.shop_id,
-            day=briefing.day,
-            payload={
-                "source": "end_of_day_reflection",
-                "result": scratchpad.to_payload(),
-            },
-        )
-        return replace(
-            day_result,
-            day_scratchpad=scratchpad,
-            events=tuple(
-                self.event_log.list_events(
-                    run_id=day_result.run_id,
-                    shop_id=briefing.shop_id,
-                    day=briefing.day,
-                )
-            ),
-        )
-
-    @staticmethod
-    def _extract_end_of_day_scratchpad(
-        response: object,
-    ) -> str:
-        if hasattr(response, "tool_calls"):
-            tool_calls = getattr(response, "tool_calls")
-            if tool_calls:
-                tool_call = tool_calls[0]
-                if tool_call.name != END_OF_DAY_SCRATCHPAD_TOOL_NAME:
-                    raise ProviderError(
-                        f"Expected {END_OF_DAY_SCRATCHPAD_TOOL_NAME}, received {tool_call.name!r}."
-                    )
-                content = tool_call.arguments.get("content")
-                if isinstance(content, str):
-                    return content.strip()
-                raise ProviderError("End-of-day scratchpad content must be a string.")
-
-        content = getattr(response, "content", None)
-        if isinstance(content, str):
-            return content.strip()
-        raise ProviderError("Provider returned no usable end-of-day scratchpad revision.")
-
-    @staticmethod
-    def _build_end_of_day_scratchpad_message(
-        *,
-        briefing: MorningBriefing,
-        day_result: DayRunResult,
-    ) -> str:
-        turns_payload = [
-            {
-                "work_slot": turn.turn_index,
-                "decision_summary": turn.decision_summary,
-                "action": None if turn.tool_call is None else turn.tool_call.name,
-                "arguments": None if turn.tool_call is None else turn.tool_call.arguments,
-                "result": None
-                if turn.tool_result is None
-                else jsonify(turn.tool_result.output),
-            }
-            for turn in day_result.turns
-        ]
-        payload = {
-            "day": briefing.day,
-            "end_reason": day_result.end_reason.value,
-            "current_scratchpad": (
-                None
-                if briefing.workspace is None
-                else briefing.workspace.content
-            ),
-            "morning_briefing": briefing.to_prompt_payload(),
-            "work_done_today": turns_payload,
-        }
-        return (
-            "Revise the scratchpad for later days based on the current scratchpad, today's seller-visible state, and today's work.\n\n"
-            "```json\n"
-            f"{json.dumps(payload, indent=2)}\n"
-            "```"
-        )
 
 
 def build_default_owner_agent_runner(

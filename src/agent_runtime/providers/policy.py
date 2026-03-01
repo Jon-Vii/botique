@@ -10,7 +10,6 @@ from agent_runtime.loop import (
     AgentTurnDecision,
     DailyAgentPolicy,
     ToolCall,
-    TurnRecord,
 )
 from agent_runtime.serialization import jsonify
 from agent_runtime.tools.registry import ToolManifestEntry
@@ -25,43 +24,43 @@ from .base import (
 )
 
 
-END_DAY_TOOL_NAME = "end_day"
-SUPPORT_TOOL_NAMES = {
-    "set_reminder",
-    "complete_reminder",
-}
 DEFAULT_SYSTEM_PROMPT = (
-    "You are an autonomous AI agent managing a craft shop on Botique, an online "
-    "marketplace. You are fully responsible for running this business across many "
-    "simulated days. No outside user will step in to manage it for you. "
-    "Your performance is judged primarily by ending available cash and the realized "
-    "business results that produce it. Revenue comes from sales. Materials and "
-    "production decisions create costs. Buyer payments may post with a delay, so money "
-    "you are owed is not the same as cash you currently have. "
-    "Your shop has a workshop with fixed daily production capacity. Every product you "
-    "make consumes capacity and materials. Some listings sell from finished inventory on "
-    "hand. Others are made-to-order: customers buy first, then production happens from "
-    "backlog. Stocked items can sell immediately but tie up capacity and capital. "
-    "Made-to-order items can create demand before production is finished, but they "
-    "increase backlog and fulfillment pressure. "
-    "Only active listings can sell. Draft listings are staging work: useful for "
-    "preparing a new product before committing it to the market. Your starting catalog "
-    "reflects your shop's production identity, but you are free to experiment, expand "
-    "into adjacent product lines, and gradually pivot over time. "
-    "Each day you receive a morning briefing with the seller-visible business state you "
-    "need to operate: cash position, recent sales and reviews, shop and listing signals, "
-    "production pressure, and market movements. You have a limited number of work slots "
-    "each day. Use them carefully. In each work slot, do one meaningful piece of work "
-    "using one available action. End the day when further work is unlikely to improve "
-    "outcomes. "
-    "You have a persistent memory system for cross-day work. Your scratchpad "
-    "carries working context from one day to the next and is automatically "
-    "revised between days — you do not need to update it manually. Reminders "
-    "resurface on a future day. Use reminders when they help you think across "
-    "time, not by reflex. "
-    "Think like a business owner: inspect enough evidence to make decisions, improve the "
-    "shop when action is warranted, manage inventory and backlog carefully, and adapt as "
-    "the market changes."
+    "## Role\n"
+    "You are an autonomous AI agent running a craft shop on Botique, an online\n"
+    "marketplace. You operate across many simulated days with no human oversight.\n"
+    "\n"
+    "## Objective\n"
+    "Maximize your shop's ending cash balance. Cash comes from sales minus material\n"
+    "and production costs. Buyer payments may post with a delay — money owed is not\n"
+    "the same as cash on hand.\n"
+    "\n"
+    "## Production\n"
+    "Your workshop has fixed daily production capacity. Every product consumes\n"
+    "capacity and materials. Two fulfillment modes:\n"
+    "- **Stocked**: sells from finished inventory immediately, but ties up capacity\n"
+    "  and capital upfront.\n"
+    "- **Made-to-order**: customers buy first, production happens from backlog.\n"
+    "  Generates demand before production, but increases fulfillment pressure.\n"
+    "\n"
+    "## Listings\n"
+    "Only active listings can sell. Draft listings let you stage new products before\n"
+    "committing them to market. You can create new products, expand into adjacent\n"
+    "product lines, and pivot over time.\n"
+    "\n"
+    "## Daily loop\n"
+    "Each day starts with a morning briefing: cash position, recent sales and\n"
+    "reviews, listing performance, production pressure, and market context. You\n"
+    "have a limited number of work slots per day. Each slot is one action. Use\n"
+    "every slot to act on, improve, or inspect your business.\n"
+    "\n"
+    "## Memory\n"
+    "You have a persistent scratchpad that carries across days. You can read and\n"
+    "update it freely — it does not cost a work slot. Use it to track plans,\n"
+    "observations, and anything you want to remember tomorrow.\n"
+    "\n"
+    "## Principles\n"
+    "Think like a business owner. Act on evidence, manage inventory and backlog,\n"
+    "and adapt as the market changes."
 )
 
 
@@ -96,35 +95,64 @@ class ToolCallingAgentPolicy(DailyAgentPolicy):
             raise ProviderError("Provider returned multiple tool calls for a single-action turn.")
 
         tool_call = response.tool_calls[0]
-        summary = response.content.strip() or self._default_summary(tool_call)
-        if tool_call.name == END_DAY_TOOL_NAME:
-            end_summary = _string_argument(tool_call.arguments, "summary") or summary
-            return AgentTurnDecision(summary=end_summary, end_day=True)
+        model_content = response.content.strip()
+        summary = model_content or self._default_summary(tool_call)
 
         return AgentTurnDecision(
             summary=summary,
             tool_call=ToolCall(
                 name=tool_call.name,
                 arguments=dict(tool_call.arguments),
+                call_id=tool_call.call_id,
             ),
+            model_content=model_content,
         )
 
     def _build_messages(self, context: AgentTurnContext) -> tuple[ProviderMessage, ...]:
-        return (
+        messages: list[ProviderMessage] = [
             ProviderMessage(
                 role=ProviderMessageRole.SYSTEM,
                 content=self.config.system_prompt,
             ),
             ProviderMessage(
                 role=ProviderMessageRole.USER,
-                content=self._build_user_message(context),
+                content=self._build_briefing_message(context),
             ),
-        )
-
-    def _build_user_message(self, context: AgentTurnContext) -> str:
-        support_tools = [
-            tool for tool in context.available_tools if tool.name in SUPPORT_TOOL_NAMES
         ]
+
+        # Replay prior turns as proper multi-turn conversation
+        for record in context.prior_turns:
+            if record.tool_call is not None:
+                messages.append(ProviderMessage(
+                    role=ProviderMessageRole.ASSISTANT,
+                    content=record.model_content,
+                    tool_calls=(ProviderToolCall(
+                        name=record.tool_call.name,
+                        arguments=record.tool_call.arguments,
+                        call_id=record.tool_call.call_id,
+                    ),),
+                ))
+                result_json = json.dumps(
+                    jsonify(record.tool_result.output), indent=2
+                ) if record.tool_result else "{}"
+                messages.append(ProviderMessage(
+                    role=ProviderMessageRole.TOOL,
+                    content=result_json,
+                    name=record.tool_call.name,
+                    tool_call_id=record.tool_call.call_id,
+                ))
+
+        # Add turn status prompt (tells model what slot it's on and what to do)
+        if context.prior_turns:
+            messages.append(ProviderMessage(
+                role=ProviderMessageRole.USER,
+                content=self._build_turn_status(context),
+            ))
+
+        return tuple(messages)
+
+    def _build_briefing_message(self, context: AgentTurnContext) -> str:
+        """First user message: morning briefing + work session info + decision prompt."""
         lines = [
             context.briefing.render_for_agent(),
             "",
@@ -135,78 +163,39 @@ class ToolCallingAgentPolicy(DailyAgentPolicy):
                 f"{context.turns_per_day} total ({context.turns_used} used)"
             ),
             (
-                "- Available actions right now: "
+                "- Available actions: "
                 + ", ".join(tool.name for tool in context.available_tools)
             ),
             "",
-            "## Work completed so far",
+            "## Decision",
+            "- Choose the single highest-leverage next action for the shop.",
+            "- Prefer drilling down or acting over repeating the same summary read.",
         ]
-
-        if support_tools:
-            lines.insert(
-                5,
-                "- Support tools available now: "
-                + ", ".join(tool.name for tool in support_tools)
-                + ".",
-            )
-
-        if context.prior_turns:
-            lines.append(
-                "Use the exact results from earlier work today instead of repeating a summary action unless the shop state has changed."
-            )
-            for record in context.prior_turns:
-                lines.extend(_render_prior_turn(record))
-        else:
-            lines.append("- No work completed yet today.")
-
-        lines.extend(
-            [
-                "",
-                "## Decision",
-                "- Choose the single highest-leverage next action for the shop.",
-                "- Prefer drilling down or acting over repeating the same summary read.",
-                (
-                    "- If it is time to stop for today, end the day with a short business reason."
-                ),
-            ]
-        )
         return "\n".join(lines)
+
+    def _build_turn_status(self, context: AgentTurnContext) -> str:
+        """Brief status update for turns 2+, after prior tool results."""
+        return (
+            f"Work slot {context.turn_index} of {context.turns_per_day} "
+            f"({context.turns_remaining} remaining). "
+            "Choose the next highest-leverage action."
+        )
 
     def _build_tools(
         self,
         context: AgentTurnContext,
     ) -> tuple[ProviderToolDefinition, ...]:
-        tools = [
+        return tuple(
             ProviderToolDefinition(
                 name=tool.name,
                 description=_provider_tool_description(tool),
                 parameters_schema=tool.parameters_schema or _fallback_parameters_schema(tool),
             )
             for tool in context.available_tools
-        ]
-        tools.append(
-            ProviderToolDefinition(
-                name=END_DAY_TOOL_NAME,
-                description="End the current workday and leave any remaining work slots unused.",
-                parameters_schema={
-                    "type": "object",
-                    "properties": {
-                        "summary": {
-                            "type": "string",
-                            "description": "Short business reason for stopping work now.",
-                        }
-                    },
-                    "required": ["summary"],
-                    "additionalProperties": False,
-                },
-            )
         )
-        return tuple(tools)
 
     @staticmethod
     def _default_summary(tool_call: ProviderToolCall) -> str:
-        if tool_call.name == END_DAY_TOOL_NAME:
-            return "End the workday."
         return f"Call {tool_call.name}."
 
 
@@ -226,49 +215,3 @@ def _fallback_parameters_schema(tool: ToolManifestEntry) -> dict[str, JSONValue]
     }
 
 
-def _string_argument(arguments: dict[str, JSONValue], key: str) -> str | None:
-    value = arguments.get(key)
-    if isinstance(value, str) and value.strip():
-        return value
-    return None
-
-
-def _render_prior_turn(record: TurnRecord) -> list[str]:
-    lines = [
-        "",
-        f"### Work slot {record.turn_index}",
-        f"- Decision summary: {record.decision_summary}",
-    ]
-    if record.tool_call is not None:
-        lines.append(f"- Action used: {record.tool_call.name}")
-        lines.extend(
-            [
-                "- Exact action arguments:",
-                "```json",
-                _render_json(record.tool_call.arguments),
-                "```",
-            ]
-        )
-    if record.tool_result is not None:
-        lines.extend(
-            [
-                "- Exact action result:",
-                "```json",
-                _render_json(record.tool_result.output),
-                "```",
-            ]
-        )
-    if record.state_changes is not None:
-        lines.extend(
-            [
-                "- Recorded state changes:",
-                "```json",
-                _render_json(record.state_changes),
-                "```",
-            ]
-        )
-    return lines
-
-
-def _render_json(value: object) -> str:
-    return json.dumps(jsonify(value), indent=2)

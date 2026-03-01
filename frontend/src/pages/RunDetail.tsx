@@ -10,7 +10,9 @@ import {
   Star,
   Storefront,
   Sun,
+  WarningCircle,
   Wrench,
+  XCircle,
 } from "@phosphor-icons/react";
 import { BackendNotice } from "../components/BackendNotice";
 import { Badge } from "../components/Badge";
@@ -35,6 +37,7 @@ import {
   useRunMemoryNotes,
   useRunMemoryReminders,
   useRunProgress,
+  useRunStatus,
   useRunSummary,
   useRunWorkspace,
   useRunWorkspaceRevisions,
@@ -60,6 +63,7 @@ export function RunDetail() {
   const workspaceQuery = useRunWorkspace(id);
   const workspaceRevisionsQuery = useRunWorkspaceRevisions(id);
   const progressQuery = useRunProgress(id);
+  const statusQuery = useRunStatus(id);
 
   const summary = summaryQuery.data;
   const manifest = manifestQuery.data;
@@ -117,6 +121,44 @@ export function RunDetail() {
 
   if (!summary) {
     const progress = progressQuery.data;
+    const runStatus = statusQuery.data;
+
+    // Failed run — show the error prominently
+    if (runStatus && runStatus.status === "failed") {
+      return (
+        <div className="space-y-6">
+          <div>
+            <Link
+              to="/runs"
+              className="mb-3 inline-flex items-center gap-1.5 text-xs font-mono text-muted transition-colors hover:text-orange"
+            >
+              <ArrowLeft size={12} aria-hidden="true" />
+              All Runs
+            </Link>
+            <h1 className="font-mono text-xl font-bold text-ink">{id}</h1>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <Badge variant="red">
+                <span className="flex items-center gap-1">
+                  <XCircle size={10} weight="fill" />
+                  failed
+                </span>
+              </Badge>
+            </div>
+          </div>
+          <div className="tech-card border-red/20 p-5 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-mono font-semibold text-red">
+              <WarningCircle size={14} weight="fill" />
+              Run failed
+            </div>
+            <p className="text-sm font-mono text-secondary leading-relaxed break-all">
+              {runStatus.error ?? "No error details available."}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // Running — show live progress
     if (progress && progress.status === "running") {
       return (
         <div className="space-y-6">
@@ -211,6 +253,47 @@ export function RunDetail() {
               ))}
             </div>
           ) : null}
+        </div>
+      );
+    }
+
+    // Still loading status — show a brief waiting state before falling back
+    if (statusQuery.isLoading || progressQuery.isLoading) {
+      return (
+        <div className="space-y-8">
+          <Skeleton width="240px" height="28px" />
+          <Skeleton width="100%" height="120px" />
+        </div>
+      );
+    }
+
+    // Running per status endpoint (no progress file yet)
+    if (runStatus && runStatus.status === "running") {
+      return (
+        <div className="space-y-6">
+          <div>
+            <Link
+              to="/runs"
+              className="mb-3 inline-flex items-center gap-1.5 text-xs font-mono text-muted transition-colors hover:text-orange"
+            >
+              <ArrowLeft size={12} aria-hidden="true" />
+              All Runs
+            </Link>
+            <h1 className="font-mono text-xl font-bold text-ink">{id}</h1>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <Badge variant="amber">
+                <span className="flex items-center gap-1">
+                  <Spinner size={10} className="animate-spin" />
+                  starting&hellip;
+                </span>
+              </Badge>
+            </div>
+          </div>
+          <div className="tech-card p-5">
+            <p className="text-sm font-mono text-muted">
+              Run is initializing. Progress will appear once the first day begins.
+            </p>
+          </div>
         </div>
       );
     }

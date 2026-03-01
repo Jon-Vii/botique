@@ -39,7 +39,7 @@ def build_owner_agent_tool_registry(
         registry,
         memory or InMemoryAgentMemory(),
         shop_id=shop_id,
-        include_scratchpad_tools=False,
+        include_scratchpad_tools=True,
         include_journal_tools=False,
     )
     return registry

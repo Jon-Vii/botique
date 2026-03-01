@@ -37,7 +37,6 @@ from .memory import (
 )
 from .providers import (
     DEFAULT_SYSTEM_PROMPT,
-    END_DAY_TOOL_NAME,
     MistralProviderConfig,
     MistralToolCallingProvider,
     ProviderError,
@@ -154,7 +153,6 @@ __all__ = [
     "WorkspaceRecord",
     "WorkSessionState",
     "DEFAULT_SYSTEM_PROMPT",
-    "END_DAY_TOOL_NAME",
     "build_owner_agent_tool_registry",
     "build_default_owner_agent_runner",
     "build_default_tournament_runner",

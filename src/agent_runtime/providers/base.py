@@ -21,6 +21,7 @@ class ProviderMessage:
     content: str
     name: str | None = None
     tool_call_id: str | None = None
+    tool_calls: tuple["ProviderToolCall", ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
