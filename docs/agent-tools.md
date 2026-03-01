@@ -234,7 +234,7 @@ Added:
 
 - `queue_production` so the agent can express a real production decision instead of faking supply through inventory semantics
 - `get_capacity_status` so the agent can inspect queue pressure before activating listings or scheduling more work
-- `get_shop_dashboard` and `get_listing_details` so the owner agent can reason from compact seller-visible summaries instead of spending budget on low-level bookkeeping
+- `get_shop_dashboard` and `get_listing_details` so the owner agent can reason from compact seller-visible summaries instead of spending turns on low-level bookkeeping
 
 Removed from the default owner-agent set:
 

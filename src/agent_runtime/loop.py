@@ -21,16 +21,17 @@ def _utcnow() -> datetime:
 
 class DayEndReason(StrEnum):
     AGENT_ENDED_DAY = "agent_ended_day"
-    WORK_BUDGET_EXHAUSTED = "work_budget_exhausted"
+    TURNS_EXHAUSTED = "turns_exhausted"
+    WORK_BUDGET_EXHAUSTED = "turns_exhausted"
 
 
 @dataclass(frozen=True, slots=True)
 class DailyLoopConfig:
-    work_budget: int = 8
+    turns_per_day: int = 5
 
     def __post_init__(self) -> None:
-        if self.work_budget < 1:
-            raise ValueError("work_budget must be at least 1.")
+        if self.turns_per_day < 1:
+            raise ValueError("turns_per_day must be at least 1.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,19 +60,23 @@ class TurnRecord:
     decision_summary: str
     started_at: datetime
     completed_at: datetime
-    work_cost: int
+    turn_cost: int = 1
     tool_call: ToolCall | None = None
     tool_result: ToolExecutionResult | None = None
     state_changes: dict[str, JSONValue] | None = None
+
+    @property
+    def work_cost(self) -> int:
+        return self.turn_cost
 
 
 @dataclass(frozen=True, slots=True)
 class WorkSessionState:
     turn_index: int
     turns_completed: int
-    work_budget: int
-    work_budget_spent: int
-    work_budget_remaining: int
+    turns_per_day: int
+    turns_used: int
+    turns_remaining: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,16 +92,28 @@ class AgentTurnContext:
         return self.session.turn_index
 
     @property
+    def turns_per_day(self) -> int:
+        return self.session.turns_per_day
+
+    @property
+    def turns_used(self) -> int:
+        return self.session.turns_used
+
+    @property
+    def turns_remaining(self) -> int:
+        return self.session.turns_remaining
+
+    @property
     def work_budget(self) -> int:
-        return self.session.work_budget
+        return self.turns_per_day
 
     @property
     def work_budget_spent(self) -> int:
-        return self.session.work_budget_spent
+        return self.turns_used
 
     @property
     def work_budget_remaining(self) -> int:
-        return self.session.work_budget_remaining
+        return self.turns_remaining
 
 
 class DailyAgentPolicy(Protocol):
@@ -112,9 +129,21 @@ class DayRunResult:
     turns: tuple[TurnRecord, ...]
     events: tuple[RuntimeEvent, ...]
     end_reason: DayEndReason
-    work_budget: int
-    work_budget_spent: int
-    work_budget_remaining: int
+    turns_per_day: int
+    turns_used: int
+    turns_remaining: int
+
+    @property
+    def work_budget(self) -> int:
+        return self.turns_per_day
+
+    @property
+    def work_budget_spent(self) -> int:
+        return self.turns_used
+
+    @property
+    def work_budget_remaining(self) -> int:
+        return self.turns_remaining
 
 
 class SingleShopDailyLoop:
@@ -138,9 +167,7 @@ class SingleShopDailyLoop:
     ) -> DayRunResult:
         active_run_id = run_id or briefing.run_id or f"run_{uuid4().hex[:12]}"
         tools = tuple(self.tool_registry.manifest())
-        tool_costs = {tool.name: tool.work_cost for tool in tools}
         turns: list[TurnRecord] = []
-        work_budget_spent = 0
 
         self.event_log.append(
             kind=EventKind.DAY_STARTED,
@@ -149,7 +176,7 @@ class SingleShopDailyLoop:
             day=briefing.day,
             payload={
                 "shop_name": briefing.shop_name,
-                "work_budget": self.config.work_budget,
+                "turns_per_day": self.config.turns_per_day,
             },
         )
         self.event_log.append(
@@ -162,18 +189,16 @@ class SingleShopDailyLoop:
 
         turn_index = 1
         while True:
-            work_budget_remaining = self.config.work_budget - work_budget_spent
-            available_tools = tuple(
-                tool for tool in tools if tool.work_cost <= work_budget_remaining
-            )
-            if not available_tools:
+            turns_used = len(turns)
+            turns_remaining = self.config.turns_per_day - turns_used
+            if turns_remaining <= 0:
                 return self._finish_day(
                     briefing=briefing,
                     run_id=active_run_id,
                     turns=turns,
-                    end_reason=DayEndReason.WORK_BUDGET_EXHAUSTED,
-                    work_budget_spent=work_budget_spent,
+                    end_reason=DayEndReason.TURNS_EXHAUSTED,
                 )
+            available_tools = tools
 
             self.event_log.append(
                 kind=EventKind.TURN_STARTED,
@@ -182,12 +207,11 @@ class SingleShopDailyLoop:
                 day=briefing.day,
                 turn_index=turn_index,
                 payload={
-                    "work_budget_remaining": work_budget_remaining,
-                    "work_budget_spent": work_budget_spent,
+                    "turns_remaining": turns_remaining,
+                    "turns_used": turns_used,
                     "available_tools": [
                         {
                             "name": tool.name,
-                            "work_cost": tool.work_cost,
                         }
                         for tool in available_tools
                     ],
@@ -201,9 +225,9 @@ class SingleShopDailyLoop:
                 session=WorkSessionState(
                     turn_index=turn_index,
                     turns_completed=len(turns),
-                    work_budget=self.config.work_budget,
-                    work_budget_spent=work_budget_spent,
-                    work_budget_remaining=work_budget_remaining,
+                    turns_per_day=self.config.turns_per_day,
+                    turns_used=turns_used,
+                    turns_remaining=turns_remaining,
                 ),
                 available_tools=available_tools,
                 prior_turns=tuple(turns),
@@ -219,7 +243,7 @@ class SingleShopDailyLoop:
                     "summary": decision.summary,
                     "action": "end_day" if decision.end_day else "tool_call",
                     "tool_name": None if decision.tool_call is None else decision.tool_call.name,
-                    "work_budget_remaining": work_budget_remaining,
+                    "turns_remaining": turns_remaining,
                 },
             )
 
@@ -229,20 +253,10 @@ class SingleShopDailyLoop:
                     run_id=active_run_id,
                     turns=turns,
                     end_reason=DayEndReason.AGENT_ENDED_DAY,
-                    work_budget_spent=work_budget_spent,
                 )
 
             if decision.tool_call is None:
                 raise ValueError("tool_call must be present when end_day is false.")
-
-            tool_work_cost = tool_costs.get(decision.tool_call.name)
-            if tool_work_cost is None:
-                raise ValueError(f"Unknown agent tool {decision.tool_call.name!r}.")
-            if tool_work_cost > work_budget_remaining:
-                raise ValueError(
-                    f"Tool {decision.tool_call.name!r} costs {tool_work_cost} work budget "
-                    f"but only {work_budget_remaining} remains."
-                )
 
             self.event_log.append(
                 kind=EventKind.TOOL_CALLED,
@@ -253,8 +267,7 @@ class SingleShopDailyLoop:
                 payload={
                     "tool_name": decision.tool_call.name,
                     "arguments": jsonify(decision.tool_call.arguments),
-                    "work_cost": tool_work_cost,
-                    "work_budget_remaining_before": work_budget_remaining,
+                    "turns_remaining_before": turns_remaining,
                 },
             )
             try:
@@ -273,12 +286,10 @@ class SingleShopDailyLoop:
                         "tool_name": decision.tool_call.name,
                         "error_type": exc.__class__.__name__,
                         "message": str(exc),
-                        "work_cost": tool_work_cost,
                     },
                 )
                 raise
 
-            work_budget_spent += tool_work_cost
             self.event_log.append(
                 kind=EventKind.TOOL_RESULT,
                 run_id=active_run_id,
@@ -288,8 +299,7 @@ class SingleShopDailyLoop:
                 payload={
                     "tool_name": tool_result.tool_name,
                     "surface": tool_result.tool.surface.value,
-                    "work_cost": tool_work_cost,
-                    "work_budget_remaining_after": self.config.work_budget - work_budget_spent,
+                    "turns_remaining_after": self.config.turns_per_day - (len(turns) + 1),
                     "result": jsonify(tool_result.output),
                 },
             )
@@ -328,7 +338,7 @@ class SingleShopDailyLoop:
                     decision_summary=decision.summary,
                     started_at=started_at,
                     completed_at=_utcnow(),
-                    work_cost=tool_work_cost,
+                    turn_cost=1,
                     tool_call=decision.tool_call,
                     tool_result=tool_result,
                 )
@@ -342,9 +352,9 @@ class SingleShopDailyLoop:
         run_id: str,
         turns: list[TurnRecord],
         end_reason: DayEndReason,
-        work_budget_spent: int,
     ) -> DayRunResult:
-        work_budget_remaining = self.config.work_budget - work_budget_spent
+        turns_used = len(turns)
+        turns_remaining = self.config.turns_per_day - turns_used
         self.event_log.append(
             kind=EventKind.DAY_ENDED,
             run_id=run_id,
@@ -353,9 +363,9 @@ class SingleShopDailyLoop:
             payload={
                 "end_reason": end_reason.value,
                 "turn_count": len(turns),
-                "work_budget": self.config.work_budget,
-                "work_budget_spent": work_budget_spent,
-                "work_budget_remaining": work_budget_remaining,
+                "turns_per_day": self.config.turns_per_day,
+                "turns_used": turns_used,
+                "turns_remaining": turns_remaining,
             },
         )
         events = tuple(
@@ -369,7 +379,7 @@ class SingleShopDailyLoop:
             turns=tuple(turns),
             events=events,
             end_reason=end_reason,
-            work_budget=self.config.work_budget,
-            work_budget_spent=work_budget_spent,
-            work_budget_remaining=work_budget_remaining,
+            turns_per_day=self.config.turns_per_day,
+            turns_used=turns_used,
+            turns_remaining=turns_remaining,
         )

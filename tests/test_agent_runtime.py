@@ -620,7 +620,7 @@ class ToolRegistryTests(unittest.TestCase):
             manifests["write_note"].parameters_schema["required"],
             ["title", "body"],
         )
-        self.assertEqual(manifests["update_listing"].work_cost, 2)
+        self.assertEqual(manifests["update_listing"].work_cost, 1)
         self.assertEqual(manifests["write_note"].work_cost, 1)
         self.assertNotIn("shop_id", manifests["write_note"].parameters_schema["properties"])
         self.assertEqual(manifests["get_shop_dashboard"].parameters_schema["required"], [])
@@ -716,7 +716,7 @@ class DailyLoopTests(unittest.TestCase):
         loop = SingleShopDailyLoop(
             tool_registry=registry,
             event_log=event_log,
-            config=DailyLoopConfig(work_budget=5),
+            config=DailyLoopConfig(turns_per_day=5),
         )
 
         result = loop.run_day(briefing=briefing, policy=policy)
@@ -735,7 +735,7 @@ class DailyLoopTests(unittest.TestCase):
         self.assertIn("note_written", event_kinds)
         self.assertEqual(event_kinds[-1], "day_ended")
 
-    def test_daily_loop_stops_when_work_budget_is_exhausted(self) -> None:
+    def test_daily_loop_stops_when_turns_are_exhausted(self) -> None:
         client = FakeSellerCoreClient()
         registry = build_owner_agent_tool_registry(client, memory=InMemoryAgentMemory(), shop_id=7)
         briefing = MorningBriefingBuilder(InMemoryAgentMemory()).build(
@@ -763,12 +763,12 @@ class DailyLoopTests(unittest.TestCase):
         )
         loop = SingleShopDailyLoop(
             tool_registry=registry,
-            config=DailyLoopConfig(work_budget=1),
+            config=DailyLoopConfig(turns_per_day=1),
         )
 
         result = loop.run_day(briefing=briefing, policy=policy)
 
-        self.assertEqual(result.end_reason, DayEndReason.WORK_BUDGET_EXHAUSTED)
+        self.assertEqual(result.end_reason, DayEndReason.TURNS_EXHAUSTED)
         self.assertEqual(len(result.turns), 1)
 
 
@@ -803,9 +803,9 @@ class ProviderPolicyTests(unittest.TestCase):
             session=WorkSessionState(
                 turn_index=1,
                 turns_completed=0,
-                work_budget=5,
-                work_budget_spent=0,
-                work_budget_remaining=5,
+                turns_per_day=5,
+                turns_used=0,
+                turns_remaining=5,
             ),
             available_tools=tuple(registry.manifest()),
             prior_turns=(),
@@ -839,7 +839,7 @@ class ProviderPolicyTests(unittest.TestCase):
         self.assertEqual(provider.calls[0]["messages"][0].role, ProviderMessageRole.SYSTEM)
         user_prompt = provider.calls[0]["messages"][1].content
         self.assertIn("# Studio North workday", user_prompt)
-        self.assertIn("Work budget: 5 left / 5 total", user_prompt)
+        self.assertIn("Work slots: 5 left / 5 total", user_prompt)
         self.assertIn("write_note", user_prompt)
 
     def test_tool_calling_policy_maps_end_day_tool(self) -> None:
@@ -960,7 +960,7 @@ class OwnerAgentRunnerTests(unittest.TestCase):
             }
         )
         runner = build_default_owner_agent_runner(
-            work_budget=4,
+            turns_per_day=4,
             memory=InMemoryAgentMemory(),
             event_log=InMemoryEventLog(),
             policy_config=ProviderPolicyConfig(),
@@ -1067,7 +1067,7 @@ class OwnerAgentRunnerTests(unittest.TestCase):
             ]
         )
         runner = build_default_owner_agent_runner(
-            work_budget=4,
+            turns_per_day=4,
             memory=InMemoryAgentMemory(),
             event_log=InMemoryEventLog(),
             policy_config=ProviderPolicyConfig(),

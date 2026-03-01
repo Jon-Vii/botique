@@ -28,7 +28,7 @@ from .tools import build_owner_agent_tool_registry
 
 @dataclass(frozen=True, slots=True)
 class OwnerAgentRunnerConfig:
-    work_budget: int = 8
+    turns_per_day: int = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +84,7 @@ class OwnerAgentRunner:
                 shop_id=briefing.shop_id,
             ),
             event_log=self.event_log,
-            config=DailyLoopConfig(work_budget=self.config.work_budget),
+            config=DailyLoopConfig(turns_per_day=self.config.turns_per_day),
         )
         return loop.run_day(briefing=briefing, policy=self.policy)
 
@@ -212,7 +212,8 @@ class OwnerAgentRunner:
 
 def build_default_owner_agent_runner(
     *,
-    work_budget: int = 8,
+    turns_per_day: int = 5,
+    work_budget: int | None = None,
     max_turns: int | None = None,
     base_url: str | None = None,
     control_base_url: str | None = None,
@@ -227,7 +228,11 @@ def build_default_owner_agent_runner(
     event_log: EventLog | None = None,
     policy_config: ProviderPolicyConfig | None = None,
 ) -> OwnerAgentRunner:
-    effective_work_budget = work_budget if max_turns is None else max_turns
+    effective_turns_per_day = turns_per_day
+    if work_budget is not None:
+        effective_turns_per_day = work_budget
+    if max_turns is not None:
+        effective_turns_per_day = max_turns
     seller_client = SellerCoreClient.from_env(
         base_url=base_url,
         api_key=api_key,
@@ -255,6 +260,6 @@ def build_default_owner_agent_runner(
         control_client=control_client,
         memory=memory,
         event_log=event_log,
-        config=OwnerAgentRunnerConfig(work_budget=effective_work_budget),
+        config=OwnerAgentRunnerConfig(turns_per_day=effective_turns_per_day),
         policy_config=policy_config,
     )

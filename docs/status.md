@@ -23,12 +23,12 @@ Current behavior:
 This is a `Current decision` for the default benchmark direction.
 ## Current Runtime Contract
 
-The owner-agent loop now runs as a budgeted seller workday.
+The owner-agent loop now runs as a turn-slotted seller workday.
 
 Current behavior:
 
-- each day starts with a visible work budget
-- each tool call spends a small amount of that budget
+- each day starts with a visible number of work slots
+- each tool call uses one slot
 - the agent still gets one tool call per turn
 - notes and reminders stay visible as ordinary support tools
 - the runtime still owns day-end accounting and simulation advancement
@@ -41,7 +41,7 @@ This is a `Current decision`.
 - live morning brief generation from seller-facing and control-plane state
 - a narrower owner-agent tool surface with runtime-composed shop and listing summaries
 - shop-scoped core and extension tool exposure behind that narrower runtime surface
-- work-budgeted single-day loop execution
+- turn-slotted single-day loop execution
 - multi-day runs with runtime-owned simulation advancement between days
 - inspectable in-memory notes and reminders
 - structured runtime event logs
@@ -49,7 +49,7 @@ This is a `Current decision`.
 
 ## Active Focus
 
-Current focus is making one believable single-shop run feel like a constrained creative-goods business day rather than a turn quota.
+Current focus is making one believable single-shop run feel like a constrained creative-goods business day rather than a hidden cost-shaping puzzle.
 
 That means:
 
@@ -60,7 +60,7 @@ That means:
 
 ## Next Likely Improvements
 
-- tune work-budget sizing and per-tool costs against observed behavior
+- tune turns-per-day sizing against observed behavior
 - enrich morning brief quality as more simulation outcomes exist
 - tune how much production detail is surfaced to the owner agent without hiding important world state
 - validate whether the new shop dashboard and listing drill-down reduce low-value bookkeeping in live runs
@@ -69,7 +69,7 @@ That means:
 
 ## Open Questions
 
-- whether the default work budget should stay at `8` or be tuned after more end-to-end runs
+- whether the default `5` turns per day should stay or be tuned after more end-to-end runs
 - whether reminder usage needs stronger guardrails if agents overuse support tools
 - how rich post-tool state summaries should become before they feel noisy again
 - how much direct production control should eventually be exposed versus staying world-owned

@@ -33,13 +33,26 @@ SUPPORT_TOOL_NAMES = {
     "complete_reminder",
 }
 DEFAULT_SYSTEM_PROMPT = (
-    "You are the owner of a single Botique shop, working through one constrained seller "
-    "workday at a time. Each turn must do exactly one thing: call one available tool or "
-    "call `end_day` when the remaining work is not worth more budget today. Treat notes "
-    "and reminders as optional support tools that are visible to you, not hidden memory. "
-    "Use them only when they genuinely help you follow through on a business idea. Use "
-    "seller-visible evidence when you need it, keep actions grounded in the current shop "
-    "state, and do not rely on hidden world knowledge or provider-specific behavior."
+    "You are the autonomous owner-operator of a single Botique shop. You are fully "
+    "responsible for running this business across many simulated days, and no outside "
+    "user will step in to manage it for you. Your job is to maximize realized business "
+    "outcomes over time, especially ending available cash, while keeping the shop healthy "
+    "and operational. "
+    "Each turn must do exactly one thing: call one available tool or call `end_day` when "
+    "the remaining work is not worth one of today's remaining work slots. You can use "
+    "only one tool at a time, and each tool call uses one work slot from the current "
+    "seller day. "
+    "Important business rules: only active listings can sell; draft listings are staging "
+    "artifacts until activated; stocked listings sell from finished inventory on hand; "
+    "made-to-order listings sell future production capacity and create backlog; cash, "
+    "backlog, production, reviews, and market shifts create delayed consequences; you "
+    "cannot see hidden market state or future events. "
+    "Planning tools are available to you. Notes help you track hypotheses, experiments, "
+    "and strategy; reminders help you resurface future follow-ups. Use them when they are "
+    "useful, not by reflex. "
+    "Operate like a business owner: gather enough evidence to make decisions, improve the "
+    "shop when action is warranted, preserve useful plans across days, and do not wait for "
+    "instructions."
 )
 
 
@@ -109,14 +122,12 @@ class ToolCallingAgentPolicy(DailyAgentPolicy):
             "## Work session",
             f"- Turn: {context.turn_index}",
             (
-                f"- Work budget: {context.work_budget_remaining} left / "
-                f"{context.work_budget} total ({context.work_budget_spent} spent)"
+                f"- Work slots: {context.turns_remaining} left / "
+                f"{context.turns_per_day} total ({context.turns_used} used)"
             ),
             (
                 "- Available tools right now: "
-                + ", ".join(
-                    f"{tool.name} ({tool.work_cost})" for tool in context.available_tools
-                )
+                + ", ".join(tool.name for tool in context.available_tools)
             ),
             "",
             "## Work completed so far",
@@ -126,9 +137,7 @@ class ToolCallingAgentPolicy(DailyAgentPolicy):
             lines.insert(
                 5,
                 "- Support tools available now: "
-                + ", ".join(
-                    f"{tool.name} ({tool.work_cost})" for tool in support_tools
-                )
+                + ", ".join(tool.name for tool in support_tools)
                 + ".",
             )
 
@@ -167,7 +176,7 @@ class ToolCallingAgentPolicy(DailyAgentPolicy):
         tools.append(
             ProviderToolDefinition(
                 name=END_DAY_TOOL_NAME,
-                description="End the current workday without spending more budget.",
+                description="End the current workday and leave any remaining work slots unused.",
                 parameters_schema={
                     "type": "object",
                     "properties": {
@@ -191,7 +200,7 @@ class ToolCallingAgentPolicy(DailyAgentPolicy):
 
 
 def _provider_tool_description(tool: ToolManifestEntry) -> str:
-    description = f"{tool.description} Work cost: {tool.work_cost}."
+    description = tool.description
     if tool.notes:
         description = f"{description} {tool.notes[0]}"
     return description
@@ -220,7 +229,7 @@ def _summarize_turn(record: TurnRecord) -> str:
 
     summary = (
         f"Turn {record.turn_index}: {record.decision_summary} "
-        f"Used {tool_name} for {record.work_cost} budget."
+        f"Used {tool_name}."
     )
     if record.tool_result is None:
         return summary
