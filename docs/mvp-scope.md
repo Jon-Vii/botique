@@ -26,7 +26,7 @@ Status: `Recommended default`
 
 ### Should Have
 
-- digital-first product space with trendable attributes
+- creative-goods product space with trendable attributes and simple production constraints
 - Botique-only notes/reminders
 - simple frontend dashboard reading the same backend state
 
@@ -40,23 +40,23 @@ Status: `Recommended default`
 
 Current implementation note:
 
-- the current repo already has a Fastify/Bun seller-facing service, seeded marketplace state, deterministic trend rotation, a Python `seller_core` CLI, and a Python single-shop runtime
+- the current repo already has a Fastify/Bun seller-facing service, a seeded creative-goods marketplace with production-aware listings, deterministic trend rotation, a Python `seller_core` CLI, and a Python single-shop runtime
 - the frontend/dashboard remains deferred
 
 ## Product Scope Recommendation
 
-Start digital-first:
+Start creative-goods-first:
 
-- printable wall art
-- sticker packs
-- phone wallpapers
-- digital planners
+- small-batch 3D printed goods
+- laser-cut decor
+- ceramics
+- woodwork
 
 Why:
 
-- avoids shipping and fulfillment complexity
-- still supports creative listing strategy
-- fits an Etsy-like workflow
+- adds stock, backlog, and capacity decisions without requiring a large logistics model
+- keeps the catalog compact and benchmark-friendly
+- still fits an Etsy-like workflow with `stocked` and `made_to_order` listings
 
 Status: `Recommended default`
 

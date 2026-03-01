@@ -8,27 +8,35 @@ Status: `Recommended default`
 
 ## Product Space
 
-Use a semi-structured digital product model.
+Use a semi-structured creative-goods product model.
 
 Recommended product schema:
 
-- base type
-- style
-- subject
+- production method / business physics
+- fulfillment mode
+- quantity on hand
+- backlog units
+- material cost per unit
+- capacity units per item
+- lead time days
 - title
 - description
 - tags
+- materials
 - price
 
 Operational note:
 
-- a listing should count as marketplace-active only when it is in `active` state and still has enabled inventory available
+- a listing should count as marketplace-active only when it is in `active` state and still has sellable capacity available
+- `stocked` and `made_to_order` listings should share one production system underneath them
+- stocked listings expose finished inventory; made-to-order listings expose queueable capacity, not infinite free fulfillment
 
 Example combinatorial space:
 
-- base types: sticker pack, wall art print, phone wallpaper, planner
-- styles: minimalist, retro, kawaii, cottagecore
-- subjects: cats, mushrooms, mountains, florals, celestial
+- production methods: 3D printing, laser cutting, ceramics, woodwork
+- product families: planters, wall signs, mugs, desk goods
+- styles: minimal utility, heirloom, art deco, earth-tone studio
+- personalization: stocked batch, custom engraving, made-to-order variation
 
 Status: `Recommended default`
 
@@ -57,7 +65,7 @@ Recommended starting context:
 
 Current implementation note:
 
-- the current server seeds a small digital-first market with taxonomy nodes, two shops, listings, orders, reviews, and payments
+- the current server seeds a small creative-goods market with four shops, production queues, listings, orders, reviews, payments, and taxonomy nodes
 - the in-memory repository starts with that default seed, and the Postgres bootstrap uses the same seed when the database is empty or partially seeded
 - the current simulation day is inferred from the latest seeded marketplace timestamp unless a world state provides an explicit day
 
@@ -103,6 +111,7 @@ Factors:
 - price competitiveness
 - listing quality score
 - shop reputation score
+- backlog and lead-time drag can be layered in as fulfillment friction without changing the seller-facing contract
 
 Purchase outcomes should be probabilistic, but based on deterministic features.
 
@@ -116,6 +125,8 @@ Examples:
 
 - delayed purchases instead of immediate perfect feedback
 - reviews arriving after orders, not at listing creation time
+- production jobs completing on later days rather than immediately
+- stocked listings going out of stock while made-to-order listings build backlog
 - customers browsing without buying
 - occasional negative or ambiguous outcomes even after sensible choices
 
@@ -163,24 +174,29 @@ System 2 should own this process. System 3 consumes the resulting world state; i
 
 ## First Advance-Day Pipeline
 
-The first implementation should stay simple as long as the steps are explicit and inspectable.
+The first implementation should stay explicit and inspectable even as production is added.
 
 Suggested initial pipeline:
 
 1. advance the world clock by one day
 2. refresh deterministic trend state
-3. rebuild the market snapshot from current listings and trends
+3. release completed production jobs into stock or fulfilled customer orders
+4. settle delayed events such as payments and pending reviews
+5. resolve market browsing and sales against current listings
+6. allocate available production capacity across stock replenishment and made-to-order backlog
+7. rebuild the market snapshot from the updated world state
 
-This is enough to establish the contract surface for `advanceDay` before adding richer order, review, or customer-resolution behavior.
+This keeps the contract surface for `advanceDay` stable while letting the world own inventory, backlog, and delayed-outcome physics.
 
 Current implementation note:
 
-- `advanceDay` is already implemented with exactly these three inspectable steps and returns them in the control response payload
+- `advanceDay` is already implemented with these inspectable steps and returns them in the control response payload
 
 Recommended default for the first build:
 
 - keep formulas simple and visible in code
 - favor deterministic trend rotation over opaque randomness
+- use one production queue model underneath both `stocked` and `made_to_order` listings
 - do not require rich multi-business competition yet
 - let later milestones add more realistic demand and purchase resolution on top of the same pipeline shape
 
