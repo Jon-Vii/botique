@@ -30,7 +30,9 @@ function Section({
   return (
     <div className="border-t border-rule/50 first:border-t-0">
       <button
+        type="button"
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
         className="flex items-center gap-2 w-full py-2.5 text-left cursor-pointer group"
       >
         {open ? (

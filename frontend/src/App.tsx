@@ -7,6 +7,7 @@ import { ListingDetail } from "./pages/ListingDetail";
 import { Marketplace } from "./pages/Marketplace";
 import { ShopDetail } from "./pages/ShopDetail";
 import { Operator } from "./pages/Operator";
+import { NotFound } from "./pages/NotFound";
 import { RunList } from "./pages/RunList";
 import { RunDetail } from "./pages/RunDetail";
 import { TournamentList } from "./pages/TournamentList";
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="tournaments" element={<TournamentList />} />
             <Route path="tournaments/:tournamentId" element={<TournamentDetail />} />
             <Route path="operator" element={<Operator />} />
+            <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
       </BrowserRouter>

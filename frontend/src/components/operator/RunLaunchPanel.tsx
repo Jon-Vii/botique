@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { Rocket, Warning } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
+import { BackendNotice } from "../BackendNotice";
 import { LoadingDots } from "../LoadingDots";
 import { Badge } from "../Badge";
+import { Snippet } from "../Snippet";
+import { frontendFeatures } from "../../config/features";
 import { useLaunchRun, useWorldState } from "../../hooks/useApi";
 
 const MODEL_OPTIONS = [
@@ -23,18 +26,23 @@ export function RunLaunchPanel({
   const { data: world } = useWorldState();
   const launchRun = useLaunchRun();
   const shops = world?.marketplace.shops ?? [];
+  const canLaunchFromUi = frontendFeatures.enablePendingControlActions;
 
   const [shopId, setShopId] = useState("");
   const [days, setDays] = useState(5);
   const [turnsPerDay, setTurnsPerDay] = useState(5);
   const [runId, setRunId] = useState("");
-  const [model, setModel] = useState(MODEL_OPTIONS[0].value);
+  const [model, setModel] = useState<string>(MODEL_OPTIONS[0].value);
   const [launchedRunId, setLaunchedRunId] = useState<string | null>(null);
 
   const handleLaunch = () => {
     const sid = shopId ? Number(shopId) : shops[0]?.shop_id;
     if (!sid) {
       onError("No shop selected");
+      return;
+    }
+    if (!canLaunchFromUi) {
+      onError("Run launch is not wired to the backend yet");
       return;
     }
     const rid = runId.trim() || `run-${Date.now()}`;
@@ -83,7 +91,7 @@ export function RunLaunchPanel({
           <select
             value={shopId}
             onChange={(e) => setShopId(e.target.value)}
-            className="w-full px-3 py-2 bg-white border border-rule text-sm font-mono text-ink focus:outline-none focus:border-orange/40 focus:shadow-[0_0_0_2px_rgba(255,112,0,0.08)] transition-all cursor-pointer"
+            className="w-full cursor-pointer border border-rule bg-white px-3 py-2 text-sm font-mono text-ink transition-[border-color,box-shadow] focus:outline-none focus:border-orange/40 focus:shadow-[0_0_0_2px_rgba(255,112,0,0.08)]"
           >
             {shops.length === 0 && <option value="">No shops available</option>}
             {shops.map((s) => (
@@ -102,7 +110,7 @@ export function RunLaunchPanel({
           <select
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            className="w-full px-3 py-2 bg-white border border-rule text-sm font-mono text-ink focus:outline-none focus:border-orange/40 focus:shadow-[0_0_0_2px_rgba(255,112,0,0.08)] transition-all cursor-pointer"
+            className="w-full cursor-pointer border border-rule bg-white px-3 py-2 text-sm font-mono text-ink transition-[border-color,box-shadow] focus:outline-none focus:border-orange/40 focus:shadow-[0_0_0_2px_rgba(255,112,0,0.08)]"
           >
             {MODEL_OPTIONS.map((m) => (
               <option key={m.value} value={m.value}>
@@ -123,7 +131,7 @@ export function RunLaunchPanel({
             max={30}
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}
-            className="w-full px-3 py-2 bg-white border border-rule text-sm font-mono text-ink focus:outline-none focus:border-orange/40 focus:shadow-[0_0_0_2px_rgba(255,112,0,0.08)] transition-all"
+            className="w-full border border-rule bg-white px-3 py-2 text-sm font-mono text-ink transition-[border-color,box-shadow] focus:outline-none focus:border-orange/40 focus:shadow-[0_0_0_2px_rgba(255,112,0,0.08)]"
           />
         </div>
 
@@ -138,7 +146,7 @@ export function RunLaunchPanel({
             max={20}
             value={turnsPerDay}
             onChange={(e) => setTurnsPerDay(Number(e.target.value))}
-            className="w-full px-3 py-2 bg-white border border-rule text-sm font-mono text-ink focus:outline-none focus:border-orange/40 focus:shadow-[0_0_0_2px_rgba(255,112,0,0.08)] transition-all"
+            className="w-full border border-rule bg-white px-3 py-2 text-sm font-mono text-ink transition-[border-color,box-shadow] focus:outline-none focus:border-orange/40 focus:shadow-[0_0_0_2px_rgba(255,112,0,0.08)]"
           />
         </div>
 
@@ -155,7 +163,7 @@ export function RunLaunchPanel({
             placeholder="my-run-01"
             value={runId}
             onChange={(e) => setRunId(e.target.value)}
-            className="w-full px-3 py-2 bg-white border border-rule text-sm font-mono text-ink placeholder:text-muted/40 focus:outline-none focus:border-orange/40 focus:shadow-[0_0_0_2px_rgba(255,112,0,0.08)] transition-all"
+            className="w-full border border-rule bg-white px-3 py-2 text-sm font-mono text-ink placeholder:text-muted/40 transition-[border-color,box-shadow] focus:outline-none focus:border-orange/40 focus:shadow-[0_0_0_2px_rgba(255,112,0,0.08)]"
           />
         </div>
       </div>
@@ -163,9 +171,11 @@ export function RunLaunchPanel({
       {/* Launch */}
       <div className="mt-5 flex items-center gap-3">
         <button
+          type="button"
           onClick={handleLaunch}
-          disabled={launchRun.isPending || shops.length === 0}
-          className="flex items-center gap-2 px-5 py-2.5 bg-orange text-white text-sm font-semibold hover:shadow-[0_0_24px_rgba(255,112,0,0.3)] hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+          disabled={!canLaunchFromUi || launchRun.isPending || shops.length === 0}
+          aria-disabled={!canLaunchFromUi || launchRun.isPending || shops.length === 0}
+          className="flex cursor-pointer items-center gap-2 bg-orange px-5 py-2.5 text-sm font-semibold text-white transition-[box-shadow,transform,opacity] hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(255,112,0,0.3)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {launchRun.isPending ? (
             <LoadingDots size={4} color="bg-white" />
@@ -182,10 +192,33 @@ export function RunLaunchPanel({
             to={`/runs/${encodeURIComponent(launchedRunId)}`}
             className="text-sm text-orange hover:text-orange-dark font-medium transition-colors"
           >
-            View run &rarr;
+            View run →
           </Link>
         )}
       </div>
+
+      {!canLaunchFromUi ? (
+        <div className="mt-5">
+          <BackendNotice
+            title="Use the CLI for single runs"
+            description="The operator form stays visible for the eventual control-plane integration, but the current repo does not expose the POST endpoint needed to start runs from the browser."
+            endpoints={["POST /control/runs/launch"]}
+            compact
+          >
+            <Snippet
+              dark={false}
+              text={[
+                "botique-agent-runtime run-days \\",
+                `  --shop-id ${(shopId || shops[0]?.shop_id || 1001).toString()} \\`,
+                `  --days ${days} \\`,
+                `  --turns-per-day ${turnsPerDay} \\`,
+                `  --run-id ${runId.trim() || "reference_baseline_01"} \\`,
+                `  --mistral-model ${model}`,
+              ]}
+            />
+          </BackendNotice>
+        </div>
+      ) : null}
     </div>
   );
 }

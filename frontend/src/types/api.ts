@@ -1,3 +1,19 @@
+export type FulfillmentMode = "stocked" | "made_to_order";
+
+export type ProductionQueueItem = {
+  job_id: string;
+  listing_id: number;
+  order_id: number | null;
+  kind: "stock" | "customer_order";
+  status: "queued" | "in_progress" | "waiting_ready";
+  created_at: string;
+  started_at: string | null;
+  ready_at: string | null;
+  capacity_units_required: number;
+  capacity_units_remaining: number;
+  material_cost: number;
+};
+
 export type InventoryOffering = {
   offering_id: number;
   price: number;
@@ -28,6 +44,9 @@ export type Listing = {
   state: "draft" | "active" | "inactive" | "sold_out";
   type: string;
   quantity: number;
+  fulfillment_mode: FulfillmentMode;
+  quantity_on_hand: number;
+  backlog_units: number;
   price: number;
   currency_code: string;
   who_made: string;
@@ -35,6 +54,9 @@ export type Listing = {
   taxonomy_id: number;
   tags: string[];
   materials: string[];
+  material_cost_per_unit: number;
+  capacity_units_per_item: number;
+  lead_time_days: number;
   image_ids: number[];
   views: number;
   favorites: number;
@@ -45,7 +67,7 @@ export type Listing = {
   inventory: Inventory;
 };
 
-export type Shop = {
+export type StoredShop = {
   shop_id: number;
   shop_name: string;
   title: string;
@@ -53,8 +75,15 @@ export type Shop = {
   sale_message: string;
   currency_code: string;
   digital_product_policy: string;
+  production_capacity_per_day: number;
+  backlog_units: number;
+  material_costs_paid_total: number;
+  production_queue: ProductionQueueItem[];
   created_at: string;
   updated_at: string;
+};
+
+export type Shop = StoredShop & {
   listing_active_count: number;
   total_sales_count: number;
   review_average: number;
@@ -91,6 +120,17 @@ export type Review = {
   review: string;
   buyer_name: string;
   created_at: string;
+};
+
+export type Payment = {
+  payment_id: number;
+  shop_id: number;
+  receipt_id: number;
+  amount: number;
+  currency_code: string;
+  status: "posted" | "pending";
+  available_at: string;
+  posted_at: string;
 };
 
 export type TaxonomyNode = {
@@ -142,21 +182,45 @@ export type MarketSnapshot = {
   active_listing_count: number;
   active_shop_count: number;
   average_active_price: number;
+  total_quantity_on_hand: number;
+  total_backlog_units: number;
   taxonomy: TaxonomyMarketSnapshot[];
 };
 
-export type Payment = {
-  payment_id: number;
+export type PendingReview = {
+  queue_id: string;
+  review_id: number;
   shop_id: number;
   receipt_id: number;
-  amount: number;
-  currency_code: string;
-  status: "posted" | "pending";
-  posted_at: string;
+  listing_id: number;
+  buyer_name: string;
+  release_at: string;
+  rating: number;
+  review: string;
+};
+
+export type ShopDayResolution = {
+  shop_id: number;
+  orders_created: number;
+  stocked_units_sold: number;
+  made_to_order_units_sold: number;
+  production_units_started: number;
+  units_released: number;
+  payments_posted: number;
+  reviews_released: number;
+  material_costs_incurred: number;
+  backlog_units_end: number;
+  queue_depth_end: number;
+};
+
+export type DayResolutionSummary = {
+  resolved_at: string;
+  pending_review_count: number;
+  shops: ShopDayResolution[];
 };
 
 export type StoredMarketplaceState = {
-  shops: Shop[];
+  shops: StoredShop[];
   listings: Listing[];
   orders: Order[];
   reviews: Review[];
@@ -168,6 +232,8 @@ export type SimulationState = {
   current_day: SimulationDay;
   market_snapshot: MarketSnapshot;
   trend_state: TrendState;
+  pending_reviews: PendingReview[];
+  last_resolution: DayResolutionSummary | null;
 };
 
 export type WorldState = {
@@ -254,6 +320,110 @@ export type DaySnapshot = {
   total_sales_count: number;
   review_average: number;
   review_count: number;
+};
+
+export type BalanceSummary = {
+  available: number;
+  pending: number;
+  currency_code: string;
+};
+
+export type ObjectiveProgress = {
+  primary_objective: string;
+  metric_name: string;
+  current_value: number;
+  target_value: number | null;
+  status_summary: string;
+  supporting_diagnostics: string[];
+};
+
+export type ListingChange = {
+  listing_id: number;
+  title: string;
+  state: string;
+  views_delta: number;
+  favorites_delta: number;
+  orders_delta: number;
+  revenue_delta: number;
+};
+
+export type MarketMovement = {
+  headline: string;
+  summary: string;
+  urgency: "high" | "watch" | "low";
+};
+
+export type YesterdayOrders = {
+  order_count: number;
+  revenue: number;
+  average_order_value: number;
+  refunded_order_count: number;
+};
+
+export type DayBriefing = {
+  day: number;
+  shop_id: number;
+  shop_name: string;
+  run_id: string;
+  generated_at?: string;
+  balance_summary: BalanceSummary;
+  objective_progress: ObjectiveProgress;
+  listing_changes: ListingChange[];
+  market_movements: MarketMovement[];
+  yesterday_orders: YesterdayOrders;
+  new_reviews: unknown[];
+  new_customer_messages: unknown[];
+  notes: unknown[];
+  due_reminders: unknown[];
+  priorities_prompt: string;
+};
+
+export type ToolCall = {
+  name: string;
+  arguments: Record<string, unknown>;
+};
+
+export type ToolResult = {
+  tool_name: string;
+  arguments: Record<string, unknown>;
+  output: unknown;
+  surface?: string;
+};
+
+export type TurnRecord = {
+  turn_index: number;
+  tool_call: ToolCall;
+  tool_result: ToolResult;
+  decision_summary: string;
+  assistant_text: string;
+  started_at: string;
+  completed_at: string;
+  state_changes: unknown | null;
+  provider_tool_calls?: Array<{
+    call_id: string;
+    name: string;
+    arguments: Record<string, unknown>;
+  }>;
+};
+
+export type MemoryNote = {
+  note_id: string;
+  shop_id: number;
+  title: string;
+  body: string;
+  tags: string[];
+  created_day: number;
+  created_at: string;
+};
+
+export type MemoryReminder = {
+  reminder_id: string;
+  shop_id: number;
+  title: string;
+  body: string;
+  due_day: number;
+  completed: boolean;
+  created_at: string;
 };
 
 /* ── Tournament types ── */

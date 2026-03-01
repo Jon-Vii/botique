@@ -12,6 +12,7 @@ export function useListing(listingId: number) {
   return useQuery({
     queryKey: ["listing", listingId],
     queryFn: () => api.getListing(listingId),
+    enabled: Number.isInteger(listingId) && listingId > 0,
   });
 }
 
@@ -19,6 +20,7 @@ export function useShop(shopId: number) {
   return useQuery({
     queryKey: ["shop", shopId],
     queryFn: () => api.getShop(shopId),
+    enabled: Number.isInteger(shopId) && shopId > 0,
   });
 }
 
@@ -26,6 +28,7 @@ export function useShopListings(shopId: number, params?: Parameters<typeof api.g
   return useQuery({
     queryKey: ["shop", shopId, "listings", params],
     queryFn: () => api.getShopListings(shopId, params),
+    enabled: Number.isInteger(shopId) && shopId > 0,
   });
 }
 
@@ -33,6 +36,7 @@ export function useShopReviews(shopId: number, params?: Parameters<typeof api.ge
   return useQuery({
     queryKey: ["shop", shopId, "reviews", params],
     queryFn: () => api.getShopReviews(shopId, params),
+    enabled: Number.isInteger(shopId) && shopId > 0,
   });
 }
 
@@ -40,6 +44,7 @@ export function useShopReceipts(shopId: number, params?: Parameters<typeof api.g
   return useQuery({
     queryKey: ["shop", shopId, "receipts", params],
     queryFn: () => api.getShopReceipts(shopId, params),
+    enabled: Number.isInteger(shopId) && shopId > 0,
   });
 }
 

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Check } from "@phosphor-icons/react";
 
 interface SnippetProps {
@@ -19,17 +19,23 @@ export function Snippet({
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const lines = Array.isArray(text) ? text : [text];
+  const lines = useMemo(() => (Array.isArray(text) ? text : [text]), [text]);
   const isMultiLine = lines.length > 1;
 
-  const handleCopy = useCallback(() => {
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const handleCopy = () => {
     const raw = lines.join("\n");
     void navigator.clipboard.writeText(raw);
     setCopied(true);
 
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => setCopied(false), 2000);
-  }, [lines]);
+  };
 
   const containerClass = dark
     ? "bg-snippet-bg border-snippet-border text-snippet-text"

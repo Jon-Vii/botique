@@ -6,11 +6,13 @@ import {
   Trophy,
 } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
+import { BackendNotice } from "../components/BackendNotice";
 import { Badge } from "../components/Badge";
 import { EmptyState } from "../components/EmptyState";
 import { Skeleton } from "../components/Skeleton";
 import type { TournamentListItem } from "../types/api";
 import { useTournamentList } from "../hooks/useApi";
+import { formatDateTimeShort } from "../lib/format";
 
 function TournamentCard({ item }: { item: TournamentListItem }) {
   const statusVariant =
@@ -49,6 +51,9 @@ function TournamentCard({ item }: { item: TournamentListItem }) {
         <div className="flex items-center gap-2">
           <span className="font-mono text-xs text-muted truncate">
             {item.run_id}
+          </span>
+          <span className="text-[10px] font-mono text-muted">
+            {formatDateTimeShort(item.created_at)}
           </span>
         </div>
 
@@ -181,10 +186,13 @@ export function TournamentList() {
             <TournamentCardSkeleton />
           </div>
         ) : error ? (
-          <EmptyState
-            icon={<Sword size={48} weight="duotone" />}
-            title="Could not load tournaments"
-            description="The tournament endpoint is not available yet. Run a tournament first using the CLI."
+          <BackendNotice
+            title="Tournament results are not exposed through the server yet"
+            description="Tournament orchestration exists in the runtime, but the current server does not implement the control-plane list/detail endpoints for this screen."
+            endpoints={[
+              "GET /control/tournaments",
+              "GET /control/tournaments/:tournamentId",
+            ]}
           />
         ) : tournaments && tournaments.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 stagger">

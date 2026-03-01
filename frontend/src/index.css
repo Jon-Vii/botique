@@ -158,12 +158,27 @@
   scrollbar-color: var(--color-muted) transparent;
 }
 
+html {
+  color-scheme: light;
+}
+
 body {
   font-family: var(--font-body);
   font-weight: 400;
   background: var(--color-cream);
   color: var(--color-ink);
   min-height: 100dvh;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 ::selection {

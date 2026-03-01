@@ -1,6 +1,9 @@
 import type {
+  DayBriefing,
   DaySnapshot,
   Listing,
+  MemoryNote,
+  MemoryReminder,
   MarketSnapshot,
   Order,
   PaginatedResults,
@@ -14,21 +17,65 @@ import type {
   TournamentListItem,
   TournamentResult,
   TrendState,
+  TurnRecord,
   WorldState,
 } from "../types/api";
 
 const BASE = "/v3/application";
 const CONTROL = "/control";
 
-async function fetchJSON<T>(path: string, base = BASE): Promise<T> {
-  const res = await fetch(`${base}${path}`);
+export class ApiError extends Error {
+  status: number;
+  base: string;
+  path: string;
+  body: unknown;
+
+  constructor(message: string, options: {
+    status: number;
+    base: string;
+    path: string;
+    body: unknown;
+  }) {
+    super(message);
+    this.name = "ApiError";
+    this.status = options.status;
+    this.base = options.base;
+    this.path = options.path;
+    this.body = options.body;
+  }
+}
+
+export function isApiErrorStatus(
+  error: unknown,
+  statuses: number | number[],
+): error is ApiError {
+  if (!(error instanceof ApiError)) return false;
+  const allowed = Array.isArray(statuses) ? statuses : [statuses];
+  return allowed.includes(error.status);
+}
+
+async function requestJSON<T>(
+  path: string,
+  options?: {
+    base?: string;
+    init?: RequestInit;
+  },
+): Promise<T> {
+  const base = options?.base ?? BASE;
+  const res = await fetch(`${base}${path}`, options?.init);
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(
-      body?.error?.message ?? `API error: ${res.status} ${res.statusText}`
+    throw new ApiError(
+      body?.error?.message ?? `API error: ${res.status} ${res.statusText}`,
+      {
+        status: res.status,
+        base,
+        path,
+        body,
+      },
     );
   }
-  return res.json();
+  return res.json() as Promise<T>;
 }
 
 export const api = {
@@ -49,15 +96,15 @@ export const api = {
     if (params?.taxonomy_id)
       search.set("taxonomy_id", String(params.taxonomy_id));
     const qs = search.toString();
-    return fetchJSON(`/listings/active${qs ? `?${qs}` : ""}`);
+    return requestJSON(`/listings/active${qs ? `?${qs}` : ""}`);
   },
 
   getListing(listingId: number): Promise<Listing> {
-    return fetchJSON(`/listings/${listingId}`);
+    return requestJSON(`/listings/${listingId}`);
   },
 
   getShop(shopId: number): Promise<Shop> {
-    return fetchJSON(`/shops/${shopId}`);
+    return requestJSON(`/shops/${shopId}`);
   },
 
   getShopListings(
@@ -69,7 +116,7 @@ export const api = {
     if (params?.limit) search.set("limit", String(params.limit));
     if (params?.offset) search.set("offset", String(params.offset));
     const qs = search.toString();
-    return fetchJSON(`/shops/${shopId}/listings${qs ? `?${qs}` : ""}`);
+    return requestJSON(`/shops/${shopId}/listings${qs ? `?${qs}` : ""}`);
   },
 
   getShopReviews(
@@ -80,7 +127,7 @@ export const api = {
     if (params?.limit) search.set("limit", String(params.limit));
     if (params?.offset) search.set("offset", String(params.offset));
     const qs = search.toString();
-    return fetchJSON(`/shops/${shopId}/reviews${qs ? `?${qs}` : ""}`);
+    return requestJSON(`/shops/${shopId}/reviews${qs ? `?${qs}` : ""}`);
   },
 
   getShopReceipts(
@@ -91,7 +138,7 @@ export const api = {
     if (params?.limit) search.set("limit", String(params.limit));
     if (params?.offset) search.set("offset", String(params.offset));
     const qs = search.toString();
-    return fetchJSON(`/shops/${shopId}/receipts${qs ? `?${qs}` : ""}`);
+    return requestJSON(`/shops/${shopId}/receipts${qs ? `?${qs}` : ""}`);
   },
 
   getTaxonomyNodes(
@@ -100,33 +147,34 @@ export const api = {
     const search = new URLSearchParams();
     if (taxonomyId) search.set("taxonomy_id", String(taxonomyId));
     const qs = search.toString();
-    return fetchJSON(`/seller-taxonomy/nodes${qs ? `?${qs}` : ""}`);
+    return requestJSON(`/seller-taxonomy/nodes${qs ? `?${qs}` : ""}`);
   },
 
   /* ── Control / Simulation ── */
 
   getSimulationDay(): Promise<SimulationDay> {
-    return fetchJSON<SimulationDay>("/simulation/day", CONTROL);
+    return requestJSON<SimulationDay>("/simulation/day", { base: CONTROL });
   },
 
   getMarketSnapshot(): Promise<MarketSnapshot> {
-    return fetchJSON<MarketSnapshot>("/simulation/market-snapshot", CONTROL);
+    return requestJSON<MarketSnapshot>("/simulation/market-snapshot", {
+      base: CONTROL,
+    });
   },
 
   getTrendState(): Promise<TrendState> {
-    return fetchJSON<TrendState>("/simulation/trend-state", CONTROL);
+    return requestJSON<TrendState>("/simulation/trend-state", { base: CONTROL });
   },
 
   getWorldState(): Promise<WorldState> {
-    return fetchJSON<WorldState>("/world-state", CONTROL);
+    return requestJSON<WorldState>("/world-state", { base: CONTROL });
   },
 
   async advanceDay(): Promise<unknown> {
-    const res = await fetch(`${CONTROL}/simulation/advance-day`, {
-      method: "POST",
+    return requestJSON("/simulation/advance-day", {
+      base: CONTROL,
+      init: { method: "POST" },
     });
-    if (!res.ok) throw new Error(`Advance day failed: ${res.status}`);
-    return res.json();
   },
 
   /* ── Benchmark / Runs ──
@@ -139,19 +187,28 @@ export const api = {
    */
 
   getRunList(): Promise<RunListEntry[]> {
-    return fetchJSON<RunListEntry[]>("/runs", CONTROL);
+    return requestJSON<RunListEntry[]>("/runs", { base: CONTROL });
   },
 
   getRunSummary(runId: string): Promise<RunSummary> {
-    return fetchJSON<RunSummary>(`/runs/${encodeURIComponent(runId)}/summary`, CONTROL);
+    return requestJSON<RunSummary>(
+      `/runs/${encodeURIComponent(runId)}/summary`,
+      { base: CONTROL },
+    );
   },
 
   getRunManifest(runId: string): Promise<RunManifest> {
-    return fetchJSON<RunManifest>(`/runs/${encodeURIComponent(runId)}/manifest`, CONTROL);
+    return requestJSON<RunManifest>(
+      `/runs/${encodeURIComponent(runId)}/manifest`,
+      { base: CONTROL },
+    );
   },
 
   getRunDaySnapshots(runId: string): Promise<DaySnapshot[]> {
-    return fetchJSON<DaySnapshot[]>(`/runs/${encodeURIComponent(runId)}/days`, CONTROL);
+    return requestJSON<DaySnapshot[]>(
+      `/runs/${encodeURIComponent(runId)}/days`,
+      { base: CONTROL },
+    );
   },
 
   /* ── Run Day Details ──
@@ -163,20 +220,32 @@ export const api = {
    *   GET /control/runs/:runId/memory/reminders   -> memory reminders array
    */
 
-  getRunDayBriefing(runId: string, day: number): Promise<unknown> {
-    return fetchJSON(`/runs/${encodeURIComponent(runId)}/days/${day}/briefing`, CONTROL);
+  getRunDayBriefing(runId: string, day: number): Promise<DayBriefing> {
+    return requestJSON<DayBriefing>(
+      `/runs/${encodeURIComponent(runId)}/days/${day}/briefing`,
+      { base: CONTROL },
+    );
   },
 
-  getRunDayTurns(runId: string, day: number): Promise<unknown[]> {
-    return fetchJSON(`/runs/${encodeURIComponent(runId)}/days/${day}/turns`, CONTROL);
+  getRunDayTurns(runId: string, day: number): Promise<TurnRecord[]> {
+    return requestJSON<TurnRecord[]>(
+      `/runs/${encodeURIComponent(runId)}/days/${day}/turns`,
+      { base: CONTROL },
+    );
   },
 
-  getRunMemoryNotes(runId: string): Promise<unknown[]> {
-    return fetchJSON(`/runs/${encodeURIComponent(runId)}/memory/notes`, CONTROL);
+  getRunMemoryNotes(runId: string): Promise<MemoryNote[]> {
+    return requestJSON<MemoryNote[]>(
+      `/runs/${encodeURIComponent(runId)}/memory/notes`,
+      { base: CONTROL },
+    );
   },
 
-  getRunMemoryReminders(runId: string): Promise<unknown[]> {
-    return fetchJSON(`/runs/${encodeURIComponent(runId)}/memory/reminders`, CONTROL);
+  getRunMemoryReminders(runId: string): Promise<MemoryReminder[]> {
+    return requestJSON<MemoryReminder[]>(
+      `/runs/${encodeURIComponent(runId)}/memory/reminders`,
+      { base: CONTROL },
+    );
   },
 
   /* ── Tournaments ──
@@ -187,21 +256,23 @@ export const api = {
    */
 
   getTournamentList(): Promise<TournamentListItem[]> {
-    return fetchJSON<TournamentListItem[]>("/tournaments", CONTROL);
+    return requestJSON<TournamentListItem[]>("/tournaments", { base: CONTROL });
   },
 
   getTournamentResult(tournamentId: string): Promise<TournamentResult> {
-    return fetchJSON<TournamentResult>(`/tournaments/${encodeURIComponent(tournamentId)}`, CONTROL);
+    return requestJSON<TournamentResult>(
+      `/tournaments/${encodeURIComponent(tournamentId)}`,
+      { base: CONTROL },
+    );
   },
 
   /* ── Operator Controls ── */
 
   async resetWorld(): Promise<unknown> {
-    const res = await fetch(`${CONTROL}/world/reset`, {
-      method: "POST",
+    return requestJSON("/world/reset", {
+      base: CONTROL,
+      init: { method: "POST" },
     });
-    if (!res.ok) throw new Error(`World reset failed: ${res.status}`);
-    return res.json();
   },
 
   /** NOTE: POST /control/runs/launch does NOT exist yet on the backend */
@@ -213,13 +284,14 @@ export const api = {
     model: string;
     provider: string;
   }): Promise<{ run_id: string }> {
-    const res = await fetch(`${CONTROL}/runs/launch`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+    return requestJSON<{ run_id: string }>("/runs/launch", {
+      base: CONTROL,
+      init: {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
     });
-    if (!res.ok) throw new Error(`Run launch failed: ${res.status}`);
-    return res.json();
   },
 
   /** NOTE: POST /control/tournaments/launch does NOT exist yet on the backend */
@@ -235,12 +307,13 @@ export const api = {
     rounds: number;
     turns_per_day: number;
   }): Promise<{ tournament_id: string }> {
-    const res = await fetch(`${CONTROL}/tournaments/launch`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+    return requestJSON<{ tournament_id: string }>("/tournaments/launch", {
+      base: CONTROL,
+      init: {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
     });
-    if (!res.ok) throw new Error(`Tournament launch failed: ${res.status}`);
-    return res.json();
   },
 };

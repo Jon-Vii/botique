@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { Trophy, Plus, Trash, Warning } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
+import { BackendNotice } from "../BackendNotice";
 import { LoadingDots } from "../LoadingDots";
 import { Badge } from "../Badge";
+import { Snippet } from "../Snippet";
+import { frontendFeatures } from "../../config/features";
 import { useLaunchTournament, useWorldState } from "../../hooks/useApi";
 
 const PRESET_ENTRANTS = [
@@ -30,6 +33,7 @@ export function TournamentLaunchPanel({
   const { data: world } = useWorldState();
   const launchTournament = useLaunchTournament();
   const shops = world?.marketplace.shops ?? [];
+  const canLaunchFromUi = frontendFeatures.enablePendingControlActions;
 
   const [entrants, setEntrants] = useState<Entrant[]>([
     PRESET_ENTRANTS[0],
@@ -64,6 +68,10 @@ export function TournamentLaunchPanel({
   const handleLaunch = () => {
     if (entrants.length < 2) {
       onError("Need at least 2 entrants");
+      return;
+    }
+    if (!canLaunchFromUi) {
+      onError("Tournament launch is not wired to the backend yet");
       return;
     }
     const sids = selectedShopIds.length > 0
@@ -111,6 +119,7 @@ export function TournamentLaunchPanel({
             Entrants
           </span>
           <button
+            type="button"
             onClick={addEntrant}
             disabled={entrants.length >= PRESET_ENTRANTS.length}
             className="flex items-center gap-1 text-xs text-orange hover:text-orange-dark font-medium disabled:opacity-30 cursor-pointer transition-colors"
@@ -155,6 +164,7 @@ export function TournamentLaunchPanel({
                 {e.model}
               </span>
               <button
+                type="button"
                 onClick={() => removeEntrant(idx)}
                 disabled={entrants.length <= 2}
                 className="text-muted hover:text-rose disabled:opacity-20 cursor-pointer transition-colors"
@@ -180,9 +190,11 @@ export function TournamentLaunchPanel({
               const selected = selectedShopIds.includes(s.shop_id);
               return (
                 <button
+                  type="button"
                   key={s.shop_id}
                   onClick={() => toggleShop(s.shop_id)}
-                  className={`px-2.5 py-1 text-xs font-mono border transition-all cursor-pointer ${
+                  aria-pressed={selected}
+                  className={`px-2.5 py-1 text-xs font-mono border transition-[background-color,border-color,color] ${
                     selected
                       ? "border-orange/30 bg-orange-50 text-orange"
                       : "border-rule bg-white text-secondary hover:border-gray-5"
@@ -208,7 +220,7 @@ export function TournamentLaunchPanel({
             max={30}
             value={daysPerRound}
             onChange={(e) => setDaysPerRound(Number(e.target.value))}
-            className="w-full px-3 py-2 bg-white border border-rule text-sm font-mono text-ink focus:outline-none focus:border-violet/40 focus:shadow-[0_0_0_2px_rgba(139,92,246,0.08)] transition-all"
+            className="w-full border border-rule bg-white px-3 py-2 text-sm font-mono text-ink transition-[border-color,box-shadow] focus:outline-none focus:border-violet/40 focus:shadow-[0_0_0_2px_rgba(139,92,246,0.08)]"
           />
         </div>
         <div className="space-y-1.5">
@@ -221,7 +233,7 @@ export function TournamentLaunchPanel({
             max={10}
             value={rounds}
             onChange={(e) => setRounds(Number(e.target.value))}
-            className="w-full px-3 py-2 bg-white border border-rule text-sm font-mono text-ink focus:outline-none focus:border-violet/40 focus:shadow-[0_0_0_2px_rgba(139,92,246,0.08)] transition-all"
+            className="w-full border border-rule bg-white px-3 py-2 text-sm font-mono text-ink transition-[border-color,box-shadow] focus:outline-none focus:border-violet/40 focus:shadow-[0_0_0_2px_rgba(139,92,246,0.08)]"
           />
         </div>
         <div className="space-y-1.5">
@@ -234,7 +246,7 @@ export function TournamentLaunchPanel({
             max={20}
             value={turnsPerDay}
             onChange={(e) => setTurnsPerDay(Number(e.target.value))}
-            className="w-full px-3 py-2 bg-white border border-rule text-sm font-mono text-ink focus:outline-none focus:border-violet/40 focus:shadow-[0_0_0_2px_rgba(139,92,246,0.08)] transition-all"
+            className="w-full border border-rule bg-white px-3 py-2 text-sm font-mono text-ink transition-[border-color,box-shadow] focus:outline-none focus:border-violet/40 focus:shadow-[0_0_0_2px_rgba(139,92,246,0.08)]"
           />
         </div>
       </div>
@@ -242,9 +254,11 @@ export function TournamentLaunchPanel({
       {/* Launch */}
       <div className="flex items-center gap-3">
         <button
+          type="button"
           onClick={handleLaunch}
-          disabled={launchTournament.isPending || entrants.length < 2}
-          className="flex items-center gap-2 px-5 py-2.5 bg-violet text-white text-sm font-semibold hover:shadow-[0_0_24px_rgba(139,92,246,0.3)] hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+          disabled={!canLaunchFromUi || launchTournament.isPending || entrants.length < 2}
+          aria-disabled={!canLaunchFromUi || launchTournament.isPending || entrants.length < 2}
+          className="flex cursor-pointer items-center gap-2 bg-violet px-5 py-2.5 text-sm font-semibold text-white transition-[box-shadow,transform,opacity] hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(139,92,246,0.3)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {launchTournament.isPending ? (
             <LoadingDots size={4} color="bg-white" />
@@ -259,12 +273,35 @@ export function TournamentLaunchPanel({
         {launchedId && (
           <Link
             to={`/tournaments/${encodeURIComponent(launchedId)}`}
-            className="text-sm text-violet hover:brightness-110 font-medium transition-all"
+            className="text-sm font-medium text-violet transition-[color,filter] hover:brightness-110"
           >
-            View tournament &rarr;
+            View tournament →
           </Link>
         )}
       </div>
+
+      {!canLaunchFromUi ? (
+        <div className="mt-5">
+          <BackendNotice
+            title="Use the CLI for tournaments"
+            description="Tournament orchestration already exists in System 3, but the browser launch action still points at a control endpoint that is not implemented in the current server."
+            endpoints={["POST /control/tournaments/launch"]}
+            compact
+          >
+            <Snippet
+              dark={false}
+              text={[
+                "botique-agent-runtime run-tournament \\",
+                "  --entrants-file entrants.json \\",
+                `  --shop-ids ${(selectedShopIds.length > 0 ? selectedShopIds : shops.map((shop) => shop.shop_id)).join(",") || "1001,1002"} \\`,
+                `  --days ${daysPerRound} \\`,
+                `  --rounds ${rounds} \\`,
+                `  --turns-per-day ${turnsPerDay}`,
+              ]}
+            />
+          </BackendNotice>
+        </div>
+      ) : null}
     </div>
   );
 }

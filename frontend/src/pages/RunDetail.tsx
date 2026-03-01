@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useEffect } from "react";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   CurrencyDollar,
@@ -7,110 +7,146 @@ import {
   Sun,
   Wrench,
 } from "@phosphor-icons/react";
+import { BackendNotice } from "../components/BackendNotice";
 import { Badge } from "../components/Badge";
+import { EmptyState } from "../components/EmptyState";
 import { Stat } from "../components/Stat";
 import { Skeleton } from "../components/Skeleton";
-import { DayTimeline } from "../components/run/DayTimeline";
 import { BriefingPanel } from "../components/run/BriefingPanel";
-import { TurnInspector } from "../components/run/TurnInspector";
+import { DayTimeline } from "../components/run/DayTimeline";
 import { MemoryPanel } from "../components/run/MemoryPanel";
-import { StateDelta } from "../components/run/StateDelta";
-import { useRunSummary } from "../hooks/useApi";
+import { TurnInspector } from "../components/run/TurnInspector";
 import {
-  MOCK_SUMMARIES,
-  MOCK_DAY_SUMMARIES,
-  MOCK_BRIEFINGS,
-  MOCK_TURNS,
-  MOCK_NOTES,
-} from "../api/mockRunData";
-import type { RunDaySummary, DayBriefing, TurnRecord, MemoryNote } from "../types/runs";
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-}
+  useRunDayBriefing,
+  useRunDaySnapshots,
+  useRunDayTurns,
+  useRunManifest,
+  useRunMemoryNotes,
+  useRunSummary,
+} from "../hooks/useApi";
+import { formatCurrency, formatDateMedium } from "../lib/format";
 
 export function RunDetail() {
   const { runId } = useParams<{ runId: string }>();
   const id = runId ?? "";
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const { data: apiSummary } = useRunSummary(id);
+  const summaryQuery = useRunSummary(id);
+  const manifestQuery = useRunManifest(id);
+  const daySnapshotsQuery = useRunDaySnapshots(id);
+  const notesQuery = useRunMemoryNotes(id);
 
-  // Fall back to mock data
-  const summary = apiSummary ?? MOCK_SUMMARIES[id];
-  const daySummaries = MOCK_DAY_SUMMARIES[id] ?? [];
-  const briefings = MOCK_BRIEFINGS[id] ?? {};
-  const turnsMap = MOCK_TURNS[id] ?? {};
-  const notes = MOCK_NOTES[id] ?? [];
+  const summary = summaryQuery.data;
+  const daySnapshots = daySnapshotsQuery.data ?? [];
+  const requestedDay = Number(searchParams.get("day"));
+  const selectedDay = daySnapshots.some((day) => day.day === requestedDay)
+    ? requestedDay
+    : daySnapshots[0]?.day ?? summary?.start_day ?? 0;
 
-  const [selectedDay, setSelectedDay] = useState<number>(
-    daySummaries[0]?.day ?? 1,
+  useEffect(() => {
+    if (!selectedDay) return;
+    if (searchParams.get("day") === String(selectedDay)) return;
+    const next = new URLSearchParams(searchParams);
+    next.set("day", String(selectedDay));
+    setSearchParams(next, { replace: true });
+  }, [searchParams, selectedDay, setSearchParams]);
+
+  const briefingQuery = useRunDayBriefing(id, selectedDay);
+  const turnsQuery = useRunDayTurns(id, selectedDay);
+
+  const currentDay =
+    daySnapshots.find((day) => day.day === selectedDay) ?? null;
+
+  const notesForSelectedDay = (notesQuery.data ?? []).filter(
+    (note) => note.created_day === selectedDay,
   );
 
-  const currentDaySummary = useMemo(
-    () => daySummaries.find((d) => d.day === selectedDay),
-    [daySummaries, selectedDay],
-  );
-
-  const currentBriefing = briefings[selectedDay] as DayBriefing | undefined;
-  const currentTurns = (turnsMap[selectedDay] ?? []) as TurnRecord[];
-  const currentNotes = notes.filter(
-    (n: MemoryNote) => n.created_day === selectedDay,
-  );
-
-  if (!summary) {
+  if (summaryQuery.isLoading) {
     return (
-      <div className="space-y-4">
-        <Skeleton width="300px" height="24px" />
-        <Skeleton lines={4} />
+      <div className="space-y-8">
+        <Skeleton width="240px" height="28px" />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Skeleton height="88px" />
+          <Skeleton height="88px" />
+          <Skeleton height="88px" />
+          <Skeleton height="88px" />
+        </div>
+        <Skeleton width="100%" height="240px" />
       </div>
     );
   }
 
+  if (!summary) {
+    return (
+      <div className="space-y-6">
+        <EmptyState
+          icon={<Sun size={48} weight="duotone" />}
+          title="Run not found"
+          description="This run could not be loaded from the current control-plane API."
+        />
+        <BackendNotice
+          title="Run summary endpoint is missing"
+          description="The run explorer depends on control-plane artifact endpoints that are not implemented in the current server."
+          endpoints={["GET /control/runs/:runId/summary"]}
+        />
+      </div>
+    );
+  }
+
+  const dayDetailUnavailable =
+    (selectedDay > 0 && briefingQuery.isError) ||
+    (selectedDay > 0 && turnsQuery.isError) ||
+    notesQuery.isError;
+
   return (
-    <div>
-      {/* Breadcrumb + header */}
-      <div className="mb-6">
+    <div className="space-y-6">
+      <div>
         <Link
           to="/runs"
-          className="inline-flex items-center gap-1.5 text-xs font-mono text-muted hover:text-orange transition-colors mb-3"
+          className="mb-3 inline-flex items-center gap-1.5 text-xs font-mono text-muted transition-colors hover:text-orange"
         >
-          <ArrowLeft size={12} />
+          <ArrowLeft size={12} aria-hidden="true" />
           All Runs
         </Link>
 
-        <div className="flex items-start gap-4 flex-wrap">
+        <div className="flex flex-wrap items-start gap-4">
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-bold text-ink font-mono">
+            <h1 className="font-mono text-xl font-bold text-ink">
               {summary.run_id}
             </h1>
-            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
               <Badge variant="orange" subtle>
                 shop {summary.shop_id}
               </Badge>
-              <Badge variant="gray">{summary.mode}</Badge>
+              <Badge variant={summary.mode === "live" ? "emerald" : "gray"}>
+                {summary.mode}
+              </Badge>
               <Badge variant="teal">
                 {summary.day_count} day{summary.day_count !== 1 ? "s" : ""}
               </Badge>
-              {summary.totals.notes_written ? (
-                <Badge variant="violet">
-                  {summary.totals.notes_written} note
-                  {summary.totals.notes_written !== 1 ? "s" : ""}
-                </Badge>
-              ) : null}
+              <Badge variant="gray" subtle>
+                days {summary.start_day}-{summary.end_day}
+              </Badge>
             </div>
           </div>
+
+          {manifestQuery.data ? (
+            <div className="tech-card min-w-[280px] p-4">
+              <div className="mb-2 text-[10px] font-mono font-semibold uppercase tracking-wider text-muted">
+                Invocation
+              </div>
+              <p className="text-sm text-secondary">
+                {manifestQuery.data.invocation.command}
+              </p>
+            </div>
+          ) : null}
         </div>
       </div>
 
-      {/* Top-level stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 stagger">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat
           label="Balance Change"
-          value={`$${summary.starting_state.available_balance.toFixed(0)} -> $${summary.ending_state.available_balance.toFixed(0)}`}
+          value={`${formatCurrency(summary.starting_state.available_balance)} → ${formatCurrency(summary.ending_state.available_balance)}`}
           icon={<CurrencyDollar size={12} weight="bold" />}
           accent={
             summary.ending_state.available_balance >
@@ -129,8 +165,8 @@ export function RunDetail() {
           accent="teal"
         />
         <Stat
-          label="Revenue"
-          value={`$${summary.totals.yesterday_revenue.toFixed(2)}`}
+          label="Yesterday Revenue"
+          value={formatCurrency(summary.totals.yesterday_revenue)}
           icon={<CurrencyDollar size={12} weight="bold" />}
           accent="amber"
         />
@@ -142,10 +178,9 @@ export function RunDetail() {
         />
       </div>
 
-      {/* Tool call breakdown */}
-      {Object.keys(summary.totals.tool_calls_by_name).length > 0 && (
-        <div className="tech-card p-4 mb-6">
-          <div className="text-[10px] font-mono font-semibold uppercase tracking-wider text-muted mb-3">
+      {Object.keys(summary.totals.tool_calls_by_name).length > 0 ? (
+        <div className="tech-card p-4">
+          <div className="mb-3 text-[10px] font-mono font-semibold uppercase tracking-wider text-muted">
             Tool Call Distribution
           </div>
           <div className="flex flex-wrap gap-2">
@@ -154,7 +189,7 @@ export function RunDetail() {
               .map(([name, count]) => (
                 <div
                   key={name}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-gray-1 border border-rule font-mono text-xs"
+                  className="flex items-center gap-2 border border-rule bg-gray-1 px-3 py-1.5 font-mono text-xs"
                 >
                   <span className="text-secondary">{name}</span>
                   <span className="num font-semibold text-ink">{count}</span>
@@ -162,72 +197,95 @@ export function RunDetail() {
               ))}
           </div>
         </div>
-      )}
+      ) : null}
 
-      {/* Day selector timeline */}
-      <DayTimeline
-        days={daySummaries}
-        selectedDay={selectedDay}
-        onSelectDay={setSelectedDay}
-      />
-
-      {/* Day detail panel */}
-      {currentDaySummary && (
-        <div className="mt-4 space-y-4 animate-card-in" key={selectedDay}>
-          {/* Day header */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-lg font-bold text-ink">
-              Day {selectedDay}
-            </h2>
-            <span className="text-xs font-mono text-muted">
-              {fmtDate(currentDaySummary.simulation_date)}
-            </span>
-            <Badge
-              variant={
-                currentDaySummary.end_reason === "agent_ended_day"
-                  ? "emerald"
-                  : "amber"
-              }
-            >
-              {currentDaySummary.end_reason.replace(/_/g, " ")}
-            </Badge>
-            <span className="text-xs font-mono text-muted">
-              {currentDaySummary.turn_count} turn
-              {currentDaySummary.turn_count !== 1 ? "s" : ""}
-            </span>
-          </div>
-
-          {/* Objective status */}
-          <div className="tech-card p-4">
-            <div className="flex items-center gap-1.5 text-[10px] font-mono font-semibold uppercase tracking-wider text-muted mb-2">
-              <Sun size={12} weight="duotone" />
-              Objective Status
-            </div>
-            <p className="text-sm text-ink leading-relaxed">
-              {currentDaySummary.objective_status}
-            </p>
-          </div>
-
-          {/* State delta */}
-          <StateDelta
-            before={currentDaySummary.state_before}
-            after={currentDaySummary.state_after}
-            nextDay={currentDaySummary.state_next_day}
+      {daySnapshotsQuery.isError ? (
+        <BackendNotice
+          title="Day snapshots are not available"
+          description="This view can show a day timeline as soon as the backend exposes per-day artifact snapshots."
+          endpoints={["GET /control/runs/:runId/days"]}
+        />
+      ) : daySnapshots.length > 0 ? (
+        <>
+          <DayTimeline
+            days={daySnapshots}
+            selectedDay={selectedDay}
+            onSelectDay={(day) => {
+              const next = new URLSearchParams(searchParams);
+              next.set("day", String(day));
+              setSearchParams(next, { replace: true });
+            }}
           />
 
-          {/* Briefing */}
-          {currentBriefing && <BriefingPanel briefing={currentBriefing} />}
+          {currentDay ? (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 className="text-lg font-bold text-ink">Day {currentDay.day}</h2>
+                <span className="text-xs font-mono text-muted">
+                  {formatDateMedium(currentDay.simulation_date)}
+                </span>
+                <Badge variant="gray" subtle>
+                  balance {formatCurrency(currentDay.available_balance, currentDay.currency_code)}
+                </Badge>
+              </div>
 
-          {/* Turns */}
-          {currentTurns.length > 0 && (
-            <TurnInspector turns={currentTurns} />
-          )}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                <Stat
+                  label="Balance"
+                  value={formatCurrency(currentDay.available_balance, currentDay.currency_code)}
+                  icon={<CurrencyDollar size={12} weight="bold" />}
+                  accent="orange"
+                />
+                <Stat
+                  label="Active Listings"
+                  value={currentDay.active_listing_count}
+                  icon={<Lightning size={12} weight="duotone" />}
+                  accent="emerald"
+                />
+                <Stat
+                  label="Draft Listings"
+                  value={currentDay.draft_listing_count}
+                  icon={<Sun size={12} weight="duotone" />}
+                  accent="teal"
+                />
+                <Stat
+                  label="Total Sales"
+                  value={currentDay.total_sales_count}
+                  icon={<Wrench size={12} weight="duotone" />}
+                  accent="violet"
+                />
+                <Stat
+                  label="Reviews"
+                  value={`${currentDay.review_average.toFixed(1)} (${currentDay.review_count})`}
+                  icon={<Sun size={12} weight="duotone" />}
+                  accent="amber"
+                />
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : null}
 
-          {/* Memory notes for this day */}
-          {currentNotes.length > 0 && (
-            <MemoryPanel notes={currentNotes} />
-          )}
-        </div>
+      {dayDetailUnavailable ? (
+        <BackendNotice
+          title="Per-day trace detail is not wired yet"
+          description="The selected run can show summary metadata, but morning briefings and turn-level trace playback need additional control-plane endpoints."
+          endpoints={[
+            "GET /control/runs/:runId/days/:day/briefing",
+            "GET /control/runs/:runId/days/:day/turns",
+            "GET /control/runs/:runId/memory/notes",
+          ]}
+        />
+      ) : (
+        <>
+          {briefingQuery.data ? <BriefingPanel briefing={briefingQuery.data} /> : null}
+          {turnsQuery.data && turnsQuery.data.length > 0 ? (
+            <TurnInspector turns={turnsQuery.data} />
+          ) : null}
+          {notesForSelectedDay.length > 0 ? (
+            <MemoryPanel notes={notesForSelectedDay} />
+          ) : null}
+        </>
       )}
     </div>
   );

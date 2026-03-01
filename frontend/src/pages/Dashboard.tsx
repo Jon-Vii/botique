@@ -17,7 +17,7 @@ import { LoadingDots } from "../components/LoadingDots";
 import { ShopCard } from "../components/ShopCard";
 import { ShopCardSkeleton, StatSkeleton } from "../components/Skeleton";
 import { Stat } from "../components/Stat";
-import { useToast } from "../components/Toast";
+import { useToast } from "../components/toast-context";
 import { TrendTag } from "../components/TrendTag";
 import {
   useAdvanceDay,
@@ -26,6 +26,7 @@ import {
   useTrendState,
   useWorldState,
 } from "../hooks/useApi";
+import { formatCurrency } from "../lib/format";
 
 export function Dashboard() {
   const { data: simDay, isLoading: dayLoading } = useSimulationDay();
@@ -117,6 +118,7 @@ export function Dashboard() {
               </div>
             )}
             <button
+              type="button"
               onClick={() =>
                 advanceDay.mutate(undefined, {
                   onSuccess: () =>
@@ -132,7 +134,7 @@ export function Dashboard() {
                 })
               }
               disabled={advanceDay.isPending}
-              className="flex items-center gap-2 px-6 py-3 bg-orange text-white text-sm font-semibold hover:shadow-[0_0_24px_rgba(255,112,0,0.3)] hover:scale-105 active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+              className="flex cursor-pointer items-center gap-2 bg-orange px-6 py-3 text-sm font-semibold text-white transition-[box-shadow,transform,opacity] hover:scale-105 hover:shadow-[0_0_24px_rgba(255,112,0,0.3)] active:scale-95 disabled:opacity-50"
             >
               {advanceDay.isPending ? (
                 <LoadingDots size={5} color="bg-white" />
@@ -165,7 +167,7 @@ export function Dashboard() {
             />
             <Stat
               label="Avg Price"
-              value={`$${snapshot.average_active_price.toFixed(2)}`}
+              value={formatCurrency(snapshot.average_active_price)}
               icon={<ChartBar size={12} weight="duotone" />}
               accent="teal"
             />

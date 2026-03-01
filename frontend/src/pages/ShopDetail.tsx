@@ -6,13 +6,13 @@ import {
   ShoppingCart,
   Star,
 } from "@phosphor-icons/react";
-import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Badge } from "../components/Badge";
 import { ListingCard } from "../components/ListingCard";
 import { Skeleton } from "../components/Skeleton";
 import { Stars } from "../components/Stars";
 import { StatusDot } from "../components/StatusDot";
+import { formatCurrency, formatDateShort } from "../lib/format";
 import {
   useShop,
   useShopListings,
@@ -33,7 +33,10 @@ function shopHue(name: string): number {
 export function ShopDetail() {
   const { shopId } = useParams<{ shopId: string }>();
   const id = Number(shopId);
-  const [tab, setTab] = useState<Tab>("listings");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const tab: Tab =
+    tabParam === "orders" || tabParam === "reviews" ? tabParam : "listings";
 
   const { data: shop, isLoading: shopLoading } = useShop(id);
   const { data: listingsData } = useShopListings(id, { limit: 50 });
@@ -43,11 +46,11 @@ export function ShopDetail() {
   const listings = listingsData?.results ?? [];
   const orders = ordersData?.results ?? [];
   const reviews = reviewsData?.results ?? [];
+  const listingCount = listingsData?.count ?? listings.length;
+  const orderCount = ordersData?.count ?? orders.length;
+  const reviewCount = reviewsData?.count ?? reviews.length;
 
-  const totalRevenue = useMemo(
-    () => orders.reduce((sum, o) => sum + o.total_price, 0),
-    [orders]
-  );
+  const totalRevenue = orders.reduce((sum, order) => sum + order.total_price, 0);
 
   if (shopLoading) {
     return (
@@ -149,7 +152,7 @@ export function ShopDetail() {
                   </span>
                 )}
                 <span className="text-muted text-xs font-mono">
-                  {shop.listing_active_count} items · {orders.length} sales
+                  {shop.listing_active_count} items · {shop.total_sales_count} sales
                 </span>
               </div>
             </div>
@@ -176,13 +179,13 @@ export function ShopDetail() {
               {
                 icon: ShoppingCart,
                 label: "Orders",
-                value: orders.length,
+                value: shop.total_sales_count,
                 color: "text-violet",
               },
               {
                 icon: CurrencyDollar,
                 label: "Revenue",
-                value: `$${totalRevenue.toFixed(2)}`,
+                value: formatCurrency(totalRevenue, shop.currency_code),
                 color: "text-orange",
               },
               {
@@ -212,18 +215,26 @@ export function ShopDetail() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-0 border-t border-rule px-8">
+        <div className="flex gap-0 border-t border-rule px-8" role="tablist" aria-label="Shop detail sections">
           {(
             [
-              ["listings", "Items", listings.length],
-              ["orders", "Orders", orders.length],
-              ["reviews", "Reviews", reviews.length],
+              ["listings", "Items", listingCount],
+              ["orders", "Orders", orderCount],
+              ["reviews", "Reviews", reviewCount],
             ] as const
           ).map(([key, label, count]) => (
             <button
               key={key}
-              onClick={() => setTab(key)}
-              className={`px-5 py-3.5 text-sm font-medium transition-all cursor-pointer ${
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => {
+                const next = new URLSearchParams(searchParams);
+                if (key === "listings") next.delete("tab");
+                else next.set("tab", key);
+                setSearchParams(next, { replace: true });
+              }}
+              className={`px-5 py-3.5 text-sm font-medium transition-[background-color,border-color,color] ${
                 tab === key ? "tab-active" : "tab-inactive"
               }`}
             >
@@ -283,7 +294,7 @@ export function ShopDetail() {
                           .join(", ")}
                       </td>
                       <td className="text-right num font-bold text-orange">
-                        ${order.total_price.toFixed(2)}
+                        {formatCurrency(order.total_price, order.currency_code)}
                       </td>
                       <td className="text-right">
                         <Badge
@@ -321,12 +332,12 @@ export function ShopDetail() {
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-3">
                       <Stars rating={review.rating} size={13} />
-                      <span className="text-sm font-bold text-ink">
-                        {review.buyer_name}
-                      </span>
+                    <span className="text-sm font-bold text-ink">
+                      {review.buyer_name}
+                    </span>
                     </div>
                     <span className="text-xs text-muted font-mono">
-                      {new Date(review.created_at).toLocaleDateString()}
+                      {formatDateShort(review.created_at)}
                     </span>
                   </div>
                   <p className="text-sm text-secondary leading-relaxed">

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   CaretRight,
@@ -14,12 +14,14 @@ import {
   Sword,
   Trophy,
 } from "@phosphor-icons/react";
+import { BackendNotice } from "../components/BackendNotice";
 import { Badge } from "../components/Badge";
 import { EmptyState } from "../components/EmptyState";
 import { Skeleton } from "../components/Skeleton";
 import { Stat } from "../components/Stat";
 import { StatSkeleton } from "../components/Skeleton";
 import { useTournamentResult } from "../hooks/useApi";
+import { formatCurrency } from "../lib/format";
 import type {
   TournamentAggregateStanding,
   TournamentResult,
@@ -108,7 +110,7 @@ function AggregateStandingsTable({
               </td>
               <td className="text-right">
                 <span className="num font-bold text-orange">
-                  ${s.average_primary_score.toFixed(2)}
+                  {formatCurrency(s.average_primary_score)}
                 </span>
               </td>
               <td className="text-right">
@@ -136,9 +138,9 @@ function AggregateStandingsTable({
                     <span
                       key={i}
                       className="inline-block px-1.5 py-0.5 text-[10px] font-mono bg-gray-1 border border-rule text-secondary"
-                      title={`Round ${i + 1}: $${score.toFixed(2)}`}
+                      title={`Round ${i + 1}: ${formatCurrency(score)}`}
                     >
-                      ${score.toFixed(0)}
+                      {formatCurrency(score, "USD", { maximumFractionDigits: 0 })}
                     </span>
                   ))}
                 </div>
@@ -204,11 +206,11 @@ function RoundStandingsTable({
               </td>
               <td className="text-right">
                 <span className="num font-bold text-orange">
-                  ${s.scorecard.available_cash.toFixed(2)}
+                  {formatCurrency(s.scorecard.available_cash)}
                 </span>
               </td>
               <td className="text-right num text-muted">
-                ${s.scorecard.pending_cash.toFixed(2)}
+                {formatCurrency(s.scorecard.pending_cash)}
               </td>
               <td className="text-right num text-secondary">
                 {s.scorecard.total_sales_count}
@@ -329,9 +331,11 @@ function RoundDetail({
                 className="border border-rule bg-white overflow-hidden"
               >
                 <button
+                  type="button"
                   onClick={() =>
                     setExpandedDay(isExpanded ? null : day.day)
                   }
+                  aria-expanded={isExpanded}
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-1 transition-colors cursor-pointer"
                 >
                   <CaretRight
@@ -411,13 +415,29 @@ function RoundDetail({
 
 export function TournamentDetail() {
   const { tournamentId } = useParams<{ tournamentId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     data: tournament,
     isLoading,
     error,
   } = useTournamentResult(tournamentId ?? "");
 
-  const [activeRound, setActiveRound] = useState(0);
+  const requestedRound = Number(searchParams.get("round"));
+  const activeRound = useMemo(() => {
+    if (!tournament || Number.isNaN(requestedRound)) return 0;
+    return tournament.rounds.some((round) => round.round_index === requestedRound)
+      ? requestedRound
+      : 0;
+  }, [requestedRound, tournament]);
+
+  useEffect(() => {
+    if (!tournament) return;
+    if (searchParams.get("round") === String(activeRound)) return;
+    const next = new URLSearchParams(searchParams);
+    if (activeRound === 0) next.delete("round");
+    else next.set("round", String(activeRound));
+    setSearchParams(next, { replace: true });
+  }, [activeRound, searchParams, setSearchParams, tournament]);
 
   if (isLoading) {
     return (
@@ -436,16 +456,25 @@ export function TournamentDetail() {
 
   if (error || !tournament) {
     return (
-      <EmptyState
-        icon={<Sword size={48} weight="duotone" />}
-        title="Tournament not found"
-        description="This tournament may not exist or the backend endpoint is not available."
-      />
+      <div className="space-y-6">
+        <EmptyState
+          icon={<Sword size={48} weight="duotone" />}
+          title="Tournament not found"
+          description="This tournament may not exist or the backend endpoint is not available."
+        />
+        <BackendNotice
+          title="Tournament detail endpoint is missing"
+          description="Tournament mode is implemented in the runtime, but the current server does not yet publish tournament results through the control API."
+          endpoints={["GET /control/tournaments/:tournamentId"]}
+        />
+      </div>
     );
   }
 
   const winner = tournament.standings[0];
-  const selectedRound = tournament.rounds[activeRound];
+  const selectedRound =
+    tournament.rounds.find((round) => round.round_index === activeRound) ??
+    tournament.rounds[0];
 
   return (
     <div className="space-y-10">
@@ -504,7 +533,7 @@ export function TournamentDetail() {
                   model={winner.entrant.model}
                 />
                 <div className="mt-3 num text-2xl font-bold text-amber">
-                  ${winner.average_primary_score.toFixed(2)}
+                  {formatCurrency(winner.average_primary_score)}
                 </div>
                 <div className="text-[10px] font-mono text-muted uppercase tracking-wider">
                   avg score
@@ -599,7 +628,7 @@ export function TournamentDetail() {
                         Avg Score
                       </div>
                       <div className="num font-bold text-orange">
-                        ${standing.average_primary_score.toFixed(2)}
+                        {formatCurrency(standing.average_primary_score)}
                       </div>
                     </div>
                     <div>
@@ -634,11 +663,23 @@ export function TournamentDetail() {
         </h2>
 
         {/* Round tabs */}
-        <div className="flex items-center gap-0 border-b border-rule mb-6">
+        <div
+          className="mb-6 flex items-center gap-0 border-b border-rule"
+          role="tablist"
+          aria-label="Tournament rounds"
+        >
           {tournament.rounds.map((round) => (
             <button
               key={round.round_index}
-              onClick={() => setActiveRound(round.round_index)}
+              type="button"
+              role="tab"
+              aria-selected={activeRound === round.round_index}
+              onClick={() => {
+                const next = new URLSearchParams(searchParams);
+                if (round.round_index === 0) next.delete("round");
+                else next.set("round", String(round.round_index));
+                setSearchParams(next, { replace: true });
+              }}
               className={`px-5 py-2.5 text-sm font-medium cursor-pointer transition-colors ${
                 activeRound === round.round_index
                   ? "tab-active"

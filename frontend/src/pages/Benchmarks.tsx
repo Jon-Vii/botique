@@ -4,7 +4,6 @@ import {
   ChartLineUp,
   ClipboardText,
   CurrencyDollar,
-  Gear,
   Lightning,
   ListChecks,
   Star,
@@ -13,10 +12,13 @@ import {
   Wrench,
 } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { BackendNotice } from "../components/BackendNotice";
 import { Badge } from "../components/Badge";
 import { EmptyState } from "../components/EmptyState";
 import { Skeleton } from "../components/Skeleton";
 import { useRunList, useRunSummaries } from "../hooks/useApi";
+import { formatCurrency } from "../lib/format";
 import type { RunSummary } from "../types/api";
 
 /* ── Sort logic ── */
@@ -116,7 +118,7 @@ function ToolBar({ tools }: { tools: Record<string, number> }) {
         {entries.map(([name, count], i) => (
           <div
             key={name}
-            className={`${palette[i % palette.length]} transition-all duration-300`}
+            className={`${palette[i % palette.length]} transition-[width] duration-300`}
             style={{ width: `${(count / total) * 100}%` }}
             title={`${name}: ${count}`}
           />
@@ -169,11 +171,11 @@ function ScoreCard({ summary }: { summary: RunSummary }) {
               </div>
               <div className="flex items-baseline gap-3">
                 <span className="num text-xs text-secondary">
-                  ${summary.starting_state.available_balance.toFixed(2)}
+                  {formatCurrency(summary.starting_state.available_balance)}
                 </span>
                 <span className="text-muted text-[10px]">&rarr;</span>
                 <span className="num text-lg font-bold text-orange">
-                  ${summary.ending_state.available_balance.toFixed(2)}
+                  {formatCurrency(summary.ending_state.available_balance)}
                 </span>
               </div>
               <div
@@ -184,8 +186,8 @@ function ScoreCard({ summary }: { summary: RunSummary }) {
                 ) : (
                   <ArrowDown size={10} weight="bold" />
                 )}
-                {delta >= 0 ? "+" : ""}
-                {delta.toFixed(2)} ({deltaPercent.toFixed(1)}%)
+                {delta >= 0 ? "+" : "-"}
+                {Math.abs(delta).toFixed(2)} ({deltaPercent.toFixed(1)}%)
               </div>
             </div>
 
@@ -274,11 +276,17 @@ function SortHeader({
   const isActive = currentSort === field;
   return (
     <th
+      aria-sort={
+        isActive ? (currentDir === "asc" ? "ascending" : "descending") : "none"
+      }
       align={align === "right" ? "right" : undefined}
-      className="cursor-pointer select-none group"
-      onClick={() => onSort(field)}
+      className="select-none"
     >
-      <span className="inline-flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        className="group inline-flex items-center gap-1 transition-colors hover:text-ink"
+      >
         {label}
         <span
           className={`transition-opacity ${isActive ? "opacity-100" : "opacity-0 group-hover:opacity-40"}`}
@@ -289,7 +297,7 @@ function SortHeader({
             <ArrowDown size={10} weight="bold" />
           )}
         </span>
-      </span>
+      </button>
     </th>
   );
 }
@@ -402,14 +410,15 @@ export function Benchmarks() {
                   />
                 </span>
                 <strong className="num text-ink">
-                  $
                   {summaries.length > 0
-                    ? Math.max(
-                        ...summaries.map(
-                          (s) => s.ending_state.available_balance
+                    ? formatCurrency(
+                        Math.max(
+                          ...summaries.map(
+                            (s) => s.ending_state.available_balance
+                          )
                         )
-                      ).toFixed(2)
-                    : "0.00"}
+                      )
+                    : formatCurrency(0)}
                 </strong>
                 <span className="text-muted text-xs">best balance</span>
               </span>
@@ -437,13 +446,14 @@ export function Benchmarks() {
 
       {/* Leaderboard table */}
       {listError ? (
-        <div className="tech-card p-8">
-          <EmptyState
-            icon={<Gear size={48} weight="duotone" />}
-            title="Backend not connected"
-            description="The /control/runs endpoint is not available yet. Once the backend serves run artifacts, benchmark data will appear here."
-          />
-        </div>
+        <BackendNotice
+          title="Benchmark data is blocked on run artifact endpoints"
+          description="This comparison view is ready for real artifact summaries, but the current server does not expose the control-plane run endpoints it queries."
+          endpoints={[
+            "GET /control/runs",
+            "GET /control/runs/:runId/summary",
+          ]}
+        />
       ) : isLoading && summaries.length === 0 ? (
         <div className="tech-card overflow-hidden">
           <div className="p-6 space-y-3">
@@ -595,25 +605,17 @@ export function Benchmarks() {
       )}
 
       {/* Backend contract note */}
-      <section className="tech-card px-6 py-4">
-        <div className="flex items-start gap-3">
-          <Gear size={16} weight="duotone" className="text-muted mt-0.5 shrink-0" />
-          <div className="text-xs text-secondary leading-relaxed">
-            <strong className="text-ink">Backend contract:</strong> This
-            dashboard expects{" "}
-            <code className="font-mono text-orange bg-orange-1 px-1 py-0.5">
-              GET /control/runs
-            </code>{" "}
-            returning <code className="font-mono">RunListEntry[]</code> and{" "}
-            <code className="font-mono text-orange bg-orange-1 px-1 py-0.5">
-              GET /control/runs/:runId/summary
-            </code>{" "}
-            returning <code className="font-mono">RunSummary</code>. Additional
-            endpoints for manifest and day-level snapshots enable drill-down
-            features.
-          </div>
-        </div>
-      </section>
+      <BackendNotice
+        title="Expected backend contract"
+        description="Benchmarks aggregate run summaries and stay intentionally read-only until the backend publishes artifact metadata through the control surface."
+        endpoints={[
+          "GET /control/runs",
+          "GET /control/runs/:runId/summary",
+          "GET /control/runs/:runId/manifest",
+          "GET /control/runs/:runId/days",
+        ]}
+        compact
+      />
     </div>
   );
 }
@@ -643,10 +645,7 @@ function RunRow({
 }) {
   return (
     <>
-      <tr
-        className={`cursor-pointer transition-colors ${isExpanded ? "bg-orange-1/40" : ""}`}
-        onClick={onToggle}
-      >
+      <tr className={isExpanded ? "bg-orange-1/40" : ""}>
         {/* Rank */}
         <td className="text-center">
           {rank === 1 ? (
@@ -668,9 +667,12 @@ function RunRow({
 
         {/* Run ID */}
         <td>
-          <span className="font-mono text-xs text-ink font-medium">
+          <Link
+            to={`/runs/${encodeURIComponent(s.run_id)}`}
+            className="font-mono text-xs font-medium text-ink transition-colors hover:text-orange"
+          >
             {s.run_id}
-          </span>
+          </Link>
         </td>
 
         {/* Shop */}
@@ -693,7 +695,7 @@ function RunRow({
           <span
             className={`num text-sm font-bold ${rankClass(balanceRank) || "text-orange"}`}
           >
-            ${s.ending_state.available_balance.toFixed(2)}
+            {formatCurrency(s.ending_state.available_balance)}
           </span>
         </td>
 
@@ -710,8 +712,8 @@ function RunRow({
             ) : (
               <ArrowDown size={9} weight="bold" />
             )}
-            {delta >= 0 ? "+" : ""}
-            {delta.toFixed(2)}
+            {delta >= 0 ? "+" : "-"}
+            {Math.abs(delta).toFixed(2)}
           </span>
         </td>
 
@@ -747,11 +749,15 @@ function RunRow({
 
         {/* Expand indicator */}
         <td className="text-center">
-          <span
-            className={`inline-block transition-transform duration-200 text-muted ${isExpanded ? "rotate-180" : ""}`}
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={isExpanded}
+            aria-label={isExpanded ? `Collapse ${s.run_id}` : `Expand ${s.run_id}`}
+            className={`inline-block text-muted transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
           >
             <ArrowDown size={12} weight="bold" />
-          </span>
+          </button>
         </td>
       </tr>
 

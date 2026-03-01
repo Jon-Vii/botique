@@ -28,7 +28,7 @@ function NavItem({
       to={to}
       end={end}
       className={({ isActive }) =>
-        `flex items-center gap-2 px-3 py-1.5 text-[13px] font-medium transition-all duration-200 border ${
+        `flex items-center gap-2 border px-3 py-1.5 text-[13px] font-medium transition-[background-color,border-color,color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange focus-visible:ring-offset-2 focus-visible:ring-offset-cream ${
           isActive
             ? "border-orange/20 bg-orange-50 text-orange"
             : "border-transparent text-muted hover:text-ink hover:bg-warm-50"
@@ -44,6 +44,12 @@ function NavItem({
 export function Layout() {
   return (
     <div className="min-h-screen flex flex-col">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-6 focus:top-4 focus:z-[60] focus:rounded-[var(--radius-sm)] focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-ink focus:shadow-[var(--shadow-elevated)]"
+      >
+        Skip to content
+      </a>
       {/* Top bar */}
       <header className="sticky top-0 z-50 border-b border-rule bg-cream/85 backdrop-blur-xl">
         <div className="mx-auto max-w-[1400px] flex items-center gap-6 px-6 h-13">
@@ -81,7 +87,10 @@ export function Layout() {
       </header>
 
       {/* Content */}
-      <main className="flex-1 mx-auto max-w-[1400px] w-full px-6 py-8">
+      <main
+        id="main-content"
+        className="flex-1 mx-auto max-w-[1400px] w-full px-6 py-8"
+      >
         <Outlet />
       </main>
     </div>

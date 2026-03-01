@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useRef,
   useState,
@@ -13,44 +11,13 @@ import {
   Warning,
   XCircle,
 } from "@phosphor-icons/react";
-
-/* ── Types ──────────────────────────────────────────── */
-
-type ToastVariant = "default" | "success" | "warning" | "error";
-
-interface ToastAction {
-  label: string;
-  onClick: () => void;
-}
-
-interface ToastOptions {
-  message: string;
-  variant?: ToastVariant;
-  duration?: number;
-  action?: ToastAction;
-}
-
-interface ToastEntry extends Required<Omit<ToastOptions, "action">> {
-  id: number;
-  action?: ToastAction;
-  state: "entering" | "visible" | "exiting";
-}
-
-interface ToastContextValue {
-  toast: (options: ToastOptions) => void;
-}
-
-/* ── Context ────────────────────────────────────────── */
-
-const ToastContext = createContext<ToastContextValue | null>(null);
-
-export function useToast(): ToastContextValue {
-  const ctx = useContext(ToastContext);
-  if (!ctx) {
-    throw new Error("useToast must be used within a <ToastProvider>");
-  }
-  return ctx;
-}
+import {
+  ToastContext,
+  type ToastContextValue,
+  type ToastEntry,
+  type ToastOptions,
+  type ToastVariant,
+} from "./toast-context";
 
 /* ── Constants ──────────────────────────────────────── */
 
@@ -142,8 +109,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   /* Clean up timers on unmount */
   useEffect(() => {
+    const currentTimers = timers.current;
     return () => {
-      for (const t of timers.current.values()) clearTimeout(t);
+      for (const timer of currentTimers.values()) clearTimeout(timer);
     };
   }, []);
 

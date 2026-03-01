@@ -39,7 +39,9 @@ function JsonBlock({ data, label }: { data: unknown; label?: string }) {
       </pre>
       {truncated && (
         <button
+          type="button"
           onClick={() => setExpanded(!expanded)}
+          aria-expanded={expanded}
           className="text-[10px] font-mono text-orange hover:text-orange-dark mt-1 cursor-pointer"
         >
           {expanded ? "Collapse" : `Show all ${lines.length} lines`}
@@ -100,7 +102,9 @@ function TurnRow({ turn }: { turn: TurnRecord }) {
       <div className="border-t border-rule/50">
         {/* Arguments */}
         <button
+          type="button"
           onClick={() => setArgsOpen(!argsOpen)}
+          aria-expanded={argsOpen}
           className="flex items-center gap-2 w-full px-4 py-2 text-left cursor-pointer hover:bg-gray-1 transition-colors"
         >
           {argsOpen ? (
@@ -128,7 +132,9 @@ function TurnRow({ turn }: { turn: TurnRecord }) {
 
         {/* Result */}
         <button
+          type="button"
           onClick={() => setResultOpen(!resultOpen)}
+          aria-expanded={resultOpen}
           className="flex items-center gap-2 w-full px-4 py-2 text-left cursor-pointer hover:bg-gray-1 transition-colors border-t border-rule/30"
         >
           {resultOpen ? (

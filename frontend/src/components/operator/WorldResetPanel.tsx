@@ -27,6 +27,7 @@ export function WorldResetPanel({
       <div className="flex items-center gap-3">
         {/* Advance Day */}
         <button
+          type="button"
           onClick={() =>
             advanceDay.mutate(undefined, {
               onSuccess: () => onSuccess(`Day ${(simDay?.day ?? 0) + 1} advanced`),
@@ -34,7 +35,7 @@ export function WorldResetPanel({
             })
           }
           disabled={advanceDay.isPending}
-          className="flex items-center gap-2 px-4 py-2.5 bg-orange text-white text-sm font-semibold hover:shadow-[0_0_20px_rgba(255,112,0,0.3)] hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+          className="flex cursor-pointer items-center gap-2 bg-orange px-4 py-2.5 text-sm font-semibold text-white transition-[box-shadow,transform,opacity] hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(255,112,0,0.3)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {advanceDay.isPending ? (
             <LoadingDots size={4} color="bg-white" />
@@ -49,8 +50,9 @@ export function WorldResetPanel({
         {/* Reset */}
         {!confirmOpen ? (
           <button
+            type="button"
             onClick={() => setConfirmOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 border border-rose/20 bg-rose-dim text-rose text-sm font-semibold hover:bg-rose-subtle hover:border-rose/30 transition-all cursor-pointer"
+            className="flex cursor-pointer items-center gap-2 border border-rose/20 bg-rose-dim px-4 py-2.5 text-sm font-semibold text-rose transition-[background-color,border-color,color] hover:bg-rose-subtle hover:border-rose/30"
           >
             <ArrowCounterClockwise size={13} weight="bold" />
             Reset World
@@ -62,6 +64,7 @@ export function WorldResetPanel({
               This wipes all shops, listings, orders, and reviews.
             </span>
             <button
+              type="button"
               onClick={() => {
                 resetWorld.mutate(undefined, {
                   onSuccess: () => {
@@ -75,7 +78,7 @@ export function WorldResetPanel({
                 });
               }}
               disabled={resetWorld.isPending}
-              className="px-3 py-1 bg-rose text-white text-xs font-bold hover:brightness-110 active:scale-95 transition-all disabled:opacity-50 cursor-pointer shrink-0"
+              className="shrink-0 bg-rose px-3 py-1 text-xs font-bold text-white transition-[filter,transform,opacity] hover:brightness-110 active:scale-95 disabled:opacity-50"
             >
               {resetWorld.isPending ? (
                 <LoadingDots size={3} color="bg-white" />
@@ -84,6 +87,7 @@ export function WorldResetPanel({
               )}
             </button>
             <button
+              type="button"
               onClick={() => setConfirmOpen(false)}
               className="text-muted hover:text-ink text-xs font-medium cursor-pointer transition-colors"
             >

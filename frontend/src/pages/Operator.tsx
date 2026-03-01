@@ -1,5 +1,6 @@
 import { Sliders, Terminal } from "@phosphor-icons/react";
-import { useToast } from "../components/Toast";
+import { BackendNotice } from "../components/BackendNotice";
+import { useToast } from "../components/toast-context";
 import { SimStatusBar } from "../components/operator/SimStatusBar";
 import { WorldResetPanel } from "../components/operator/WorldResetPanel";
 import { RunLaunchPanel } from "../components/operator/RunLaunchPanel";
@@ -41,6 +42,16 @@ export function Operator() {
 
       {/* Current simulation state */}
       <SimStatusBar />
+
+      <BackendNotice
+        title="Operator launch actions are not wired to the backend yet"
+        description="World inspection and reset are live, but the UI launch controls still target control-plane endpoints that are not implemented in the current repo. Keep using the CLI for single runs and tournaments until those POST routes land."
+        endpoints={[
+          "POST /control/runs/launch",
+          "POST /control/tournaments/launch",
+        ]}
+        compact
+      />
 
       {/* World state controls (advance day + reset) */}
       <WorldResetPanel onSuccess={onSuccess} onError={onError} />
