@@ -23,7 +23,7 @@ These pieces already exist in the repo and are safe to build on.
 - separate `/control` surface for runtime resets, world-state inspection, tournament orchestration, and day advancement
 - seeded creative-goods marketplace with production-aware listings, orders, reviews, payments, taxonomy, and trend state
 - first-class deterministic scenario seeding with canonical `operate` and `bootstrap` setups carried in world state and control/runtime reset flows
-- System 2 simulation with inspectable day resolution for views, favorites, orders, delayed payments, delayed reviews, and production queue release
+- System 2 simulation with a research-grounded staged demand pipeline: taxonomy-level traffic generation, discoverability-weighted view allocation, per-view conversion into favorites and orders, and inventory/backlog consequences — calibrated against real Etsy marketplace data and EcoGym demand patterns
 - controlled-shop day advancement that disables free stocked auto-replenishment for agent-managed shops while leaving baseline NPC stocking behavior available for background market shops
 - transparent marketplace ranking based on relevance, listing quality, reviews, price fit, recency, and trend bonus
 - Python `seller_core` client/CLI for the portability-aware seller surface

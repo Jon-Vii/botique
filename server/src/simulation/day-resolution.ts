@@ -18,6 +18,7 @@ import {
   syncListingInventoryState
 } from "./production";
 import { addUtcDays, buildMarketSnapshot, buildTrendState, nextSimulationDay, normalizeWorldState } from "./state";
+import { isMarketplaceActiveListing } from "../listing-availability";
 import type {
   AdvanceDayResult,
   DayResolutionSummary,
@@ -40,6 +41,20 @@ const BUYER_NAMES = [
   "Zoe Carter"
 ];
 
+// ─── Demand Model Parameters ────────────────────────────────────────
+// Staged pipeline grounded in EcoGym (arxiv 2602.09514) demand model
+// and calibrated against real Etsy marketplace conversion data.
+// See docs/simulation-model.md for full rationale.
+
+const BASE_TAXONOMY_TRAFFIC = 15;
+const BASE_CONVERSION_RATE = 0.06;
+const BASE_FAVORITE_RATE = 0.12;
+const CLICK_ELASTICITY = 1.5;
+const QUALITY_EXPONENT = 1.0;
+const REPUTATION_EXPONENT = 0.8;
+const FRESHNESS_EXPONENT = 0.5;
+const TREND_FIT_EXPONENT = 0.7;
+
 function clone<T>(value: T): T {
   return structuredClone(value);
 }
@@ -58,6 +73,12 @@ function stableUnitInterval(seed: string): number {
   return ((hash >>> 0) % 10_000) / 10_000;
 }
 
+function stochasticRound(value: number, seed: string): number {
+  const floor = Math.floor(value);
+  const frac = value - floor;
+  return floor + (stableUnitInterval(seed) < frac ? 1 : 0);
+}
+
 function differenceInDays(start: string, end: string): number {
   return Math.max(0, Math.round((Date.parse(end) - Date.parse(start)) / 86_400_000));
 }
@@ -72,6 +93,8 @@ function createResolutionMap(shops: StoredShop[]): Map<number, ShopDayResolution
       shop.shop_id,
       {
         shop_id: shop.shop_id,
+        total_views: 0,
+        total_favorites: 0,
         orders_created: 0,
         stocked_units_sold: 0,
         made_to_order_units_sold: 0,
@@ -114,33 +137,97 @@ function getDemandMultiplier(listing: Listing, trendState: TrendState): number {
   return multiplier;
 }
 
-function computeSaleProbability(
+// ─── Stage 1: Taxonomy-Level Daily Traffic ──────────────────────────
+
+function taxonomyDailyTraffic(
+  taxonomyId: number,
+  currentDate: string,
+  trendState: TrendState,
+  activeListingCount: number
+): number {
+  const listingScale = 1 + 0.3 * Math.log(1 + activeListingCount);
+
+  let trendMultiplier = trendState.baseline_multiplier;
+  for (const trend of trendState.active_trends) {
+    if (trend.taxonomy_id === taxonomyId) {
+      trendMultiplier = Math.max(trendMultiplier, trend.demand_multiplier);
+    }
+  }
+
+  const noise = 0.85 + 0.30 * stableUnitInterval(`traffic:${currentDate}:${taxonomyId}`);
+
+  return Math.max(1, Math.round(BASE_TAXONOMY_TRAFFIC * listingScale * trendMultiplier * noise));
+}
+
+// ─── Stage 2: Discoverability Score ─────────────────────────────────
+
+function computeDiscoverability(
+  listing: Listing,
+  trendState: TrendState,
+  taxonomyAveragePrice: number,
+  reviewAverage: number,
+  currentDate: string
+): number {
+  const quality = Math.max(0.1, computeListingQuality(listing) / 9);
+  const reputation = Math.max(0.1, reviewAverage / 5);
+
+  const listingAgeDays = differenceInDays(listing.created_at, currentDate);
+  const freshness = Math.max(0.1, 1 - listingAgeDays / 30);
+
+  const trendFit = Math.max(0.1, getDemandMultiplier(listing, trendState));
+
+  const priceRatio = taxonomyAveragePrice > 0
+    ? (listing.price - taxonomyAveragePrice) / taxonomyAveragePrice
+    : 0;
+  const priceClickFit = clamp(1 - CLICK_ELASTICITY * Math.max(0, priceRatio), 0.3, 1.15);
+
+  const exposure =
+    Math.pow(quality, QUALITY_EXPONENT) *
+    Math.pow(reputation, REPUTATION_EXPONENT) *
+    Math.pow(freshness, FRESHNESS_EXPONENT) *
+    Math.pow(trendFit, TREND_FIT_EXPONENT);
+
+  return exposure * priceClickFit;
+}
+
+// ─── Stage 3: Per-View Conversion Rates ─────────────────────────────
+
+function computeOrderConversionRate(
   listing: Listing,
   shop: StoredShop,
   trendState: TrendState,
   taxonomyAveragePrice: number,
   reviewAverage: number
 ): number {
-  if (isStockedListing(listing) && listing.quantity_on_hand <= 0) {
-    return 0;
-  }
+  const qualityBonus = (computeListingQuality(listing) / 9) * 0.04;
+  const reputationBonus = clamp((reviewAverage - 3) / 2, 0, 1) * 0.04;
 
-  const demandMultiplier = getDemandMultiplier(listing, trendState);
-  const qualityFactor = 0.8 + computeListingQuality(listing) / 10;
-  const priceFactor =
-    taxonomyAveragePrice <= 0
-      ? 1
-      : clamp(1.15 - Math.max(0, listing.price - taxonomyAveragePrice) / taxonomyAveragePrice, 0.7, 1.2);
-  const reviewFactor = clamp(0.8 + reviewAverage / 10, 0.8, 1.3);
-  const fulfillmentFactor = isStockedListing(listing)
-    ? 1
-    : 1 /
-      (1 +
-        (listing.backlog_units * listing.capacity_units_per_item) /
-          Math.max(shop.production_capacity_per_day, 1) +
-        Math.max(0, listing.lead_time_days - 1) * 0.35);
+  const priceRatio = taxonomyAveragePrice > 0
+    ? (listing.price - taxonomyAveragePrice) / taxonomyAveragePrice
+    : 0;
+  const priceTerm = clamp(-2.0 * priceRatio * 0.04, -0.04, 0.03);
 
-  return clamp(0.18 * demandMultiplier * qualityFactor * priceFactor * reviewFactor * fulfillmentFactor, 0, 0.92);
+  const trendBonus = Math.max(0, (getDemandMultiplier(listing, trendState) - 1) / 0.3) * 0.02;
+
+  const fulfillmentPenalty = isStockedListing(listing) ? 0 :
+    Math.min(0.03, (listing.backlog_units * listing.capacity_units_per_item) /
+      Math.max(shop.production_capacity_per_day, 1) * 0.015);
+
+  return clamp(
+    BASE_CONVERSION_RATE + qualityBonus + reputationBonus + priceTerm + trendBonus - fulfillmentPenalty,
+    0.02,
+    0.15
+  );
+}
+
+function computeFavoriteRate(
+  listing: Listing,
+  trendState: TrendState
+): number {
+  const qualityBonus = (computeListingQuality(listing) / 9) * 0.06;
+  const trendBonus = Math.max(0, (getDemandMultiplier(listing, trendState) - 1) / 0.3) * 0.04;
+
+  return clamp(BASE_FAVORITE_RATE + qualityBonus + trendBonus, 0.05, 0.25);
 }
 
 function buildBuyerName(seed: string): string {
@@ -334,92 +421,132 @@ function resolveMarketSales(
   ]);
   let jobSequence = world.marketplace.shops.reduce((sum, shop) => sum + shop.production_queue.length, 0);
 
-  for (const listing of world.marketplace.listings.filter((item) => item.state === "active")) {
-    const shop = world.marketplace.shops.find((item) => item.shop_id === listing.shop_id);
-    if (!shop) {
-      continue;
-    }
+  // Group marketplace-active listings by taxonomy
+  const activeListings = world.marketplace.listings.filter(isMarketplaceActiveListing);
+  const listingsByTaxonomy = new Map<number, Listing[]>();
+  for (const listing of activeListings) {
+    const group = listingsByTaxonomy.get(listing.taxonomy_id) ?? [];
+    group.push(listing);
+    listingsByTaxonomy.set(listing.taxonomy_id, group);
+  }
 
-    const taxonomyAveragePrice =
-      preSalesSnapshot.taxonomy.find((item) => item.taxonomy_id === listing.taxonomy_id)?.average_price ?? listing.price;
-    const reviewAverage = getShopReviewAverage(world, shop.shop_id);
-    const probability = computeSaleProbability(listing, shop, trendState, taxonomyAveragePrice, reviewAverage);
-    const shouldSell = stableUnitInterval(`sale:${currentDate}:${listing.listing_id}`) < probability;
+  for (const [taxonomyId, taxonomyListings] of listingsByTaxonomy) {
+    // Stage 1: Generate buyer session traffic for this taxonomy
+    const traffic = taxonomyDailyTraffic(taxonomyId, currentDate, trendState, taxonomyListings.length);
+    const taxonomyAvgPrice =
+      preSalesSnapshot.taxonomy.find((item) => item.taxonomy_id === taxonomyId)?.average_price ?? 0;
 
-    if (!shouldSell) {
-      continue;
-    }
+    // Stage 2: Compute discoverability and allocate views by share-of-voice
+    const listingScores = taxonomyListings.map((listing) => {
+      const shop = world.marketplace.shops.find((item) => item.shop_id === listing.shop_id)!;
+      const reviewAvg = getShopReviewAverage(world, shop.shop_id);
+      const score = computeDiscoverability(listing, trendState, taxonomyAvgPrice, reviewAvg, currentDate);
+      return { listing, shop, reviewAvg, score };
+    });
+    const totalScore = listingScores.reduce((sum, item) => sum + item.score, 0);
 
-    const buyerName = buildBuyerName(`buyer:${currentDate}:${listing.listing_id}`);
-    const order: Order = {
-      receipt_id: orderId,
-      shop_id: shop.shop_id,
-      buyer_name: buyerName,
-      status: isStockedListing(listing) ? "fulfilled" : "paid",
-      was_paid: true,
-      was_shipped: false,
-      was_delivered: isStockedListing(listing),
-      total_price: listing.price,
-      currency_code: listing.currency_code,
-      line_items: [
-        {
-          listing_id: listing.listing_id,
-          title: listing.title,
-          quantity: 1,
-          price: listing.price
-        }
-      ],
-      created_at: currentDate,
-      updated_at: currentDate
-    };
-    world.marketplace.orders.push(order);
-
-    const payment: Payment = {
-      payment_id: paymentId,
-      shop_id: shop.shop_id,
-      receipt_id: orderId,
-      amount: listing.price,
-      currency_code: listing.currency_code,
-      status: "pending",
-      available_at: addUtcDays(currentDate, 1),
-      posted_at: currentDate
-    };
-    world.marketplace.payments.push(payment);
-
-    const resolution = resolutions.get(shop.shop_id)!;
-    resolution.orders_created += 1;
-
-    if (isStockedListing(listing)) {
-      listing.quantity_on_hand = Math.max(0, listing.quantity_on_hand - 1);
-      listing.updated_at = currentDate;
-      Object.assign(listing, syncListingInventoryState(listing));
-      resolution.stocked_units_sold += 1;
-
-      const rating = buildReviewRating(listing, currentDate, currentDate);
-      pendingReviews.push({
-        queue_id: `review-${orderId}`,
-        review_id: reviewId,
-        shop_id: shop.shop_id,
-        receipt_id: orderId,
-        listing_id: listing.listing_id,
-        buyer_name: buyerName,
-        release_at: addUtcDays(currentDate, 2),
-        rating,
-        review: buildReviewText(listing, rating)
-      });
-      reviewId += 1;
-    } else {
-      listing.backlog_units += 1;
-      listing.updated_at = currentDate;
-      resolution.made_to_order_units_sold += 1;
-      jobSequence += 1;
-      shop.production_queue.unshift(
-        createProductionQueueJob(listing, currentDate, jobSequence, "customer_order", orderId)
+    for (const { listing, shop, reviewAvg, score } of listingScores) {
+      const viewShare = totalScore > 0 ? score / totalScore : 1 / taxonomyListings.length;
+      const views = stochasticRound(
+        traffic * viewShare,
+        `views:${currentDate}:${listing.listing_id}`
       );
-    }
 
-    orderId += 1;
-    paymentId += 1;
+      listing.views += views;
+      const resolution = resolutions.get(shop.shop_id)!;
+      resolution.total_views += views;
+
+      // Stage 3: Convert each view independently into favorites and orders
+      const favoriteRate = computeFavoriteRate(listing, trendState);
+      const orderRate = computeOrderConversionRate(listing, shop, trendState, taxonomyAvgPrice, reviewAvg);
+
+      for (let viewIdx = 0; viewIdx < views; viewIdx += 1) {
+        // Favorite check (independent of stock availability)
+        if (stableUnitInterval(`fav:${currentDate}:${listing.listing_id}:${viewIdx}`) < favoriteRate) {
+          listing.favorites += 1;
+          resolution.total_favorites += 1;
+        }
+
+        // Order check — stocked listings stop selling at zero inventory
+        if (isStockedListing(listing) && listing.quantity_on_hand <= 0) {
+          continue;
+        }
+
+        if (stableUnitInterval(`order:${currentDate}:${listing.listing_id}:${viewIdx}`) >= orderRate) {
+          continue;
+        }
+
+        const buyerName = buildBuyerName(`buyer:${currentDate}:${listing.listing_id}:${viewIdx}`);
+        const order: Order = {
+          receipt_id: orderId,
+          shop_id: shop.shop_id,
+          buyer_name: buyerName,
+          status: isStockedListing(listing) ? "fulfilled" : "paid",
+          was_paid: true,
+          was_shipped: false,
+          was_delivered: isStockedListing(listing),
+          total_price: listing.price,
+          currency_code: listing.currency_code,
+          line_items: [
+            {
+              listing_id: listing.listing_id,
+              title: listing.title,
+              quantity: 1,
+              price: listing.price
+            }
+          ],
+          created_at: currentDate,
+          updated_at: currentDate
+        };
+        world.marketplace.orders.push(order);
+
+        const payment: Payment = {
+          payment_id: paymentId,
+          shop_id: shop.shop_id,
+          receipt_id: orderId,
+          amount: listing.price,
+          currency_code: listing.currency_code,
+          status: "pending",
+          available_at: addUtcDays(currentDate, 1),
+          posted_at: currentDate
+        };
+        world.marketplace.payments.push(payment);
+
+        resolution.orders_created += 1;
+
+        if (isStockedListing(listing)) {
+          listing.quantity_on_hand = Math.max(0, listing.quantity_on_hand - 1);
+          listing.updated_at = currentDate;
+          Object.assign(listing, syncListingInventoryState(listing));
+          resolution.stocked_units_sold += 1;
+
+          const rating = buildReviewRating(listing, currentDate, currentDate);
+          pendingReviews.push({
+            queue_id: `review-${orderId}`,
+            review_id: reviewId,
+            shop_id: shop.shop_id,
+            receipt_id: orderId,
+            listing_id: listing.listing_id,
+            buyer_name: buyerName,
+            release_at: addUtcDays(currentDate, 2),
+            rating,
+            review: buildReviewText(listing, rating)
+          });
+          reviewId += 1;
+        } else {
+          listing.backlog_units += 1;
+          listing.updated_at = currentDate;
+          resolution.made_to_order_units_sold += 1;
+          jobSequence += 1;
+          shop.production_queue.unshift(
+            createProductionQueueJob(listing, currentDate, jobSequence, "customer_order", orderId)
+          );
+        }
+
+        orderId += 1;
+        paymentId += 1;
+      }
+    }
   }
 }
 
@@ -498,7 +625,7 @@ function buildStepResult(world: StoredWorldState, previousDayDate: string, nextD
     },
     {
       name: "resolve_market_sales",
-      description: "Generate formula-driven daily purchases and route them into stock depletion or backlog creation by fulfillment mode."
+      description: "Generate taxonomy-level buyer traffic, distribute views by discoverability share, convert views into favorites and orders, and route orders into stock depletion or backlog creation."
     },
     {
       name: "allocate_production",

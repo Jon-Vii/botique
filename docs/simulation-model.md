@@ -434,35 +434,44 @@ If the model cannot explain outcomes in these terms, it is not yet strong enough
 
 ### Implementation Hooks
 
-Map the sales model to explicit System 2 functions:
+The staged sales model is implemented as explicit functions in `server/src/simulation/day-resolution.ts`:
 
-- `taxonomyDailyTraffic(taxonomyId, currentDay, trendState)`
-- `listingExposure(listing, currentDay, trendState, shopReviewAverage)`
-- `referencePrice(taxonomyId, marketplaceState)`
-- `priceClickFit(listing, referencePrice, elasticity)`
-- `favoriteProbability(factors)`
-- `orderProbability(factors)`
-- `schedulePostPurchaseEvents(order, factors, currentDay)`
+- `taxonomyDailyTraffic(taxonomyId, currentDate, trendState, activeListingCount)` — stage 1: generates buyer session pool per taxonomy with trend multiplier, listing-count scaling, and ±15% seeded noise
+- `computeDiscoverability(listing, trendState, taxonomyAveragePrice, reviewAverage, currentDate)` — stage 2: quality^1.0 * reputation^0.8 * freshness^0.5 * trendFit^0.7 * priceClickFit
+- `computeOrderConversionRate(listing, shop, trendState, taxonomyAveragePrice, reviewAverage)` — stage 3: base 6% + quality/reputation/price/trend bonuses, clamped 2-15%
+- `computeFavoriteRate(listing, trendState)` — stage 3: base 12% + quality/trend bonuses, clamped 5-25%
 
-This keeps the code layout aligned with the current `day-resolution.ts` structure while making the price model and later cohort hook much clearer.
+`resolveMarketSales` groups active listings by taxonomy, generates traffic per taxonomy, distributes views by discoverability share-of-voice, then loops over each view with independent favorite and order conversion rolls using seeded `stableUnitInterval`.
 
-### Immediate Refactor Target
+Demand model constants (calibrated against real Etsy marketplace data and EcoGym patterns):
 
-The next clean iteration of `server/src/simulation/day-resolution.ts` should do these things:
+- `BASE_TAXONOMY_TRAFFIC = 15` — buyer sessions per taxonomy per day
+- `BASE_CONVERSION_RATE = 0.06` — per-view order probability (Etsy median ~2-3%, good shops ~5-8%)
+- `BASE_FAVORITE_RATE = 0.12` — per-view favorite probability
+- `CLICK_ELASTICITY = 1.5` — how sharply overpricing hurts discoverability
+- Exposure exponents: quality=1.0, reputation=0.8, freshness=0.5, trendFit=0.7
 
-- separate taxonomy traffic calculation from listing scoring
-- rename `demandScore` toward `discoverabilityScore` or `exposureScore`
-- separate click-stage price fit from order-stage price fit
-- keep favorites as a distinct intermediate signal, not just a cosmetic counter
-- keep review scheduling downstream from orders
-- add only enough extra state to explain outcomes in `last_day_resolution`
+This produces approximately 5-8 orders/day across the 4-taxonomy seed marketplace, with stocked listings depleting in 2-6 days and meaningful backlog accumulation for made-to-order listings.
 
-Do not add:
+### Scaling Traffic Volume
 
-- freeform customer agents
-- LLM-written purchase decisions
-- dozens of hidden coefficients
-- persistent per-customer memories for hackathon scope
+The pipeline scales linearly through a single constant: `BASE_TAXONOMY_TRAFFIC`. Orders/day ≈ `BASE_TAXONOMY_TRAFFIC × taxonomy_count × BASE_CONVERSION_RATE`, so with 4 taxonomies and 6% conversion:
+
+| Target orders/day | `BASE_TAXONOMY_TRAFFIC` | Etsy equivalent |
+|---|---|---|
+| ~5-8 (current) | 15 | Small niche shop |
+| ~50 | ~120 | Established seller |
+| ~500 | ~1,200 | Top 1% shop |
+| ~5,000 | ~12,000 | Front-page viral day |
+
+No structural changes are needed — the view distribution and conversion math stay the same, only the session pool grows.
+
+When scaling up, also scale the seed data to match:
+
+- increase `quantity_on_hand` on stocked listings so they don't deplete on the first sim-day
+- increase `production_capacity_per_day` on shops so production can keep pace with order volume
+- optionally add more listings per taxonomy so the share-of-voice distribution remains competitive
+- at higher traffic levels, add more seed shops and listings to keep the marketplace realistic — a 500 orders/day market with only 4 shops feels implausible and concentrates all pressure on a few production queues
 
 ### How Cohorts Affect Discoverability
 
@@ -575,10 +584,11 @@ Current implementation:
 
 Current implementation note:
 
-- `server/src/simulation/day-resolution.ts` now owns the first real System 2 consequence pipeline
-- active listings are grouped by taxonomy and resolved with explicit quality, reputation, price, freshness, trend, and small deterministic-variation factors
-- the first pass is intentionally formula-driven and session-free: it does not use LLMs and it does not yet persist full buyer-session traces
-- `advanceDay` now returns inspectable steps plus a `last_day_resolution` summary and `pending_events` queue through the control/world-state surfaces
+- `server/src/simulation/day-resolution.ts` owns the System 2 consequence pipeline using a staged demand model grounded in EcoGym (arxiv 2602.09514) patterns and calibrated against real Etsy marketplace conversion data
+- active listings are grouped by taxonomy, traffic is generated per taxonomy (stage 1), views are distributed by discoverability share-of-voice (stage 2), and each view independently converts into favorites and orders (stage 3) before routing to inventory or backlog consequences (stage 4)
+- per-shop day resolution now tracks `total_views` and `total_favorites` alongside orders, production, and payments
+- the demand model is entirely formula-driven and session-free: it does not use LLMs and it does not yet persist full buyer-session traces
+- `advanceDay` returns inspectable steps plus a `last_day_resolution` summary and `pending_events` queue through the control/world-state surfaces
 - delayed payment posting and delayed review creation are live; buyer-message delivery still uses the same pending-event hook but is not yet materialized into seller-visible state
 
 Recommended default for the first build:

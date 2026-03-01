@@ -69,6 +69,8 @@ export type PendingReview = {
 
 export type ShopDayResolution = {
   shop_id: number;
+  total_views: number;
+  total_favorites: number;
   orders_created: number;
   stocked_units_sold: number;
   made_to_order_units_sold: number;
