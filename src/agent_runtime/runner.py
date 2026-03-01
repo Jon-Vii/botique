@@ -19,10 +19,10 @@ from .loop import DailyLoopConfig, DayRunResult, SingleShopDailyLoop
 from .memory import (
     AgentMemoryStore,
     InMemoryAgentMemory,
-    NoteRecord,
     ReminderRecord,
-    ScratchpadRecord,
     ShopId,
+    WorkspaceEntryRecord,
+    WorkspaceRecord,
 )
 from .providers import (
     MistralProviderConfig,
@@ -38,11 +38,12 @@ from .providers import (
 from .serialization import jsonify
 from .tools import build_owner_agent_tool_registry
 
-END_OF_DAY_NOTE_TOOL_NAME = "save_end_of_day_note"
-END_OF_DAY_NOTE_SYSTEM_PROMPT = (
-    "You are closing out a Botique shop workday. Write one note for your future self "
-    "about anything from today worth remembering. This note is your own working memory "
-    "for later days. No user is waiting for you. Do not explain the note; just save it."
+END_OF_DAY_WORKSPACE_ENTRY_TOOL_NAME = "save_end_of_day_workspace_entry"
+END_OF_DAY_WORKSPACE_ENTRY_SYSTEM_PROMPT = (
+    "You are closing out a Botique shop workday. Write one workspace-history entry for "
+    "your future self about anything from today worth remembering. This entry is part of "
+    "your own workspace system for later days. No user is waiting for you. Do not "
+    "explain the entry; just save it."
 )
 
 
@@ -71,10 +72,10 @@ class MultiDayRunResult:
     shop_id: ShopId
     days: tuple[LiveDayRunResult, ...]
     events: tuple[RuntimeEvent, ...]
-    notes: tuple[NoteRecord, ...]
+    workspace_entries: tuple[WorkspaceEntryRecord, ...]
     reminders: tuple[ReminderRecord, ...]
-    scratchpad: ScratchpadRecord | None = None
-    scratchpad_history: tuple[ScratchpadRecord, ...] = ()
+    workspace: WorkspaceRecord | None = None
+    workspace_revisions: tuple[WorkspaceRecord, ...] = ()
 
 
 class OwnerAgentRunner:
@@ -111,7 +112,10 @@ class OwnerAgentRunner:
             config=DailyLoopConfig(turns_per_day=self.config.turns_per_day),
         )
         day_result = loop.run_day(briefing=briefing, policy=self.policy)
-        return self._write_end_of_day_note(briefing=briefing, day_result=day_result)
+        return self._write_end_of_day_workspace_entry(
+            briefing=briefing,
+            day_result=day_result,
+        )
 
     def build_live_briefing(
         self,
@@ -239,10 +243,12 @@ class OwnerAgentRunner:
             shop_id=shop_id,
             days=tuple(live_days),
             events=tuple(self.event_log.list_events(run_id=active_run_id, shop_id=shop_id)),
-            notes=tuple(self.memory.list_notes(shop_id=shop_id)),
+            workspace_entries=tuple(self.memory.list_workspace_entries(shop_id=shop_id)),
             reminders=tuple(self.memory.list_reminders(shop_id=shop_id)),
-            scratchpad=self.memory.read_scratchpad(shop_id=shop_id),
-            scratchpad_history=tuple(self.memory.list_scratchpad_revisions(shop_id=shop_id)),
+            workspace=self.memory.read_workspace(shop_id=shop_id),
+            workspace_revisions=tuple(
+                self.memory.list_workspace_revisions(shop_id=shop_id)
+            ),
         )
 
     def _live_briefings(self) -> LiveMorningBriefingBuilder:
@@ -259,7 +265,7 @@ class OwnerAgentRunner:
             )
         return self.control_client
 
-    def _write_end_of_day_note(
+    def _write_end_of_day_workspace_entry(
         self,
         *,
         briefing: MorningBriefing,
@@ -269,11 +275,11 @@ class OwnerAgentRunner:
             messages=(
                 ProviderMessage(
                     role=ProviderMessageRole.SYSTEM,
-                    content=END_OF_DAY_NOTE_SYSTEM_PROMPT,
+                    content=END_OF_DAY_WORKSPACE_ENTRY_SYSTEM_PROMPT,
                 ),
                 ProviderMessage(
                     role=ProviderMessageRole.USER,
-                    content=self._build_end_of_day_note_message(
+                    content=self._build_end_of_day_workspace_entry_message(
                         briefing=briefing,
                         day_result=day_result,
                     ),
@@ -281,21 +287,22 @@ class OwnerAgentRunner:
             ),
             tools=(
                 ProviderToolDefinition(
-                    name=END_OF_DAY_NOTE_TOOL_NAME,
-                    description="Save one note for later use after the day is over.",
+                    name=END_OF_DAY_WORKSPACE_ENTRY_TOOL_NAME,
+                    description="Save one workspace-history entry for later use after the day is over.",
                     parameters_schema={
                         "type": "object",
                         "properties": {
-                            "title": {
+                            "content": {
                                 "type": "string",
-                                "description": "Optional note title.",
+                                "description": "The workspace-history entry content to save for later days.",
                             },
-                            "body": {
-                                "type": "string",
-                                "description": "The note content to save for later days.",
+                            "tags": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Optional tags for the entry.",
                             },
                         },
-                        "required": ["body"],
+                        "required": ["content"],
                         "additionalProperties": False,
                     },
                 ),
@@ -304,26 +311,26 @@ class OwnerAgentRunner:
             allow_parallel_tool_calls=False,
         )
 
-        title, body = self._extract_end_of_day_note(response)
-        note = self.memory.write_note(
+        content, tags = self._extract_end_of_day_workspace_entry(response)
+        entry = self.memory.add_workspace_entry(
             shop_id=briefing.shop_id,
-            title=title or f"Day {briefing.day} note",
-            body=body,
+            content=content,
+            tags=tags,
             day=briefing.day,
         )
         self.event_log.append(
-            kind=EventKind.NOTE_WRITTEN,
+            kind=EventKind.WORKSPACE_ENTRY_ADDED,
             run_id=day_result.run_id,
             shop_id=briefing.shop_id,
             day=briefing.day,
             payload={
                 "source": "end_of_day_reflection",
-                "result": note.to_payload(),
+                "result": entry.to_payload(),
             },
         )
         return replace(
             day_result,
-            day_note=note,
+            day_workspace_entry=entry,
             events=tuple(
                 self.event_log.list_events(
                     run_id=day_result.run_id,
@@ -334,29 +341,37 @@ class OwnerAgentRunner:
         )
 
     @staticmethod
-    def _extract_end_of_day_note(response: object) -> tuple[str | None, str]:
+    def _extract_end_of_day_workspace_entry(
+        response: object,
+    ) -> tuple[str, tuple[str, ...]]:
         if hasattr(response, "tool_calls"):
             tool_calls = getattr(response, "tool_calls")
             if tool_calls:
                 tool_call = tool_calls[0]
-                if tool_call.name != END_OF_DAY_NOTE_TOOL_NAME:
+                if tool_call.name != END_OF_DAY_WORKSPACE_ENTRY_TOOL_NAME:
                     raise ProviderError(
-                        f"Expected {END_OF_DAY_NOTE_TOOL_NAME}, received {tool_call.name!r}."
+                        f"Expected {END_OF_DAY_WORKSPACE_ENTRY_TOOL_NAME}, received {tool_call.name!r}."
                     )
-                title = tool_call.arguments.get("title")
-                body = tool_call.arguments.get("body")
-                if isinstance(body, str) and body.strip():
-                    resolved_title = title if isinstance(title, str) and title.strip() else None
-                    return resolved_title, body.strip()
-                raise ProviderError("End-of-day note body must be a non-empty string.")
+                content = tool_call.arguments.get("content")
+                raw_tags = tool_call.arguments.get("tags", ())
+                if isinstance(content, str) and content.strip():
+                    tags = (
+                        tuple(tag for tag in raw_tags if isinstance(tag, str))
+                        if isinstance(raw_tags, (list, tuple))
+                        else ()
+                    )
+                    return content.strip(), tags
+                raise ProviderError(
+                    "End-of-day workspace entry content must be a non-empty string."
+                )
 
         content = getattr(response, "content", None)
         if isinstance(content, str) and content.strip():
-            return None, content.strip()
-        raise ProviderError("Provider returned no usable end-of-day note.")
+            return content.strip(), ()
+        raise ProviderError("Provider returned no usable end-of-day workspace entry.")
 
     @staticmethod
-    def _build_end_of_day_note_message(
+    def _build_end_of_day_workspace_entry_message(
         *,
         briefing: MorningBriefing,
         day_result: DayRunResult,
@@ -380,7 +395,7 @@ class OwnerAgentRunner:
             "work_done_today": turns_payload,
         }
         return (
-            "Write one note for later days based on today's seller-visible state and work.\n\n"
+            "Write one workspace-history entry for later days based on today's seller-visible state and work.\n\n"
             "```json\n"
             f"{json.dumps(payload, indent=2)}\n"
             "```"

@@ -30,10 +30,10 @@ from .loop import (
 )
 from .memory import (
     InMemoryAgentMemory,
-    NoteRecord,
     ReminderRecord,
     ReminderStatus,
-    ScratchpadRecord,
+    WorkspaceEntryRecord,
+    WorkspaceRecord,
 )
 from .providers import (
     DEFAULT_SYSTEM_PROMPT,
@@ -99,7 +99,6 @@ __all__ = [
     "MorningBriefingBuilder",
     "OwnerAgentRunner",
     "OwnerAgentRunnerConfig",
-    "NoteRecord",
     "ObjectiveProgress",
     "OrderSummary",
     "ProviderError",
@@ -113,7 +112,6 @@ __all__ = [
     "ReminderStatus",
     "ReviewSummary",
     "RuntimeEvent",
-    "ScratchpadRecord",
     "ShopStateSnapshot",
     "SingleShopDailyLoop",
     "ToolCallingAgentPolicy",
@@ -124,6 +122,8 @@ __all__ = [
     "ToolNotFoundError",
     "ToolSurface",
     "TurnRecord",
+    "WorkspaceEntryRecord",
+    "WorkspaceRecord",
     "WorkSessionState",
     "DEFAULT_SYSTEM_PROMPT",
     "END_DAY_TOOL_NAME",

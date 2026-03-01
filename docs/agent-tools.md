@@ -114,10 +114,10 @@ Direct seller tools:
 
 Botique support tools still remain:
 
-- `write_note`
-- `read_notes`
-- `read_scratchpad`
-- `update_scratchpad`
+- `read_workspace`
+- `update_workspace`
+- `add_workspace_entry`
+- `read_workspace_entries`
 - `set_reminder`
 - `complete_reminder`
 
@@ -165,24 +165,35 @@ Boundary rules:
 
 ## Memory Tools
 
-Botique now has three explicit memory primitives:
+Botique now exposes one coherent workspace system with three underlying semantics:
 
-- notes: append-only journal/history
-- reminders: scheduled resurfacing
-- scratchpad: mutable working memory
+- `workspace`: one mutable current text block per shop/run
+- `workspace-history entries`: append-only journal/log items
+- `reminders`: scheduled resurfacing
 
-The scratchpad is intentionally freeform:
+Default owner-agent memory tools:
 
-- it is one persistent workspace per shop/run
-- the agent can use it for plans, hypotheses, experiments, open questions, or anything else useful
-- `update_scratchpad` replaces the current contents, so the agent can rewrite or clear it without needing prescriptive add/remove operations
-- scratchpad history should remain inspectable in run artifacts for operator analysis
+- `read_workspace`
+- `update_workspace`
+- `add_workspace_entry`
+- `read_workspace_entries`
+- `set_reminder`
+- `complete_reminder`
+
+Workspace rules:
+
+- the workspace is intentionally freeform and model-authored
+- `update_workspace` replaces the full current workspace text, including clearing it with an empty string
+- `add_workspace_entry` appends one inspectable workspace-history entry without rewriting prior entries
+- `read_workspace_entries` stays simple and bounded with `limit`, optional `tag`, and optional `since_day`
+- reminders remain push-style resurfacing rather than hidden retrieval
 
 Boundary rules:
 
-- do not auto-copy raw external content or tool payloads into the scratchpad
-- do not auto-inject the full scratchpad into every morning briefing
-- keep scratchpad use optional so the benchmark still measures whether the model discovers and maintains useful working memory on its own
+- do not auto-copy raw external content or tool payloads into the workspace
+- do inject the current workspace text, due reminders, and only a small recent entry slice into the morning briefing
+- do not inject the full workspace-history every morning
+- keep the workspace seller-visible and inspectable in artifacts
 
 ## Tools Not Exposed By Default
 
@@ -307,7 +318,7 @@ Botique-only seller extensions:
 
 - production queue inspection
 - production scheduling
-- notes and reminders
+- workspace and reminders
 - trend summaries or other simulation-rich seller aids
 
 Not seller-facing:

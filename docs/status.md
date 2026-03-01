@@ -1,6 +1,6 @@
 # Botique Status
 
-Last updated: `2026-02-28`
+Last updated: `2026-03-01`
 
 ## Purpose
 
@@ -29,7 +29,7 @@ These pieces already exist in the repo and are safe to build on.
 - Python single-shop agent runtime with live morning briefing generation
 - one-tool-per-turn agent loop with bounded inspection, a forced act-or-`no_action` decision, and automatic day settlement
 - phase-aware prompt/tool exposure that summarizes prior tool results in-model while keeping full raw payloads in artifacts
-- simple Botique memory tools for notes, reminders, and a mutable scratchpad
+- unified owner-agent workspace memory with mutable current workspace text, append-only workspace-history entries, and reminders
 - Mistral provider wiring for tool-calling runs
 - multi-day runtime path that can build briefings from live Botique state, advance the simulation between days, and persist artifact-rich reference-run bundles for inspection
 
@@ -53,7 +53,7 @@ Near-term work that should most improve the first end-to-end run.
 - decide the first production/capacity abstraction and which shop archetypes belong in the seeded world
 - migrate the seed taxonomy and marketplace examples away from digital-first products if the scope pivot holds
 - improve the morning briefing so it highlights opportunities, risks, and strongest/weakest listing signals
-- decide whether and how simple note/reminder reflection should fit back into the v1 runtime without becoming the main action
+- tune how the unified workspace and reminders support the v1 runtime without becoming the main action
 - tune the first consequence-producing day pipeline against multi-day traces
 - decide whether the next demand step should be explicit cohort sessions or a richer aggregate demand model
 - add delayed customer-message delivery on top of the existing pending-event queue if it materially improves the demo
