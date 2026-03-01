@@ -13,8 +13,8 @@ const PRESET_ENTRANTS = [
   { entrant_id: "mistral-small", display_name: "Mistral Small", provider: "mistral", model: "mistral-small-latest" },
   { entrant_id: "magistral-medium", display_name: "Magistral Medium", provider: "mistral", model: "magistral-medium-latest" },
   { entrant_id: "magistral-small", display_name: "Magistral Small", provider: "mistral", model: "magistral-small-latest" },
-  { entrant_id: "ministral-14b", display_name: "Ministral 14B", provider: "mistral", model: "ministral-3-14b-25-12" },
-  { entrant_id: "ministral-8b", display_name: "Ministral 8B", provider: "mistral", model: "ministral-3-8b-25-12" },
+  { entrant_id: "ministral-14b", display_name: "Ministral 14B", provider: "mistral", model: "ministral-14b-latest" },
+  { entrant_id: "ministral-8b", display_name: "Ministral 8B", provider: "mistral", model: "ministral-8b-latest" },
   { entrant_id: "devstral-2", display_name: "Devstral 2", provider: "mistral", model: "devstral-2-25-12" },
   { entrant_id: "codestral", display_name: "Codestral", provider: "mistral", model: "codestral-latest" },
 ];

@@ -317,7 +317,7 @@ class ArenaTournamentRunner:
                         run_id=entrant_run_id,
                         shop_id=assignments[eid],
                         days=tuple(days_for_entrant),
-                        events=tuple(runner.event_log.events),
+                        events=tuple(runner.event_log.list_events()),
                         workspace_entries=tuple(
                             runner.memory.list_workspace_entries(shop_id=assignments[eid])
                         ),
