@@ -151,9 +151,11 @@ class ToolCallingAgentPolicy(DailyAgentPolicy):
             )
 
         if context.prior_turns:
-            lines.extend(
-                f"- {_summarize_turn(record)}" for record in context.prior_turns[-6:]
+            lines.append(
+                "Use the exact results from earlier work today instead of repeating a summary action unless the shop state has changed."
             )
+            for record in context.prior_turns:
+                lines.extend(_render_prior_turn(record))
         else:
             lines.append("- No work completed yet today.")
 
@@ -162,6 +164,7 @@ class ToolCallingAgentPolicy(DailyAgentPolicy):
                 "",
                 "## Decision",
                 "- Choose the single highest-leverage next action for the shop.",
+                "- Prefer drilling down or acting over repeating the same summary read.",
                 (
                     "- If it is time to stop for today, end the day with a short business reason."
                 ),
@@ -230,48 +233,42 @@ def _string_argument(arguments: dict[str, JSONValue], key: str) -> str | None:
     return None
 
 
-def _summarize_turn(record: TurnRecord) -> str:
-    tool_name = "no tool"
+def _render_prior_turn(record: TurnRecord) -> list[str]:
+    lines = [
+        "",
+        f"### Work slot {record.turn_index}",
+        f"- Decision summary: {record.decision_summary}",
+    ]
     if record.tool_call is not None:
-        tool_name = record.tool_call.name
+        lines.append(f"- Action used: {record.tool_call.name}")
+        lines.extend(
+            [
+                "- Exact action arguments:",
+                "```json",
+                _render_json(record.tool_call.arguments),
+                "```",
+            ]
+        )
+    if record.tool_result is not None:
+        lines.extend(
+            [
+                "- Exact action result:",
+                "```json",
+                _render_json(record.tool_result.output),
+                "```",
+            ]
+        )
+    if record.state_changes is not None:
+        lines.extend(
+            [
+                "- Recorded state changes:",
+                "```json",
+                _render_json(record.state_changes),
+                "```",
+            ]
+        )
+    return lines
 
-    summary = (
-        f"Turn {record.turn_index}: {record.decision_summary} "
-        f"Used {tool_name}."
-    )
-    if record.tool_result is None:
-        return summary
-    return f"{summary} Outcome: {_summarize_tool_output(record.tool_result.output)}"
 
-
-def _summarize_tool_output(output: object) -> str:
-    value = jsonify(output)
-    if isinstance(value, dict):
-        if isinstance(value.get("count"), int):
-            return f"{value['count']} item(s) returned."
-
-        note = value.get("note")
-        if isinstance(note, dict):
-            title = note.get("title")
-            if isinstance(title, str) and title:
-                return f'Note saved: "{title}".'
-            return "Note saved."
-
-        reminder = value.get("reminder")
-        if isinstance(reminder, dict):
-            content = reminder.get("content")
-            due_day = reminder.get("due_day")
-            if isinstance(content, str) and due_day is not None:
-                return f'Reminder tracked for day {due_day}: "{content}".'
-            status = reminder.get("status")
-            if isinstance(status, str) and status:
-                return f"Reminder status: {status}."
-
-        results = value.get("results")
-        if isinstance(results, list):
-            return f"{len(results)} result(s) returned."
-
-    compact = json.dumps(value, separators=(",", ":"), sort_keys=True)
-    if len(compact) <= 140:
-        return compact
-    return f"{compact[:137]}..."
+def _render_json(value: object) -> str:
+    return json.dumps(jsonify(value), indent=2)

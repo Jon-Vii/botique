@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from datetime import datetime, timezone
 from io import StringIO
 from unittest.mock import patch
 
@@ -31,6 +32,8 @@ from agent_runtime import (
     ShopStateSnapshot,
     ToolCallingAgentPolicy,
     ToolCall,
+    ToolExecutionResult,
+    TurnRecord,
     WorkSessionState,
     build_default_owner_agent_runner,
     build_owner_agent_tool_registry,
@@ -597,7 +600,7 @@ class ToolRegistryTests(unittest.TestCase):
             shop_id=7,
         )
 
-        with self.assertRaisesRegex(ValueError, "shop_id is bound to 7"):
+        with self.assertRaisesRegex(ValueError, "arguments.shop_id is not allowed"):
             registry.invoke("write_note", {"shop_id": 8, "title": "Wrong", "body": "nope"})
 
     def test_registry_manifest_includes_parameter_schemas_for_provider_use(self) -> None:
@@ -632,6 +635,16 @@ class ToolRegistryTests(unittest.TestCase):
             manifests["queue_production"].parameters_schema["required"],
             ["listing_id", "units"],
         )
+
+    def test_registry_rejects_unexpected_arguments_for_summary_tools(self) -> None:
+        registry = build_owner_agent_tool_registry(
+            FakeSellerCoreClient(),
+            memory=InMemoryAgentMemory(),
+            shop_id=7,
+        )
+
+        with self.assertRaisesRegex(ValueError, "arguments.unexpected is not allowed"):
+            registry.invoke("get_shop_dashboard", {"unexpected": True})
 
     def test_completed_reminders_stop_showing_up_in_future_briefings(self) -> None:
         memory = InMemoryAgentMemory()
@@ -862,6 +875,66 @@ class ProviderPolicyTests(unittest.TestCase):
 
         self.assertTrue(decision.end_day)
         self.assertEqual(decision.summary, "Priority work is complete for today.")
+
+    def test_tool_calling_policy_preserves_exact_same_day_tool_results_in_prompt(self) -> None:
+        registry, briefing = self._make_context()
+        dashboard_manifest = next(
+            entry for entry in registry.manifest() if entry.name == "get_shop_dashboard"
+        )
+        prior_turn = TurnRecord(
+            turn_index=1,
+            decision_summary="Check the shop dashboard before acting.",
+            started_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(timezone.utc),
+            tool_call=ToolCall("get_shop_dashboard", {}),
+            tool_result=ToolExecutionResult(
+                tool=dashboard_manifest,
+                arguments={},
+                output={
+                    "shop": {"shop_id": 7, "shop_name": "Studio North"},
+                    "alerts": ["Low stock risk: Mushroom Planter."],
+                    "active_listings": [
+                        {"listing_id": 2001, "title": "Mushroom Planter", "quantity_on_hand": 1}
+                    ],
+                },
+            ),
+        )
+        provider = RecordingProvider(
+            [
+                ProviderResponse(
+                    content="Inspect the listing that is low on stock.",
+                    tool_calls=(
+                        ProviderToolCall(
+                            name="get_listing_details",
+                            arguments={"listing_id": 2001},
+                        ),
+                    ),
+                )
+            ]
+        )
+        policy = ToolCallingAgentPolicy(provider)
+        context = AgentTurnContext(
+            run_id=briefing.run_id,
+            briefing=briefing,
+            session=WorkSessionState(
+                turn_index=2,
+                turns_completed=1,
+                turns_per_day=5,
+                turns_used=1,
+                turns_remaining=4,
+            ),
+            available_tools=tuple(registry.manifest()),
+            prior_turns=(prior_turn,),
+        )
+
+        policy.next_turn(context=context)
+
+        user_prompt = provider.calls[0]["messages"][1].content
+        self.assertIn("### Work slot 1", user_prompt)
+        self.assertIn('"alerts": [', user_prompt)
+        self.assertIn('"Low stock risk: Mushroom Planter."', user_prompt)
+        self.assertIn('"listing_id": 2001', user_prompt)
+        self.assertNotIn("1 item(s) returned.", user_prompt)
 
 
 class MistralProviderTests(unittest.TestCase):
