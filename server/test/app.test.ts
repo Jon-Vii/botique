@@ -49,6 +49,29 @@ describe("Botique server core endpoints", () => {
     assert.equal(taxonomyResponse.json().count, 5);
   });
 
+  test("default marketplace search matches taxonomy labels from trend and category language", async (t) => {
+    const defaultApp = await buildApp({
+      config: {
+        databaseUrl: undefined
+      }
+    });
+
+    t.after(async () => {
+      await defaultApp.close();
+    });
+
+    const response = await defaultApp.inject({
+      method: "GET",
+      url: "/v3/application/listings/active?keywords=phone%20wallpapers&limit=10&offset=0"
+    });
+
+    assert.equal(response.statusCode, 200);
+    const payload = response.json();
+    assert.equal(payload.count, 1);
+    assert.equal(payload.results[0].listing_id, 2004);
+    assert.ok(payload.results[0].ranking_score > 0);
+  });
+
   test("creates, updates, reads, and deletes listings through the Etsy-shaped contract", async () => {
     const createResponse = await app.inject({
       method: "POST",

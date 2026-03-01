@@ -39,7 +39,11 @@ export function computeTrendBonus(listing: Listing, context: MarketplaceSearchCo
   return Number(bonus.toFixed(2));
 }
 
-export function computeKeywordRelevance(listing: Listing, keywords: string[]): number {
+export function computeKeywordRelevance(
+  listing: Listing,
+  keywords: string[],
+  supplementalTexts: string[] = []
+): number {
   if (keywords.length === 0) {
     return 0;
   }
@@ -47,6 +51,7 @@ export function computeKeywordRelevance(listing: Listing, keywords: string[]): n
   const title = listing.title.toLowerCase();
   const description = listing.description.toLowerCase();
   const tags = listing.tags.map((tag) => tag.toLowerCase());
+  const supplemental = supplementalTexts.map((text) => text.toLowerCase());
 
   return keywords.reduce((score, term) => {
     let termScore = 0;
@@ -59,6 +64,9 @@ export function computeKeywordRelevance(listing: Listing, keywords: string[]): n
     if (tags.some((tag) => tag.includes(term))) {
       termScore += 3;
     }
+    if (supplemental.some((text) => text.includes(term))) {
+      termScore += 2;
+    }
     return score + termScore;
   }, 0);
 }
@@ -66,13 +74,21 @@ export function computeKeywordRelevance(listing: Listing, keywords: string[]): n
 export function scoreMarketplaceListing(input: {
   listing: Listing;
   keywords: string[];
+  keywordSupplementalTexts?: string[];
   shopReviewAverage: number;
   newestListingTimestamp: number;
   searchContext: MarketplaceSearchContext;
 }): number {
-  const { listing, keywords, shopReviewAverage, newestListingTimestamp, searchContext } = input;
+  const {
+    listing,
+    keywords,
+    keywordSupplementalTexts = [],
+    shopReviewAverage,
+    newestListingTimestamp,
+    searchContext
+  } = input;
 
-  const keywordRelevance = computeKeywordRelevance(listing, keywords);
+  const keywordRelevance = computeKeywordRelevance(listing, keywords, keywordSupplementalTexts);
   const quality = computeListingQuality(listing);
   const priceFit = listing.price <= 15 ? 2 : listing.price <= 25 ? 1 : 0;
   const listingAgeDays = differenceInUtcDays(searchContext.current_day.date, listing.created_at);
