@@ -1,4 +1,4 @@
-"""System 3 runtime scaffolding for Botique's single-shop owner agent."""
+"""System 3 runtime scaffolding for Botique's owner-agent and tournament modes."""
 
 from .briefing import (
     BalanceSummary,
@@ -50,6 +50,22 @@ from .runner import (
     OwnerAgentRunner,
     OwnerAgentRunnerConfig,
     build_default_owner_agent_runner,
+)
+from .tournament import (
+    ArenaTournamentRunner,
+    TournamentAggregateStanding,
+    TournamentConfig,
+    TournamentEntrant,
+    TournamentEntrantConfig,
+    TournamentEntrantDayResult,
+    TournamentResult,
+    TournamentRoundDayResult,
+    TournamentRoundResult,
+    TournamentScorecard,
+    TournamentShopAssignment,
+    TournamentStanding,
+    build_default_tournament_runner,
+    load_tournament_entrants_from_payload,
 )
 from .tools import (
     AgentToolRegistry,
@@ -116,11 +132,25 @@ __all__ = [
     "ToolManifestEntry",
     "ToolNotFoundError",
     "ToolSurface",
+    "ArenaTournamentRunner",
+    "TournamentAggregateStanding",
+    "TournamentConfig",
+    "TournamentEntrant",
+    "TournamentEntrantConfig",
+    "TournamentEntrantDayResult",
+    "TournamentResult",
+    "TournamentRoundDayResult",
+    "TournamentRoundResult",
+    "TournamentScorecard",
+    "TournamentShopAssignment",
+    "TournamentStanding",
     "TurnRecord",
     "WorkSessionState",
     "DEFAULT_SYSTEM_PROMPT",
     "END_DAY_TOOL_NAME",
     "build_owner_agent_tool_registry",
     "build_default_owner_agent_runner",
+    "build_default_tournament_runner",
+    "load_tournament_entrants_from_payload",
     "morning_briefing_from_payload",
 ]
