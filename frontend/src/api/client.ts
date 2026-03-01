@@ -263,7 +263,7 @@ export const api = {
     run_id: string;
     model: string;
     provider: string;
-    scenario?: "operate" | "bootstrap";
+    scenario_id: "operate" | "bootstrap";
   }): Promise<{ run_id: string }> {
     return requestJSON<{ run_id: string }>("/runs/launch", {
       base: CONTROL,
@@ -286,6 +286,8 @@ export const api = {
     days_per_round: number;
     rounds: number;
     turns_per_day: number;
+    scenario_id?: "operate" | "bootstrap";
+    run_id?: string;
   }): Promise<{ tournament_id: string }> {
     return requestJSON<{ tournament_id: string }>("/tournaments/launch", {
       base: CONTROL,

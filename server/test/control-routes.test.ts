@@ -9,6 +9,10 @@ describe("Botique server control endpoints", () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
   const tournamentResult = {
     run_id: "tournament_demo_01",
+    scenario: {
+      scenario_id: "bootstrap",
+      controlled_shop_ids: [1001, 1002]
+    },
     days_per_round: 5,
     round_count: 2,
     entrants: [
@@ -101,6 +105,15 @@ describe("Botique server control endpoints", () => {
       shop_id: 1001,
       mode: "live",
       day_count: 5,
+      scenario: {
+        scenario_id: "bootstrap",
+        controlled_shop_ids: [1001]
+      },
+      identity: {
+        provider: "mistral",
+        model: "mistral-medium-latest",
+        turns_per_day: 5
+      },
       has_summary: true,
       has_manifest: true,
       created_at: "2026-03-01T10:00:00.000Z"
@@ -111,6 +124,15 @@ describe("Botique server control endpoints", () => {
     shop_id: 1001,
     mode: "live",
     day_count: 5,
+    scenario: {
+      scenario_id: "bootstrap",
+      controlled_shop_ids: [1001]
+    },
+    identity: {
+      provider: "mistral",
+      model: "mistral-medium-latest",
+      turns_per_day: 5
+    },
     start_day: 1,
     end_day: 5,
     start_simulation_date: "2026-02-27T00:00:00.000Z",
@@ -156,12 +178,36 @@ describe("Botique server control endpoints", () => {
     shop_id: 1001,
     mode: "live",
     day_count: 5,
+    scenario: {
+      scenario_id: "bootstrap",
+      controlled_shop_ids: [1001]
+    },
+    identity: {
+      provider: "mistral",
+      model: "mistral-medium-latest",
+      turns_per_day: 5
+    },
     invocation: {
       command: "run-days",
       days: 5,
       max_turns: null,
+      turns_per_day: 5,
       shop_id: "1001",
-      run_id: "run_demo_01"
+      run_id: "run_demo_01",
+      provider: "mistral",
+      mistral_model: "mistral-medium-latest",
+      scenario_id: "bootstrap"
+    },
+    summary: {
+      scenario: {
+        scenario_id: "bootstrap",
+        controlled_shop_ids: [1001]
+      },
+      identity: {
+        provider: "mistral",
+        model: "mistral-medium-latest",
+        turns_per_day: 5
+      }
     }
   };
   const runDaySnapshots = [
@@ -280,6 +326,7 @@ describe("Botique server control endpoints", () => {
         listTournaments: async () => [
           {
             run_id: "tournament_demo_01",
+            scenario: tournamentResult.scenario,
             entrant_count: 2,
             round_count: 2,
             days_per_round: 5,
@@ -507,16 +554,19 @@ describe("Botique server control endpoints", () => {
           shop_ids: [1001, 1002],
           days_per_round: 5,
           rounds: 2,
-          turns_per_day: 5
+          turns_per_day: 5,
+          scenario_id: "bootstrap"
         }
       })
     ]);
 
     assert.equal(listResponse.statusCode, 200);
     assert.equal(listResponse.json()[0].run_id, "tournament_demo_01");
+    assert.equal(listResponse.json()[0].scenario.scenario_id, "bootstrap");
 
     assert.equal(detailResponse.statusCode, 200);
     assert.equal(detailResponse.json().run_id, "tournament_demo_01");
+    assert.equal(detailResponse.json().scenario.scenario_id, "bootstrap");
     assert.equal(detailResponse.json().rounds[0].run_id, "tournament_demo_01_round_01");
 
     assert.equal(launchResponse.statusCode, 201);
@@ -552,19 +602,23 @@ describe("Botique server control endpoints", () => {
           turns_per_day: 5,
           run_id: "run_demo_01",
           model: "mistral-medium-latest",
-          provider: "mistral"
+          provider: "mistral",
+          scenario_id: "bootstrap"
         }
       })
     ]);
 
     assert.equal(listResponse.statusCode, 200);
     assert.equal(listResponse.json()[0].run_id, "run_demo_01");
+    assert.equal(listResponse.json()[0].scenario.scenario_id, "bootstrap");
 
     assert.equal(summaryResponse.statusCode, 200);
     assert.equal(summaryResponse.json().totals.notes_written, 3);
+    assert.equal(summaryResponse.json().scenario.scenario_id, "bootstrap");
 
     assert.equal(manifestResponse.statusCode, 200);
     assert.equal(manifestResponse.json().invocation.command, "run-days");
+    assert.equal(manifestResponse.json().summary.scenario.scenario_id, "bootstrap");
 
     assert.equal(daysResponse.statusCode, 200);
     assert.equal(daysResponse.json()[0].turn_count, 2);

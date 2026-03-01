@@ -7,10 +7,15 @@ import {
 import { Link } from "react-router-dom";
 import { BackendNotice } from "../components/BackendNotice";
 import { Badge } from "../components/Badge";
+import {
+  ControlledShopsBadge,
+  ScenarioBadge,
+} from "../components/ScenarioBadge";
 import { EmptyState } from "../components/EmptyState";
 import { Skeleton } from "../components/Skeleton";
 import { useRunList } from "../hooks/useApi";
 import { formatDateTimeShort } from "../lib/format";
+import { buildRunIdentityTokens } from "../lib/run-identity";
 
 export function RunList() {
   const { data: runs, isLoading, error } = useRunList();
@@ -55,81 +60,83 @@ export function RunList() {
         </div>
       ) : runs && runs.length > 0 ? (
         <div className="space-y-2">
-          {runs.map((run, index) => (
-            <Link
-              key={run.run_id}
-              to={`/runs/${encodeURIComponent(run.run_id)}`}
-              className="tech-card card-lift block p-5 animate-card-in group"
-              style={{ animationDelay: `${index * 60}ms` }}
-            >
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="min-w-0">
-                  <span className="font-mono text-sm font-semibold text-ink transition-colors group-hover:text-orange">
-                    {run.run_id}
-                  </span>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <Badge variant="orange" subtle>
-                      shop {run.shop_id}
-                    </Badge>
-                    <Badge variant={run.mode === "live" ? "emerald" : "gray"}>
-                      {run.mode}
-                    </Badge>
-                    {run.scenario ? (
-                      <Badge variant="teal" subtle>
-                        {run.scenario}
+          {runs.map((run, index) => {
+            const identityTokens = buildRunIdentityTokens(run.identity);
+
+            return (
+              <Link
+                key={run.run_id}
+                to={`/runs/${encodeURIComponent(run.run_id)}`}
+                className="tech-card card-lift block p-5 animate-card-in group"
+                style={{ animationDelay: `${index * 60}ms` }}
+              >
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="min-w-0">
+                    <span className="font-mono text-sm font-semibold text-ink transition-colors group-hover:text-orange">
+                      {run.run_id}
+                    </span>
+                    {identityTokens.length > 0 ? (
+                      <div className="mt-1 text-[10px] font-mono text-muted">
+                        {identityTokens.join(" · ")}
+                      </div>
+                    ) : null}
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <Badge variant="orange" subtle>
+                        shop {run.shop_id}
                       </Badge>
-                    ) : null}
-                    {run.model ? (
-                      <Badge variant="violet" subtle>
-                        {run.provider ? `${run.provider}/` : ""}
-                        {run.model}
+                      <Badge variant={run.mode === "live" ? "emerald" : "gray"}>
+                        {run.mode}
                       </Badge>
-                    ) : null}
-                    {run.created_at ? (
-                      <span className="text-[10px] font-mono text-muted">
-                        {formatDateTimeShort(run.created_at)}
-                      </span>
-                    ) : null}
+                      {run.scenario ? <ScenarioBadge scenario={run.scenario} subtle /> : null}
+                      {run.scenario ? (
+                        <ControlledShopsBadge shopIds={run.scenario.controlled_shop_ids} />
+                      ) : null}
+                      {run.created_at ? (
+                        <span className="text-[10px] font-mono text-muted">
+                          {formatDateTimeShort(run.created_at)}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="flex-1" />
+
+                  <div className="flex flex-wrap items-center gap-5 text-xs font-mono">
+                    <div
+                      className="flex items-center gap-1.5 text-muted"
+                      title="Days simulated"
+                    >
+                      <Lightning
+                        size={12}
+                        weight="fill"
+                        className="text-amber"
+                        aria-hidden="true"
+                      />
+                      <span className="num">{run.day_count}d</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-muted">
+                      <FileText
+                        size={12}
+                        weight="duotone"
+                        className={run.has_summary ? "text-emerald" : "text-muted"}
+                        aria-hidden="true"
+                      />
+                      <span>{run.has_summary ? "summary" : "summary pending"}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-muted">
+                      <Package
+                        size={12}
+                        weight="duotone"
+                        className={run.has_manifest ? "text-teal" : "text-muted"}
+                        aria-hidden="true"
+                      />
+                      <span>{run.has_manifest ? "manifest" : "manifest pending"}</span>
+                    </div>
                   </div>
                 </div>
-
-                <div className="flex-1" />
-
-                <div className="flex flex-wrap items-center gap-5 text-xs font-mono">
-                  <div
-                    className="flex items-center gap-1.5 text-muted"
-                    title="Days simulated"
-                  >
-                    <Lightning
-                      size={12}
-                      weight="fill"
-                      className="text-amber"
-                      aria-hidden="true"
-                    />
-                    <span className="num">{run.day_count}d</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-muted">
-                    <FileText
-                      size={12}
-                      weight="duotone"
-                      className={run.has_summary ? "text-emerald" : "text-muted"}
-                      aria-hidden="true"
-                    />
-                    <span>{run.has_summary ? "summary" : "summary pending"}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-muted">
-                    <Package
-                      size={12}
-                      weight="duotone"
-                      className={run.has_manifest ? "text-teal" : "text-muted"}
-                      aria-hidden="true"
-                    />
-                    <span>{run.has_manifest ? "manifest" : "manifest pending"}</span>
-                  </div>
-                </div>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       ) : (
         <EmptyState

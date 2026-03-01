@@ -80,8 +80,7 @@ export class RunControlService {
           mode: artifact.summary.mode,
           day_count: artifact.summary.day_count,
           scenario: extractRunScenario(artifact.summary),
-          provider: extractRunProvider(artifact.manifest),
-          model: extractRunModel(artifact.manifest),
+          identity: extractRunIdentity(artifact.manifest, artifact.summary),
           has_summary: true,
           has_manifest: artifact.manifest !== null,
           created_at: artifact.createdAt,
@@ -173,8 +172,9 @@ export class RunControlService {
       payload.provider,
     ];
 
-    if (payload.scenario) {
-      args.push("--scenario", payload.scenario);
+    const scenarioId = payload.scenario_id ?? payload.scenario;
+    if (scenarioId) {
+      args.push("--scenario", scenarioId);
     }
 
     try {
@@ -301,14 +301,16 @@ function formatDayDirectory(day: number): string {
 }
 
 function normalizeRunSummaryPayload(summary: any, manifest: any | null) {
+  const scenario = extractRunScenario(summary);
+  const identity = extractRunIdentity(manifest, summary);
+
   return {
     run_id: summary.run_id,
     shop_id: summary.shop_id,
     mode: summary.mode,
     day_count: summary.day_count,
-    scenario: extractRunScenario(summary),
-    provider: extractRunProvider(manifest),
-    model: extractRunModel(manifest),
+    scenario,
+    identity,
     start_day: summary.start_day,
     end_day: summary.end_day,
     start_simulation_date: summary.start_simulation_date,
@@ -335,21 +337,46 @@ function normalizeRunSummaryPayload(summary: any, manifest: any | null) {
 }
 
 function normalizeRunManifestPayload(manifest: any, summary: any) {
+  const scenario = extractRunScenario(summary);
+  const identity = extractRunIdentity(manifest, summary);
+  const rawInvocation =
+    manifest?.invocation && typeof manifest.invocation === "object"
+      ? manifest.invocation
+      : {};
+
   return {
     artifact_version: manifest?.artifact_version ?? 1,
     run_id: manifest?.run_id ?? summary?.run_id,
     shop_id: manifest?.shop_id ?? summary?.shop_id,
     mode: manifest?.mode ?? summary?.mode ?? "live",
     day_count: manifest?.day_count ?? summary?.day_count ?? 0,
-    scenario: extractRunScenario(summary),
-    provider: extractRunProvider(manifest),
-    model: extractRunModel(manifest),
+    scenario,
+    identity,
     invocation: {
-      command: manifest?.invocation?.command ?? "run-days",
-      days: manifest?.invocation?.days ?? summary?.day_count ?? 0,
-      max_turns: manifest?.invocation?.max_turns ?? null,
-      shop_id: manifest?.invocation?.shop_id ?? String(summary?.shop_id ?? ""),
-      run_id: manifest?.invocation?.run_id ?? summary?.run_id ?? "",
+      ...rawInvocation,
+      command: rawInvocation.command ?? "run-days",
+      days: rawInvocation.days ?? summary?.day_count ?? 0,
+      max_turns: rawInvocation.max_turns ?? rawInvocation.turns_per_day ?? null,
+      turns_per_day: rawInvocation.turns_per_day ?? rawInvocation.max_turns ?? null,
+      shop_id: rawInvocation.shop_id ?? String(summary?.shop_id ?? ""),
+      run_id: rawInvocation.run_id ?? summary?.run_id ?? "",
+      provider: rawInvocation.provider ?? identity?.provider,
+      model: rawInvocation.model ?? identity?.model,
+      mistral_model: rawInvocation.mistral_model ?? identity?.model,
+      temperature:
+        rawInvocation.temperature ?? rawInvocation.mistral_temperature ?? identity?.temperature,
+      mistral_temperature:
+        rawInvocation.mistral_temperature ?? rawInvocation.temperature ?? identity?.temperature,
+      top_p: rawInvocation.top_p ?? rawInvocation.mistral_top_p ?? identity?.top_p,
+      mistral_top_p:
+        rawInvocation.mistral_top_p ?? rawInvocation.top_p ?? identity?.top_p,
+      scenario: rawInvocation.scenario ?? rawInvocation.scenario_id ?? scenario?.scenario_id,
+      scenario_id:
+        rawInvocation.scenario_id ?? rawInvocation.scenario ?? scenario?.scenario_id,
+    },
+    summary: {
+      scenario,
+      identity,
     },
   };
 }
@@ -460,17 +487,99 @@ function inferMemoryTitle(content: string, fallback: string): string {
   return firstLine.length > 72 ? `${firstLine.slice(0, 69)}...` : firstLine;
 }
 
-function extractRunScenario(summary: any): "operate" | "bootstrap" | undefined {
-  const scenarioId = summary?.scenario?.scenario_id;
-  return scenarioId === "operate" || scenarioId === "bootstrap" ? scenarioId : undefined;
+function extractRunScenario(summary: any):
+  | { scenario_id: "operate" | "bootstrap"; controlled_shop_ids: number[] }
+  | undefined {
+  const rawScenario = summary?.scenario;
+  const scenarioId = rawScenario?.scenario_id ?? rawScenario;
+
+  if (scenarioId !== "operate" && scenarioId !== "bootstrap") {
+    return undefined;
+  }
+
+  return {
+    scenario_id: scenarioId,
+    controlled_shop_ids: Array.isArray(rawScenario?.controlled_shop_ids)
+      ? rawScenario.controlled_shop_ids
+          .filter((value: unknown): value is number => Number.isInteger(value))
+      : [],
+  };
 }
 
 function extractRunProvider(manifest: any | null | undefined): string | undefined {
-  const provider = manifest?.invocation?.provider;
+  const provider = manifest?.invocation?.provider ?? manifest?.provider;
   return typeof provider === "string" && provider.trim() ? provider : undefined;
 }
 
 function extractRunModel(manifest: any | null | undefined): string | undefined {
-  const model = manifest?.invocation?.mistral_model;
+  const model =
+    manifest?.invocation?.model ??
+    manifest?.invocation?.mistral_model ??
+    manifest?.model;
   return typeof model === "string" && model.trim() ? model : undefined;
+}
+
+function extractRunIdentity(
+  manifest: any | null | undefined,
+  summary: any | null | undefined,
+) {
+  const rawIdentity =
+    summary?.identity && typeof summary.identity === "object"
+      ? summary.identity
+      : undefined;
+  const turnsPerDay = normalizePositiveInteger(
+    rawIdentity?.turns_per_day ??
+      manifest?.invocation?.turns_per_day ??
+      manifest?.invocation?.max_turns,
+  );
+  const temperature = normalizeNumber(
+    rawIdentity?.temperature ??
+      manifest?.invocation?.temperature ??
+      manifest?.invocation?.mistral_temperature,
+  );
+  const topP = normalizeNumber(
+    rawIdentity?.top_p ??
+      manifest?.invocation?.top_p ??
+      manifest?.invocation?.mistral_top_p,
+  );
+
+  const identity = {
+    provider:
+      (typeof rawIdentity?.provider === "string" && rawIdentity.provider.trim()
+        ? rawIdentity.provider
+        : undefined) ?? extractRunProvider(manifest),
+    model:
+      (typeof rawIdentity?.model === "string" && rawIdentity.model.trim()
+        ? rawIdentity.model
+        : undefined) ?? extractRunModel(manifest),
+    turns_per_day: turnsPerDay,
+    temperature,
+    top_p: topP,
+  };
+
+  return Object.values(identity).some((value) => value !== undefined)
+    ? identity
+    : undefined;
+}
+
+function normalizePositiveInteger(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function normalizeNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
 }

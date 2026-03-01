@@ -129,6 +129,16 @@ export function useRunSummaries(runIds: string[]) {
   });
 }
 
+export function useRunManifests(runIds: string[]) {
+  return useQueries({
+    queries: runIds.map((runId) => ({
+      queryKey: ["runs", runId, "manifest"],
+      queryFn: () => api.getRunManifest(runId),
+      enabled: !!runId,
+    })),
+  });
+}
+
 export function useRunManifest(runId: string) {
   return useQuery({
     queryKey: ["runs", runId, "manifest"],

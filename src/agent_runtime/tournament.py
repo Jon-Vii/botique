@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Protocol, Sequence, TypeVar
 from uuid import uuid4
 
-from control_api import AdvanceDayResult, ControlApiClient
+from control_api import AdvanceDayResult, ControlApiClient, SimulationScenario
 from seller_core.client import SellerCoreClient
 
 from .briefing import ShopStateSnapshot
@@ -137,6 +137,7 @@ class TournamentRoundResult:
 @dataclass(frozen=True, slots=True)
 class TournamentResult:
     run_id: str
+    scenario: SimulationScenario
     days_per_round: int
     round_count: int
     entrants: tuple[TournamentEntrant, ...]
@@ -182,6 +183,7 @@ class ArenaTournamentRunner:
             scenario_id=self.config.scenario_id,
             controlled_shop_ids=tuple(int(shop_id) for shop_id in normalized_shop_ids),
         )
+        scenario = self.control_client.get_scenario()
         initial_world_state = self.control_client.get_world_state()
         rounds: list[TournamentRoundResult] = []
         standings_by_entrant: dict[str, list[TournamentStanding]] = {
@@ -278,6 +280,7 @@ class ArenaTournamentRunner:
 
         return TournamentResult(
             run_id=active_run_id,
+            scenario=scenario,
             days_per_round=self.config.days_per_round,
             round_count=self.config.rounds,
             entrants=tuple(entrant.entrant for entrant in normalized_entrants),

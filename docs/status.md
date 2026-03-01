@@ -34,6 +34,7 @@ These pieces already exist in the repo and are safe to build on.
 - artifact-rich single-run bundles with briefings, turns, scratchpad state, journal history, reminders, and run summaries
 - additive arena-style tournament orchestration with rotating entrant order, rotating shop assignments, and shared-world resets
 - a committed React/Vite frontend shell for marketplace, shop, listing, and simulation overview pages
+- frontend operator controls now expose scenario selection for single-run launch scaffolding and live tournament launch, with scenario-aware labels across run, benchmark, and tournament views
 
 ## In Motion
 

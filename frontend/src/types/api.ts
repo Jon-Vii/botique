@@ -1,4 +1,10 @@
 export type FulfillmentMode = "stocked" | "made_to_order";
+export type ScenarioId = "operate" | "bootstrap";
+
+export type SimulationScenario = {
+  scenario_id: ScenarioId;
+  controlled_shop_ids: number[];
+};
 
 export type ProductionQueueItem = {
   job_id: string;
@@ -230,6 +236,7 @@ export type StoredMarketplaceState = {
 
 export type SimulationState = {
   current_day: SimulationDay;
+  scenario: SimulationScenario;
   market_snapshot: MarketSnapshot;
   trend_state: TrendState;
   pending_reviews: PendingReview[];
@@ -270,14 +277,21 @@ export type RunMemory = {
   pending_reminder_count: number;
 };
 
+export type RunIdentity = {
+  provider?: string | null;
+  model?: string | null;
+  turns_per_day?: number;
+  temperature?: number;
+  top_p?: number;
+};
+
 export type RunSummary = {
   run_id: string;
   shop_id: number;
   mode: "live" | "mock";
+  scenario?: SimulationScenario | null;
+  identity?: RunIdentity | null;
   day_count: number;
-  scenario?: "operate" | "bootstrap";
-  provider?: string;
-  model?: string;
   start_day: number;
   end_day: number;
   start_simulation_date: string;
@@ -294,26 +308,33 @@ export type RunManifest = {
   shop_id: number;
   mode: "live" | "mock";
   day_count: number;
-  scenario?: "operate" | "bootstrap";
-  provider?: string;
-  model?: string;
-  invocation: {
-    command: string;
-    days: number;
-    max_turns: number;
-    shop_id: string;
-    run_id: string;
+  invocation: Record<string, unknown> & {
+    command?: string;
+    days?: number;
+    max_turns?: number;
+    turns_per_day?: number;
+    shop_id?: string | number;
+    run_id?: string;
+    provider?: string;
+    model?: string;
+    mistral_model?: string;
+    temperature?: number;
+    mistral_temperature?: number;
+    top_p?: number;
+    mistral_top_p?: number;
+    scenario?: ScenarioId;
+    scenario_id?: ScenarioId;
   };
+  summary?: Partial<RunSummary>;
 };
 
 export type RunListEntry = {
   run_id: string;
   shop_id: number;
   mode: "live" | "mock";
+  scenario?: SimulationScenario | null;
+  identity?: RunIdentity | null;
   day_count: number;
-  scenario?: "operate" | "bootstrap";
-  provider?: string;
-  model?: string;
   has_summary: boolean;
   has_manifest: boolean;
   created_at?: string;
@@ -508,6 +529,7 @@ export type TournamentAggregateStanding = {
 
 export type TournamentResult = {
   run_id: string;
+  scenario: SimulationScenario;
   days_per_round: number;
   round_count: number;
   entrants: TournamentEntrant[];
@@ -518,6 +540,7 @@ export type TournamentResult = {
 
 export type TournamentListItem = {
   run_id: string;
+  scenario: SimulationScenario;
   entrant_count: number;
   round_count: number;
   days_per_round: number;

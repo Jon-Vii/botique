@@ -15,11 +15,13 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { BackendNotice } from "../components/BackendNotice";
 import { Badge } from "../components/Badge";
+import { ScenarioBadge } from "../components/ScenarioBadge";
 import { EmptyState } from "../components/EmptyState";
 import { Skeleton } from "../components/Skeleton";
-import { useRunList, useRunSummaries } from "../hooks/useApi";
+import { useRunList, useRunManifests, useRunSummaries } from "../hooks/useApi";
 import { formatCurrency } from "../lib/format";
-import type { RunSummary } from "../types/api";
+import { buildRunIdentityTokens, getRunIdentity, getRunScenario } from "../lib/run-identity";
+import type { RunManifest, RunSummary } from "../types/api";
 
 /* ── Sort logic ── */
 
@@ -27,6 +29,7 @@ type SortField =
   | "run_id"
   | "shop_id"
   | "mode"
+  | "scenario"
   | "day_count"
   | "balance"
   | "delta"
@@ -45,6 +48,8 @@ function getSortValue(s: RunSummary, field: SortField): number | string {
       return s.shop_id;
     case "mode":
       return s.mode;
+    case "scenario":
+      return s.scenario?.scenario_id ?? "";
     case "day_count":
       return s.day_count;
     case "balance":
@@ -308,6 +313,7 @@ export function Benchmarks() {
   const { data: runList, isLoading: listLoading, error: listError } = useRunList();
   const runIds = useMemo(() => (runList ?? []).map((r) => r.run_id), [runList]);
   const summaryResults = useRunSummaries(runIds);
+  const manifestResults = useRunManifests(runIds);
 
   const [sortField, setSortField] = useState<SortField>("balance");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -320,6 +326,15 @@ export function Benchmarks() {
     }
     return loaded;
   }, [summaryResults]);
+  const manifestsByRunId = useMemo(() => {
+    const loaded = new Map<string, RunManifest>();
+    for (const result of manifestResults) {
+      if (result.data) {
+        loaded.set(result.data.run_id, result.data);
+      }
+    }
+    return loaded;
+  }, [manifestResults]);
 
   const sorted = useMemo(() => {
     const arr = [...summaries];
@@ -515,6 +530,13 @@ export function Benchmarks() {
                     onSort={handleSort}
                   />
                   <SortHeader
+                    label="Scenario"
+                    field="scenario"
+                    currentSort={sortField}
+                    currentDir={sortDir}
+                    onSort={handleSort}
+                  />
+                  <SortHeader
                     label="Days"
                     field="day_count"
                     currentSort={sortField}
@@ -585,6 +607,7 @@ export function Benchmarks() {
                     <RunRow
                       key={s.run_id}
                       summary={s}
+                      manifest={manifestsByRunId.get(s.run_id)}
                       rank={rank}
                       delta={delta}
                       isExpanded={isExpanded}
@@ -624,6 +647,7 @@ export function Benchmarks() {
 
 function RunRow({
   summary: s,
+  manifest,
   rank,
   delta,
   isExpanded,
@@ -634,6 +658,7 @@ function RunRow({
   reviewRank,
 }: {
   summary: RunSummary;
+  manifest?: RunManifest;
   rank: number;
   delta: number;
   isExpanded: boolean;
@@ -643,6 +668,10 @@ function RunRow({
   salesRank: "best" | "worst" | null;
   reviewRank: "best" | "worst" | null;
 }) {
+  const scenario = getRunScenario({ summary: s, manifest });
+  const identity = getRunIdentity({ summary: s, manifest });
+  const identityTokens = buildRunIdentityTokens(identity);
+
   return (
     <>
       <tr className={isExpanded ? "bg-orange-1/40" : ""}>
@@ -673,6 +702,11 @@ function RunRow({
           >
             {s.run_id}
           </Link>
+          {identityTokens.length > 0 ? (
+            <div className="mt-1 text-[10px] font-mono text-muted">
+              {identityTokens.join(" · ")}
+            </div>
+          ) : null}
         </td>
 
         {/* Shop */}
@@ -683,6 +717,15 @@ function RunRow({
           <Badge variant={s.mode === "live" ? "emerald" : "gray"} subtle>
             {s.mode}
           </Badge>
+        </td>
+
+        {/* Scenario */}
+        <td>
+          {scenario ? (
+            <ScenarioBadge scenario={scenario} subtle />
+          ) : (
+            <span className="text-[10px] font-mono text-muted">--</span>
+          )}
         </td>
 
         {/* Days */}

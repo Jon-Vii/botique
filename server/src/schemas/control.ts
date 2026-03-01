@@ -151,6 +151,7 @@ export const runLaunchRequestSchema = z.object({
   model: z.string().min(1),
   provider: z.string().min(1),
   scenario: z.enum(["operate", "bootstrap"]).optional(),
+  scenario_id: z.enum(["operate", "bootstrap"]).optional(),
 });
 
 export const runLaunchResponseSchema = z.object({
@@ -187,14 +188,21 @@ export const runMemorySchema = z.object({
   pending_reminder_count: z.number().int().nonnegative()
 });
 
+export const runIdentitySchema = z.object({
+  provider: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+  turns_per_day: z.number().int().positive().optional(),
+  temperature: z.number().optional(),
+  top_p: z.number().optional(),
+});
+
 export const runSummarySchema = z.object({
   run_id: z.string().min(1),
   shop_id: z.number().int().positive(),
   mode: z.enum(["live", "mock"]),
   day_count: z.number().int().positive(),
-  scenario: z.enum(["operate", "bootstrap"]).optional(),
-  provider: z.string().min(1).optional(),
-  model: z.string().min(1).optional(),
+  scenario: simulationScenarioSchema.optional(),
+  identity: runIdentitySchema.optional(),
   start_day: z.number().int().positive(),
   end_day: z.number().int().positive(),
   start_simulation_date: z.string(),
@@ -211,16 +219,29 @@ export const runManifestSchema = z.object({
   shop_id: z.number().int().positive(),
   mode: z.enum(["live", "mock"]),
   day_count: z.number().int().positive(),
-  scenario: z.enum(["operate", "bootstrap"]).optional(),
-  provider: z.string().min(1).optional(),
-  model: z.string().min(1).optional(),
+  scenario: simulationScenarioSchema.optional(),
+  identity: runIdentitySchema.optional(),
   invocation: z.object({
-    command: z.string(),
-    days: z.number().int().positive(),
-    max_turns: z.number().int().positive().nullable(),
-    shop_id: z.string(),
-    run_id: z.string()
-  })
+    command: z.string().optional(),
+    days: z.number().int().positive().optional(),
+    max_turns: z.number().int().positive().nullable().optional(),
+    turns_per_day: z.number().int().positive().nullable().optional(),
+    shop_id: z.union([z.string(), z.number().int().positive()]).optional(),
+    run_id: z.string().optional(),
+    provider: z.string().min(1).optional(),
+    model: z.string().min(1).optional(),
+    mistral_model: z.string().min(1).optional(),
+    temperature: z.number().optional(),
+    mistral_temperature: z.number().optional(),
+    top_p: z.number().optional(),
+    mistral_top_p: z.number().optional(),
+    scenario: z.enum(["operate", "bootstrap"]).optional(),
+    scenario_id: z.enum(["operate", "bootstrap"]).optional(),
+  }).passthrough(),
+  summary: z.object({
+    scenario: simulationScenarioSchema.optional(),
+    identity: runIdentitySchema.optional(),
+  }).optional(),
 });
 
 export const runListEntrySchema = z.object({
@@ -228,9 +249,8 @@ export const runListEntrySchema = z.object({
   shop_id: z.number().int().positive(),
   mode: z.enum(["live", "mock"]),
   day_count: z.number().int().positive(),
-  scenario: z.enum(["operate", "bootstrap"]).optional(),
-  provider: z.string().min(1).optional(),
-  model: z.string().min(1).optional(),
+  scenario: simulationScenarioSchema.optional(),
+  identity: runIdentitySchema.optional(),
   has_summary: z.boolean(),
   has_manifest: z.boolean(),
   created_at: z.string().optional()
@@ -373,6 +393,7 @@ export const tournamentLaunchRequestSchema = z.object({
   days_per_round: z.number().int().positive(),
   rounds: z.number().int().positive(),
   turns_per_day: z.number().int().positive(),
+  scenario_id: z.enum(["operate", "bootstrap"]).optional(),
   run_id: z.string().min(1).optional()
 });
 
@@ -444,6 +465,7 @@ export const tournamentAggregateStandingSchema = z.object({
 
 export const tournamentResultSchema = z.object({
   run_id: z.string().min(1),
+  scenario: simulationScenarioSchema,
   days_per_round: z.number().int().positive(),
   round_count: z.number().int().positive(),
   entrants: z.array(tournamentEntrantSchema),
@@ -454,6 +476,7 @@ export const tournamentResultSchema = z.object({
 
 export const tournamentListItemSchema = z.object({
   run_id: z.string().min(1),
+  scenario: simulationScenarioSchema,
   entrant_count: z.number().int().nonnegative(),
   round_count: z.number().int().positive(),
   days_per_round: z.number().int().positive(),

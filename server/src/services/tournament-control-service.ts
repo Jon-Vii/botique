@@ -62,7 +62,7 @@ export class TournamentControlService {
 
   async getTournamentResult(tournamentId: string): Promise<TournamentResult> {
     const artifactDir = await this.findTournamentArtifactDir(tournamentId);
-    const result = await this.readTournamentResultFile(artifactDir);
+    const result = await this.readTournamentResult(artifactDir);
     return tournamentResultSchema.parse(result);
   }
 
@@ -97,6 +97,10 @@ export class TournamentControlService {
         "--output-dir",
         outputDir,
       ];
+
+      if (payload.scenario_id) {
+        args.push("--scenario", payload.scenario_id);
+      }
 
       const { stdout, stderr } = await execFileAsync(this.runtimeCliPath, args, {
         cwd: process.cwd(),
@@ -153,12 +157,12 @@ export class TournamentControlService {
   private async readTournamentArtifact(
     artifactDir: string
   ): Promise<{ listItem: TournamentListItem; result: TournamentResult } | null> {
-    const result = await this.readTournamentResultFileSafe(artifactDir);
+    const manifest = await this.readTournamentManifest(artifactDir);
+    const result = await this.readTournamentResultFileSafe(artifactDir, manifest);
     if (result === null) {
       return null;
     }
 
-    const manifest = await this.readJsonSafe(join(artifactDir, "manifest.json"));
     const generatedAt =
       typeof manifest?.generated_at === "string"
         ? manifest.generated_at
@@ -169,6 +173,7 @@ export class TournamentControlService {
       result,
       listItem: tournamentListItemSchema.parse({
         run_id: result.run_id,
+        scenario: result.scenario,
         entrant_count: result.entrants.length,
         round_count: result.round_count,
         days_per_round: result.days_per_round,
@@ -184,14 +189,75 @@ export class TournamentControlService {
     return payload;
   }
 
-  private async readTournamentResultFileSafe(artifactDir: string): Promise<TournamentResult | null> {
+  private async readTournamentResult(artifactDir: string): Promise<unknown> {
+    const [payload, manifest] = await Promise.all([
+      this.readTournamentResultFile(artifactDir),
+      this.readTournamentManifest(artifactDir),
+    ]);
+
+    return this.withTournamentScenario(payload, manifest);
+  }
+
+  private async readTournamentResultFileSafe(
+    artifactDir: string,
+    manifest?: any | null,
+  ): Promise<TournamentResult | null> {
     try {
-      const payload = await this.readTournamentResultFile(artifactDir);
+      const payload =
+        manifest === undefined
+          ? await this.readTournamentResult(artifactDir)
+          : this.withTournamentScenario(
+              await this.readTournamentResultFile(artifactDir),
+              manifest,
+            );
       const parsed = tournamentResultSchema.safeParse(payload);
       return parsed.success ? parsed.data : null;
     } catch {
       return null;
     }
+  }
+
+  private async readTournamentManifest(artifactDir: string): Promise<any | null> {
+    return this.readJsonSafe(join(artifactDir, "manifest.json"));
+  }
+
+  private withTournamentScenario(payload: unknown, manifest: any | null): unknown {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return payload;
+    }
+
+    const value = payload as Record<string, unknown>;
+    if (value.scenario) {
+      return payload;
+    }
+
+    const manifestScenario =
+      manifest?.summary?.scenario ??
+      (() => {
+        const scenarioId =
+          typeof manifest?.invocation?.scenario_id === "string"
+            ? manifest.invocation.scenario_id
+            : typeof manifest?.invocation?.scenario === "string"
+              ? manifest.invocation.scenario
+              : null;
+        return scenarioId
+          ? {
+              scenario_id: scenarioId,
+              controlled_shop_ids: Array.isArray(value.shop_ids)
+                ? value.shop_ids
+                : [],
+            }
+          : null;
+      })();
+
+    if (!manifestScenario) {
+      return payload;
+    }
+
+    return {
+      ...value,
+      scenario: manifestScenario,
+    };
   }
 
   private async readJson(path: string): Promise<unknown> {
