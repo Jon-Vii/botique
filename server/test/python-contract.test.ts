@@ -55,13 +55,18 @@ client = SellerCoreClient(config=ClientConfig(base_url="${baseUrl}"))
 created = client.create_draft_listing(
     shop_id=1001,
     quantity=3,
-    title="Python Contract Listing",
+    title="Python Contract Hook Rail",
     description="Created from the Python client against the Botique server.",
-    price=10,
+    price=48,
+    fulfillment_mode="made_to_order",
+    quantity_on_hand=0,
     who_made="i_did",
     when_made="2020_2025",
-    taxonomy_id=9102,
-    type="download",
+    taxonomy_id=9104,
+    type="physical",
+    material_cost_per_unit=12,
+    capacity_units_per_item=2,
+    lead_time_days=4,
 )
 fetched = client.get_listing(listing_id=created["listing_id"])
 print(json.dumps({
@@ -83,6 +88,6 @@ print(json.dumps({
 
     const payload = JSON.parse(python.stdout.trim());
     assert.equal(payload.state, "draft");
-    assert.equal(payload.title, "Python Contract Listing");
+    assert.equal(payload.title, "Python Contract Hook Rail");
   });
 });

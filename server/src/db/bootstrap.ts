@@ -58,6 +58,10 @@ export async function seedMarketplaceStateIfEmpty(
           sale_message,
           currency_code,
           digital_product_policy,
+          production_capacity_per_day,
+          backlog_units,
+          material_costs_paid_total,
+          production_queue,
           created_at,
           updated_at
         )
@@ -69,6 +73,10 @@ export async function seedMarketplaceStateIfEmpty(
           ${shop.sale_message},
           ${shop.currency_code},
           ${shop.digital_product_policy},
+          ${shop.production_capacity_per_day},
+          ${shop.backlog_units},
+          ${shop.material_costs_paid_total},
+          ${JSON.stringify(shop.production_queue)}::jsonb,
           ${shop.created_at},
           ${shop.updated_at}
         )
@@ -86,6 +94,9 @@ export async function seedMarketplaceStateIfEmpty(
           state,
           type,
           quantity,
+          fulfillment_mode,
+          quantity_on_hand,
+          backlog_units,
           price,
           currency_code,
           who_made,
@@ -93,6 +104,9 @@ export async function seedMarketplaceStateIfEmpty(
           taxonomy_id,
           tags,
           materials,
+          material_cost_per_unit,
+          capacity_units_per_item,
+          lead_time_days,
           image_ids,
           views,
           favorites,
@@ -109,6 +123,9 @@ export async function seedMarketplaceStateIfEmpty(
           ${listing.state},
           ${listing.type},
           ${listing.quantity},
+          ${listing.fulfillment_mode},
+          ${listing.quantity_on_hand},
+          ${listing.backlog_units},
           ${listing.price},
           ${listing.currency_code},
           ${listing.who_made},
@@ -116,6 +133,9 @@ export async function seedMarketplaceStateIfEmpty(
           ${listing.taxonomy_id},
           ${JSON.stringify(listing.tags)}::jsonb,
           ${JSON.stringify(listing.materials)}::jsonb,
+          ${listing.material_cost_per_unit},
+          ${listing.capacity_units_per_item},
+          ${listing.lead_time_days},
           ${JSON.stringify(listing.image_ids)}::jsonb,
           ${listing.views},
           ${listing.favorites},
@@ -195,6 +215,7 @@ export async function seedMarketplaceStateIfEmpty(
           amount,
           currency_code,
           status,
+          available_at,
           posted_at
         )
         values (
@@ -204,6 +225,7 @@ export async function seedMarketplaceStateIfEmpty(
           ${payment.amount},
           ${payment.currency_code},
           ${payment.status},
+          ${payment.available_at},
           ${payment.posted_at}
         )
         on conflict (payment_id) do nothing
@@ -233,10 +255,26 @@ export async function bootstrapDatabase(
       sale_message text not null,
       currency_code varchar(3) not null,
       digital_product_policy text not null,
+      production_capacity_per_day integer not null,
+      backlog_units integer not null,
+      material_costs_paid_total numeric(10, 2) not null,
+      production_queue jsonb not null,
       created_at timestamptz not null,
       updated_at timestamptz not null
     )
   `;
+  await client`alter table shops add column if not exists production_capacity_per_day integer`;
+  await client`alter table shops add column if not exists backlog_units integer`;
+  await client`alter table shops add column if not exists material_costs_paid_total numeric(10, 2)`;
+  await client`alter table shops add column if not exists production_queue jsonb`;
+  await client`update shops set production_capacity_per_day = coalesce(production_capacity_per_day, 6)`;
+  await client`update shops set backlog_units = coalesce(backlog_units, 0)`;
+  await client`update shops set material_costs_paid_total = coalesce(material_costs_paid_total, 0)`;
+  await client`update shops set production_queue = coalesce(production_queue, '[]'::jsonb)`;
+  await client`alter table shops alter column production_capacity_per_day set not null`;
+  await client`alter table shops alter column backlog_units set not null`;
+  await client`alter table shops alter column material_costs_paid_total set not null`;
+  await client`alter table shops alter column production_queue set not null`;
 
   await client`
     create table if not exists listings (
@@ -247,6 +285,9 @@ export async function bootstrapDatabase(
       state varchar(16) not null,
       type varchar(32) not null,
       quantity integer not null,
+      fulfillment_mode varchar(32) not null,
+      quantity_on_hand integer not null,
+      backlog_units integer not null,
       price numeric(10, 2) not null,
       currency_code varchar(3) not null,
       who_made varchar(64) not null,
@@ -254,6 +295,9 @@ export async function bootstrapDatabase(
       taxonomy_id integer not null,
       tags jsonb not null,
       materials jsonb not null,
+      material_cost_per_unit numeric(10, 2) not null,
+      capacity_units_per_item integer not null,
+      lead_time_days integer not null,
       image_ids jsonb not null,
       views integer not null,
       favorites integer not null,
@@ -263,6 +307,24 @@ export async function bootstrapDatabase(
       updated_at timestamptz not null
     )
   `;
+  await client`alter table listings add column if not exists fulfillment_mode varchar(32)`;
+  await client`alter table listings add column if not exists quantity_on_hand integer`;
+  await client`alter table listings add column if not exists backlog_units integer`;
+  await client`alter table listings add column if not exists material_cost_per_unit numeric(10, 2)`;
+  await client`alter table listings add column if not exists capacity_units_per_item integer`;
+  await client`alter table listings add column if not exists lead_time_days integer`;
+  await client`update listings set fulfillment_mode = coalesce(fulfillment_mode, 'stocked')`;
+  await client`update listings set quantity_on_hand = coalesce(quantity_on_hand, quantity)`;
+  await client`update listings set backlog_units = coalesce(backlog_units, 0)`;
+  await client`update listings set material_cost_per_unit = coalesce(material_cost_per_unit, 0)`;
+  await client`update listings set capacity_units_per_item = coalesce(capacity_units_per_item, 1)`;
+  await client`update listings set lead_time_days = coalesce(lead_time_days, 1)`;
+  await client`alter table listings alter column fulfillment_mode set not null`;
+  await client`alter table listings alter column quantity_on_hand set not null`;
+  await client`alter table listings alter column backlog_units set not null`;
+  await client`alter table listings alter column material_cost_per_unit set not null`;
+  await client`alter table listings alter column capacity_units_per_item set not null`;
+  await client`alter table listings alter column lead_time_days set not null`;
 
   await client`
     create table if not exists orders (
@@ -301,9 +363,13 @@ export async function bootstrapDatabase(
       amount numeric(10, 2) not null,
       currency_code varchar(3) not null,
       status varchar(16) not null,
+      available_at timestamptz not null,
       posted_at timestamptz not null
     )
   `;
+  await client`alter table payments add column if not exists available_at timestamptz`;
+  await client`update payments set available_at = coalesce(available_at, posted_at)`;
+  await client`alter table payments alter column available_at set not null`;
 
   await client`
     create table if not exists taxonomy_nodes (
@@ -323,9 +389,15 @@ export async function bootstrapDatabase(
       advanced_at timestamptz,
       market_snapshot jsonb not null,
       trend_state jsonb not null,
+      pending_reviews jsonb not null,
+      last_resolution jsonb,
       updated_at timestamptz not null
     )
   `;
+  await client`alter table simulation_state add column if not exists pending_reviews jsonb`;
+  await client`alter table simulation_state add column if not exists last_resolution jsonb`;
+  await client`update simulation_state set pending_reviews = coalesce(pending_reviews, '[]'::jsonb)`;
+  await client`alter table simulation_state alter column pending_reviews set not null`;
 
   await db.execute(sql`create index if not exists listings_shop_id_idx on listings (shop_id)`);
   await db.execute(sql`create index if not exists listings_state_idx on listings (state)`);

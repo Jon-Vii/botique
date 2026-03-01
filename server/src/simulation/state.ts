@@ -1,8 +1,15 @@
 import type { Listing } from "../schemas/domain";
 import { isMarketplaceActiveListing } from "../listing-availability";
+import {
+  normalizeListingProduction,
+  normalizeShopProduction,
+  recalculateShopBacklog
+} from "./production";
 import type {
+  DayResolutionSummary,
   MarketSnapshot,
   MarketTrend,
+  PendingReview,
   SimulationDay,
   SimulationState,
   StoredMarketplaceState,
@@ -22,15 +29,62 @@ function average(values: number[]): number {
   return Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2));
 }
 
-function startOfUtcDay(value: string): string {
+export function startOfUtcDay(value: string): string {
   const date = new Date(value);
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())).toISOString();
 }
 
-function addUtcDays(value: string, days: number): string {
+export function addUtcDays(value: string, days: number): string {
   const date = new Date(value);
   date.setUTCDate(date.getUTCDate() + days);
   return startOfUtcDay(date.toISOString());
+}
+
+function normalizePaymentAvailability<T extends { available_at?: string; posted_at: string }>(value: T): T {
+  return {
+    ...value,
+    available_at: value.available_at ?? value.posted_at
+  };
+}
+
+function normalizePendingReview(review: PendingReview): PendingReview {
+  return {
+    ...review,
+    release_at: startOfUtcDay(review.release_at)
+  };
+}
+
+function normalizeLastResolution(summary?: DayResolutionSummary | null): DayResolutionSummary | null {
+  if (!summary) {
+    return null;
+  }
+
+  return clone(summary);
+}
+
+export function normalizeMarketplaceState(state: StoredMarketplaceState): StoredMarketplaceState {
+  const listings = state.listings.map(normalizeListingProduction);
+  const shopsById = new Map(
+    state.shops.map((shop) => {
+      const normalizedShop = normalizeShopProduction(shop);
+      return [
+        normalizedShop.shop_id,
+        recalculateShopBacklog(
+          normalizedShop,
+          listings.filter((listing) => listing.shop_id === normalizedShop.shop_id)
+        )
+      ];
+    })
+  );
+
+  return {
+    shops: state.shops.map((shop) => clone(shopsById.get(shop.shop_id)!)),
+    listings,
+    orders: state.orders.map((order) => clone(order)),
+    reviews: state.reviews.map((review) => clone(review)),
+    payments: state.payments.map((payment) => clone(normalizePaymentAvailability(payment))),
+    taxonomyNodes: state.taxonomyNodes.map((node) => clone(node))
+  };
 }
 
 function collectTimestamps(state: StoredMarketplaceState): string[] {
@@ -174,6 +228,8 @@ export function buildMarketSnapshot(
     active_listing_count: activeListings.length,
     active_shop_count: activeShops.size,
     average_active_price: average(activeListings.map((listing) => listing.price)),
+    total_quantity_on_hand: activeListings.reduce((sum, listing) => sum + listing.quantity_on_hand, 0),
+    total_backlog_units: marketplaceState.listings.reduce((sum, listing) => sum + listing.backlog_units, 0),
     taxonomy: [...grouped.entries()]
       .sort((left, right) => left[0] - right[0])
       .map(([taxonomyId, listings]) => ({
@@ -189,16 +245,21 @@ export function createSimulationState(
   marketplaceState: StoredMarketplaceState,
   options: {
     currentDay?: SimulationDay;
+    pendingReviews?: PendingReview[];
+    lastResolution?: DayResolutionSummary | null;
   } = {}
 ): SimulationState {
-  const currentDay = options.currentDay ?? createSimulationDay(1, inferCurrentDayDate(marketplaceState));
-  const trendState = buildTrendState(marketplaceState, currentDay);
-  const marketSnapshot = buildMarketSnapshot(marketplaceState, trendState);
+  const normalizedMarketplaceState = normalizeMarketplaceState(marketplaceState);
+  const currentDay = options.currentDay ?? createSimulationDay(1, inferCurrentDayDate(normalizedMarketplaceState));
+  const trendState = buildTrendState(normalizedMarketplaceState, currentDay);
+  const marketSnapshot = buildMarketSnapshot(normalizedMarketplaceState, trendState);
 
   return {
     current_day: currentDay,
     market_snapshot: marketSnapshot,
-    trend_state: trendState
+    trend_state: trendState,
+    pending_reviews: (options.pendingReviews ?? []).map(normalizePendingReview),
+    last_resolution: normalizeLastResolution(options.lastResolution)
   };
 }
 
@@ -206,9 +267,11 @@ export function createWorldState(
   marketplaceState: StoredMarketplaceState,
   options: {
     currentDay?: SimulationDay;
+    pendingReviews?: PendingReview[];
+    lastResolution?: DayResolutionSummary | null;
   } = {}
 ): StoredWorldState {
-  const marketplace = clone(marketplaceState);
+  const marketplace = normalizeMarketplaceState(marketplaceState);
   return {
     marketplace,
     simulation: createSimulationState(marketplace, options)
@@ -219,11 +282,15 @@ export function normalizeWorldState(
   input: StoredMarketplaceState | StoredWorldState
 ): StoredWorldState {
   if (isWorldState(input)) {
-    const marketplace = clone(input.marketplace);
+    const marketplace = normalizeMarketplaceState(input.marketplace);
     return {
       marketplace,
       simulation: input.simulation
-        ? clone(input.simulation)
+        ? {
+            ...clone(input.simulation),
+            pending_reviews: (input.simulation.pending_reviews ?? []).map(normalizePendingReview),
+            last_resolution: normalizeLastResolution(input.simulation.last_resolution)
+          }
         : createSimulationState(marketplace)
     };
   }

@@ -158,6 +158,11 @@ export class MarketplaceService {
       state: input.state ?? "draft",
       type: input.type ?? "download",
       quantity: input.quantity,
+      fulfillment_mode: input.fulfillment_mode ?? "stocked",
+      quantity_on_hand:
+        input.quantity_on_hand ??
+        ((input.fulfillment_mode ?? "stocked") === "stocked" ? input.quantity : 0),
+      backlog_units: 0,
       price: input.price,
       currency_code: shop.currency_code,
       who_made: input.who_made,
@@ -165,6 +170,9 @@ export class MarketplaceService {
       taxonomy_id: input.taxonomy_id,
       tags: input.tags ?? [],
       materials: input.materials ?? [],
+      material_cost_per_unit: input.material_cost_per_unit ?? 0,
+      capacity_units_per_item: input.capacity_units_per_item ?? 1,
+      lead_time_days: input.lead_time_days ?? 1,
       image_ids: input.image_ids ?? [],
       views: 0,
       favorites: 0,
@@ -218,10 +226,19 @@ export class MarketplaceService {
 
   async updateListing(shopId: number, listingId: number, patch: UpdateListingBody): Promise<Listing> {
     await this.assertShopExists(shopId);
+    const existing = await this.getListing(listingId);
+    const fulfillmentMode = patch.fulfillment_mode ?? existing.fulfillment_mode;
     const listing = await this.repository.updateListing(
       shopId,
       listingId,
-      patch,
+      {
+        ...patch,
+        ...(patch.quantity !== undefined &&
+        patch.quantity_on_hand === undefined &&
+        fulfillmentMode === "stocked"
+          ? { quantity_on_hand: patch.quantity }
+          : {})
+      },
       await this.mutationMetadata()
     );
     if (!listing) {

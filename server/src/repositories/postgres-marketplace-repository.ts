@@ -21,6 +21,10 @@ import type {
   StoredShop,
   TaxonomyNode
 } from "../schemas/domain";
+import { recalculateShopBacklog, syncListingInventoryState } from "../simulation/production";
+import { createSimulationState, normalizeWorldState } from "../simulation/state";
+import type { SimulationState, StoredMarketplaceState, StoredWorldState } from "../simulation/state-types";
+import { isMarketplaceActiveListing } from "../listing-availability";
 import type {
   CreateListingData,
   MarketplaceRepository,
@@ -28,14 +32,11 @@ import type {
   UpdateListingData,
   UpdateShopData
 } from "./types";
-import { isMarketplaceActiveListing } from "../listing-availability";
-import { createSimulationState } from "../simulation/state";
-import type { SimulationState, StoredMarketplaceState } from "../simulation/state-types";
 
 const SIMULATION_STATE_KEY = "default";
 
-function toIsoString(value: Date | string): string {
-  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+function toIsoString(value: Date | string | null): string {
+  return value instanceof Date ? value.toISOString() : new Date(value ?? 0).toISOString();
 }
 
 function toNumber(value: string | number): number {
@@ -101,6 +102,251 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
     };
   }
 
+  async replaceWorldState(state: StoredWorldState): Promise<StoredWorldState> {
+    const normalized = normalizeWorldState(state);
+    const sql = await this.dbClient.client.reserve();
+
+    try {
+      await sql`begin`;
+      await sql`delete from simulation_state where state_key = ${SIMULATION_STATE_KEY}`;
+      await sql`delete from payments`;
+      await sql`delete from reviews`;
+      await sql`delete from orders`;
+      await sql`delete from listings`;
+      await sql`delete from shops`;
+      await sql`delete from taxonomy_nodes`;
+
+      for (const taxonomyNode of normalized.marketplace.taxonomyNodes) {
+        await sql`
+          insert into taxonomy_nodes (taxonomy_id, parent_taxonomy_id, name, full_path, level)
+          values (
+            ${taxonomyNode.taxonomy_id},
+            ${taxonomyNode.parent_taxonomy_id},
+            ${taxonomyNode.name},
+            ${taxonomyNode.full_path},
+            ${taxonomyNode.level}
+          )
+        `;
+      }
+
+      for (const shop of normalized.marketplace.shops) {
+        await sql`
+          insert into shops (
+            shop_id,
+            shop_name,
+            title,
+            announcement,
+            sale_message,
+            currency_code,
+            digital_product_policy,
+            production_capacity_per_day,
+            backlog_units,
+            material_costs_paid_total,
+            production_queue,
+            created_at,
+            updated_at
+          )
+          values (
+            ${shop.shop_id},
+            ${shop.shop_name},
+            ${shop.title},
+            ${shop.announcement},
+            ${shop.sale_message},
+            ${shop.currency_code},
+            ${shop.digital_product_policy},
+            ${shop.production_capacity_per_day},
+            ${shop.backlog_units},
+            ${shop.material_costs_paid_total},
+            ${JSON.stringify(shop.production_queue)}::jsonb,
+            ${shop.created_at},
+            ${shop.updated_at}
+          )
+        `;
+      }
+
+      for (const listing of normalized.marketplace.listings) {
+        await sql`
+          insert into listings (
+            listing_id,
+            shop_id,
+            title,
+            description,
+            state,
+            type,
+            quantity,
+            fulfillment_mode,
+            quantity_on_hand,
+            backlog_units,
+            price,
+            currency_code,
+            who_made,
+            when_made,
+            taxonomy_id,
+            tags,
+            materials,
+            material_cost_per_unit,
+            capacity_units_per_item,
+            lead_time_days,
+            image_ids,
+            views,
+            favorites,
+            url,
+            inventory,
+            created_at,
+            updated_at
+          )
+          values (
+            ${listing.listing_id},
+            ${listing.shop_id},
+            ${listing.title},
+            ${listing.description},
+            ${listing.state},
+            ${listing.type},
+            ${listing.quantity},
+            ${listing.fulfillment_mode},
+            ${listing.quantity_on_hand},
+            ${listing.backlog_units},
+            ${listing.price},
+            ${listing.currency_code},
+            ${listing.who_made},
+            ${listing.when_made},
+            ${listing.taxonomy_id},
+            ${JSON.stringify(listing.tags)}::jsonb,
+            ${JSON.stringify(listing.materials)}::jsonb,
+            ${listing.material_cost_per_unit},
+            ${listing.capacity_units_per_item},
+            ${listing.lead_time_days},
+            ${JSON.stringify(listing.image_ids)}::jsonb,
+            ${listing.views},
+            ${listing.favorites},
+            ${listing.url},
+            ${JSON.stringify(listing.inventory)}::jsonb,
+            ${listing.created_at},
+            ${listing.updated_at}
+          )
+        `;
+      }
+
+      for (const order of normalized.marketplace.orders) {
+        await sql`
+          insert into orders (
+            receipt_id,
+            shop_id,
+            buyer_name,
+            status,
+            was_paid,
+            was_shipped,
+            was_delivered,
+            total_price,
+            currency_code,
+            line_items,
+            created_at,
+            updated_at
+          )
+          values (
+            ${order.receipt_id},
+            ${order.shop_id},
+            ${order.buyer_name},
+            ${order.status},
+            ${order.was_paid ? 1 : 0},
+            ${order.was_shipped ? 1 : 0},
+            ${order.was_delivered ? 1 : 0},
+            ${order.total_price},
+            ${order.currency_code},
+            ${JSON.stringify(order.line_items)}::jsonb,
+            ${order.created_at},
+            ${order.updated_at}
+          )
+        `;
+      }
+
+      for (const review of normalized.marketplace.reviews) {
+        await sql`
+          insert into reviews (
+            review_id,
+            shop_id,
+            listing_id,
+            rating,
+            review,
+            buyer_name,
+            created_at
+          )
+          values (
+            ${review.review_id},
+            ${review.shop_id},
+            ${review.listing_id},
+            ${review.rating},
+            ${review.review},
+            ${review.buyer_name},
+            ${review.created_at}
+          )
+        `;
+      }
+
+      for (const payment of normalized.marketplace.payments) {
+        await sql`
+          insert into payments (
+            payment_id,
+            shop_id,
+            receipt_id,
+            amount,
+            currency_code,
+            status,
+            available_at,
+            posted_at
+          )
+          values (
+            ${payment.payment_id},
+            ${payment.shop_id},
+            ${payment.receipt_id},
+            ${payment.amount},
+            ${payment.currency_code},
+            ${payment.status},
+            ${payment.available_at},
+            ${payment.posted_at}
+          )
+        `;
+      }
+
+      await sql`
+        insert into simulation_state (
+          state_key,
+          current_day,
+          current_day_date,
+          advanced_at,
+          market_snapshot,
+          trend_state,
+          pending_reviews,
+          last_resolution,
+          updated_at
+        )
+        values (
+          ${SIMULATION_STATE_KEY},
+          ${normalized.simulation.current_day.day},
+          ${normalized.simulation.current_day.date},
+          ${normalized.simulation.current_day.advanced_at},
+          ${JSON.stringify(normalized.simulation.market_snapshot)}::jsonb,
+          ${JSON.stringify(normalized.simulation.trend_state)}::jsonb,
+          ${JSON.stringify(normalized.simulation.pending_reviews)}::jsonb,
+          ${JSON.stringify(normalized.simulation.last_resolution)}::jsonb,
+          now()
+        )
+      `;
+
+      await sql`commit`;
+    } catch (error) {
+      await sql`rollback`;
+      throw error;
+    } finally {
+      sql.release();
+    }
+
+    return {
+      marketplace: await this.getMarketplaceState(),
+      simulation: await this.getSimulationState()
+    };
+  }
+
   async getSimulationState(): Promise<SimulationState> {
     const rows = await this.db
       .select()
@@ -126,6 +372,8 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
         advancedAt: state.current_day.advanced_at ? new Date(state.current_day.advanced_at) : null,
         marketSnapshot: state.market_snapshot,
         trendState: state.trend_state,
+        pendingReviews: state.pending_reviews,
+        lastResolution: state.last_resolution,
         updatedAt: new Date()
       })
       .onConflictDoUpdate({
@@ -136,6 +384,8 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
           advancedAt: state.current_day.advanced_at ? new Date(state.current_day.advanced_at) : null,
           marketSnapshot: state.market_snapshot,
           trendState: state.trend_state,
+          pendingReviews: state.pending_reviews,
+          lastResolution: state.last_resolution,
           updatedAt: new Date()
         }
       })
@@ -251,6 +501,9 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
           state,
           type,
           quantity,
+          fulfillment_mode,
+          quantity_on_hand,
+          backlog_units,
           price,
           currency_code,
           who_made,
@@ -258,6 +511,9 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
           taxonomy_id,
           tags,
           materials,
+          material_cost_per_unit,
+          capacity_units_per_item,
+          lead_time_days,
           image_ids,
           views,
           favorites,
@@ -274,6 +530,9 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
           ${data.state},
           ${data.type},
           ${data.quantity},
+          ${data.fulfillment_mode},
+          ${data.quantity_on_hand},
+          ${data.backlog_units},
           ${data.price},
           ${data.currency_code},
           ${data.who_made},
@@ -281,6 +540,9 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
           ${data.taxonomy_id},
           ${JSON.stringify(data.tags)}::jsonb,
           ${JSON.stringify(data.materials)}::jsonb,
+          ${data.material_cost_per_unit},
+          ${data.capacity_units_per_item},
+          ${data.lead_time_days},
           ${JSON.stringify(data.image_ids)}::jsonb,
           ${data.views},
           ${data.favorites},
@@ -320,6 +582,9 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
         ...(patch.state !== undefined ? { state: patch.state } : {}),
         ...(patch.type !== undefined ? { type: patch.type } : {}),
         ...(patch.quantity !== undefined ? { quantity: patch.quantity } : {}),
+        ...(patch.fulfillment_mode !== undefined ? { fulfillmentMode: patch.fulfillment_mode } : {}),
+        ...(patch.quantity_on_hand !== undefined ? { quantityOnHand: patch.quantity_on_hand } : {}),
+        ...(patch.backlog_units !== undefined ? { backlogUnits: patch.backlog_units } : {}),
         ...(patch.price !== undefined ? { price: patch.price.toFixed(2) } : {}),
         ...(patch.currency_code !== undefined ? { currencyCode: patch.currency_code } : {}),
         ...(patch.who_made !== undefined ? { whoMade: patch.who_made } : {}),
@@ -327,6 +592,11 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
         ...(patch.taxonomy_id !== undefined ? { taxonomyId: patch.taxonomy_id } : {}),
         ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
         ...(patch.materials !== undefined ? { materials: patch.materials } : {}),
+        ...(patch.material_cost_per_unit !== undefined
+          ? { materialCostPerUnit: patch.material_cost_per_unit.toFixed(2) }
+          : {}),
+        ...(patch.capacity_units_per_item !== undefined ? { capacityUnitsPerItem: patch.capacity_units_per_item } : {}),
+        ...(patch.lead_time_days !== undefined ? { leadTimeDays: patch.lead_time_days } : {}),
         ...(patch.image_ids !== undefined ? { imageIds: patch.image_ids } : {}),
         ...(patch.url !== undefined ? { url: patch.url } : {}),
         ...(patch.inventory !== undefined ? { inventory: patch.inventory } : {}),
@@ -357,24 +627,44 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
     inventory: ListingInventory,
     metadata?: MutationMetadata
   ): Promise<ListingInventory | null> {
+    const listing = await this.getListing(listingId);
+    if (!listing) {
+      return null;
+    }
+
     const quantity = inventory.products.reduce(
       (sum, product) => sum + product.offerings.reduce((offeringSum, offering) => offeringSum + offering.quantity, 0),
       0
     );
     const price = inventory.products[0]?.offerings[0]?.price;
+    const quantityOnHand = listing.fulfillment_mode === "stocked" ? quantity : listing.quantity_on_hand;
 
     const rows = await this.db
       .update(listingsTable)
       .set({
         inventory,
         quantity,
+        quantityOnHand,
         ...(price !== undefined ? { price: price.toFixed(2) } : {}),
         updatedAt: this.resolveTimestamp(metadata)
       })
       .where(eq(listingsTable.listingId, listingId))
-      .returning({ inventory: listingsTable.inventory });
+      .returning();
 
-    return rows[0]?.inventory ?? null;
+    if (!rows[0]) {
+      return null;
+    }
+
+    const synced = syncListingInventoryState(this.mapListing(rows[0], listing.shop_name));
+    await this.db
+      .update(listingsTable)
+      .set({
+        quantity: synced.quantity,
+        inventory: synced.inventory
+      })
+      .where(eq(listingsTable.listingId, listingId));
+
+    return synced.inventory;
   }
 
   async listOrders(shopId: number): Promise<Order[]> {
@@ -429,7 +719,7 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
     ]);
 
     return {
-      ...shop,
+      ...recalculateShopBacklog(shop, listings),
       listing_active_count: listings.filter(isMarketplaceActiveListing).length,
       total_sales_count: orders.filter((order) => order.was_paid).reduce(
         (sum, order) => sum + order.line_items.reduce((lineSum, lineItem) => lineSum + lineItem.quantity, 0),
@@ -449,6 +739,10 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
       sale_message: row.saleMessage,
       currency_code: row.currencyCode,
       digital_product_policy: row.digitalProductPolicy,
+      production_capacity_per_day: row.productionCapacityPerDay,
+      backlog_units: row.backlogUnits,
+      material_costs_paid_total: toNumber(row.materialCostsPaidTotal),
+      production_queue: row.productionQueue,
       created_at: toIsoString(row.createdAt),
       updated_at: toIsoString(row.updatedAt)
     };
@@ -464,6 +758,9 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
       state: row.state as Listing["state"],
       type: row.type,
       quantity: row.quantity,
+      fulfillment_mode: row.fulfillmentMode as Listing["fulfillment_mode"],
+      quantity_on_hand: row.quantityOnHand,
+      backlog_units: row.backlogUnits,
       price: toNumber(row.price),
       currency_code: row.currencyCode,
       who_made: row.whoMade,
@@ -471,6 +768,9 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
       taxonomy_id: row.taxonomyId,
       tags: row.tags,
       materials: row.materials,
+      material_cost_per_unit: toNumber(row.materialCostPerUnit),
+      capacity_units_per_item: row.capacityUnitsPerItem,
+      lead_time_days: row.leadTimeDays,
       image_ids: row.imageIds,
       views: row.views,
       favorites: row.favorites,
@@ -518,6 +818,7 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
       amount: toNumber(row.amount),
       currency_code: row.currencyCode,
       status: row.status as Payment["status"],
+      available_at: toIsoString(row.availableAt),
       posted_at: toIsoString(row.postedAt)
     };
   }
@@ -530,7 +831,9 @@ export class PostgresMarketplaceRepository implements MarketplaceRepository {
         advanced_at: row.advancedAt ? toIsoString(row.advancedAt) : null
       },
       market_snapshot: row.marketSnapshot,
-      trend_state: row.trendState
+      trend_state: row.trendState,
+      pending_reviews: row.pendingReviews,
+      last_resolution: row.lastResolution
     };
   }
 

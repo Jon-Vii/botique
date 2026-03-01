@@ -35,10 +35,12 @@ describe("Botique server control endpoints", () => {
 
     assert.equal(snapshotResponse.statusCode, 200);
     const snapshot = snapshotResponse.json();
-    assert.equal(snapshot.active_listing_count, 3);
-    assert.equal(snapshot.active_shop_count, 2);
+    assert.equal(snapshot.active_listing_count, 4);
+    assert.equal(snapshot.active_shop_count, 4);
     assert.ok(snapshot.average_active_price > 0);
-    assert.ok(snapshot.taxonomy.length >= 2);
+    assert.equal(snapshot.total_quantity_on_hand, 8);
+    assert.equal(snapshot.total_backlog_units, 2);
+    assert.ok(snapshot.taxonomy.length >= 4);
 
     assert.equal(trendResponse.statusCode, 200);
     const trendState = trendResponse.json();
@@ -65,7 +67,15 @@ describe("Botique server control endpoints", () => {
     assert.equal(advancePayload.current_day.date, "2026-03-01T00:00:00.000Z");
     assert.deepEqual(
       advancePayload.steps.map((step: { name: string }) => step.name),
-      ["advance_clock", "refresh_trends", "refresh_market_snapshot"]
+      [
+        "advance_clock",
+        "refresh_trends",
+        "release_completed_production",
+        "settle_delayed_events",
+        "resolve_market_sales",
+        "allocate_production",
+        "refresh_market_snapshot"
+      ]
     );
 
     const [dayResponse, trendResponse, worldStateResponse] = await Promise.all([

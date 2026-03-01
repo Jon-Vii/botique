@@ -18,6 +18,7 @@ import type {
 import { createDefaultMarketplaceState } from "../default-marketplace-state";
 import { isMarketplaceActiveListing } from "../listing-availability";
 import { normalizeWorldState } from "../simulation/state";
+import { normalizeListingProduction, recalculateShopBacklog, syncListingInventoryState } from "../simulation/production";
 import type { SimulationState, StoredMarketplaceState, StoredWorldState } from "../simulation/state-types";
 
 function clone<T>(value: T): T {
@@ -49,6 +50,13 @@ export class InMemoryMarketplaceRepository implements MarketplaceRepository {
 
   async getSimulationState(): Promise<SimulationState> {
     return clone(this.state.simulation);
+  }
+
+  async replaceWorldState(state: StoredWorldState): Promise<StoredWorldState> {
+    const normalized = normalizeWorldState(state);
+    this.state.marketplace = normalized.marketplace;
+    this.state.simulation = normalized.simulation;
+    return clone(this.state);
   }
 
   async setSimulationState(state: SimulationState): Promise<SimulationState> {
@@ -101,7 +109,7 @@ export class InMemoryMarketplaceRepository implements MarketplaceRepository {
     const listingId = this.nextId(this.state.marketplace.listings.map((item) => item.listing_id));
     const timestamp = mutationTimestamp(metadata);
     const listing: Listing = {
-      ...clone(data),
+      ...syncListingInventoryState(normalizeListingProduction(clone(data) as Listing)),
       listing_id: listingId,
       created_at: timestamp,
       updated_at: timestamp
@@ -123,11 +131,11 @@ export class InMemoryMarketplaceRepository implements MarketplaceRepository {
       return null;
     }
 
-    this.state.marketplace.listings[index] = {
+    this.state.marketplace.listings[index] = syncListingInventoryState(normalizeListingProduction({
       ...this.state.marketplace.listings[index],
       ...clone(patch),
       updated_at: mutationTimestamp(metadata)
-    };
+    }));
 
     return clone(this.state.marketplace.listings[index]);
   }
@@ -160,11 +168,16 @@ export class InMemoryMarketplaceRepository implements MarketplaceRepository {
         sum + product.offerings.reduce((offeringSum, offering) => offeringSum + offering.quantity, 0),
       0
     );
+    if (listing.fulfillment_mode === "stocked") {
+      listing.quantity_on_hand = listing.quantity;
+    }
     const firstOffering = inventory.products[0]?.offerings[0];
     if (firstOffering) {
       listing.price = firstOffering.price;
     }
     listing.updated_at = mutationTimestamp(metadata);
+    const synced = syncListingInventoryState(listing);
+    Object.assign(listing, synced);
     return clone(listing.inventory);
   }
 
@@ -211,7 +224,7 @@ export class InMemoryMarketplaceRepository implements MarketplaceRepository {
     const orders = this.state.marketplace.orders.filter((item) => item.shop_id === shop.shop_id && item.was_paid);
 
     return {
-      ...clone(shop),
+      ...clone(recalculateShopBacklog(shop, listings)),
       listing_active_count: listings.filter(isMarketplaceActiveListing).length,
       total_sales_count: orders.reduce(
         (sum, order) => sum + order.line_items.reduce((lineSum, lineItem) => lineSum + lineItem.quantity, 0),

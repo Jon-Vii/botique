@@ -4,6 +4,7 @@ import {
   listingSchema,
   orderSchema,
   paymentSchema,
+  productionQueueItemSchema,
   reviewSchema,
   storedShopSchema,
   taxonomyNodeSchema
@@ -41,7 +42,41 @@ export const marketSnapshotSchema = z.object({
   active_listing_count: z.number().int().nonnegative(),
   active_shop_count: z.number().int().nonnegative(),
   average_active_price: z.number().nonnegative(),
+  total_quantity_on_hand: z.number().int().nonnegative(),
+  total_backlog_units: z.number().int().nonnegative(),
   taxonomy: z.array(taxonomyMarketSnapshotSchema)
+});
+
+export const pendingReviewSchema = z.object({
+  queue_id: z.string(),
+  review_id: z.number().int().positive(),
+  shop_id: z.number().int().positive(),
+  receipt_id: z.number().int().positive(),
+  listing_id: z.number().int().positive(),
+  buyer_name: z.string(),
+  release_at: z.string(),
+  rating: z.number().int().min(1).max(5),
+  review: z.string()
+});
+
+export const shopDayResolutionSchema = z.object({
+  shop_id: z.number().int().positive(),
+  orders_created: z.number().int().nonnegative(),
+  stocked_units_sold: z.number().int().nonnegative(),
+  made_to_order_units_sold: z.number().int().nonnegative(),
+  production_units_started: z.number().int().nonnegative(),
+  units_released: z.number().int().nonnegative(),
+  payments_posted: z.number().int().nonnegative(),
+  reviews_released: z.number().int().nonnegative(),
+  material_costs_incurred: z.number().nonnegative(),
+  backlog_units_end: z.number().int().nonnegative(),
+  queue_depth_end: z.number().int().nonnegative()
+});
+
+export const dayResolutionSummarySchema = z.object({
+  resolved_at: z.string(),
+  pending_review_count: z.number().int().nonnegative(),
+  shops: z.array(shopDayResolutionSchema)
 });
 
 export const storedMarketplaceStateSchema = z.object({
@@ -56,7 +91,9 @@ export const storedMarketplaceStateSchema = z.object({
 export const simulationStateSchema = z.object({
   current_day: simulationDaySchema,
   market_snapshot: marketSnapshotSchema,
-  trend_state: trendStateSchema
+  trend_state: trendStateSchema,
+  pending_reviews: z.array(pendingReviewSchema),
+  last_resolution: dayResolutionSummarySchema.nullable()
 });
 
 export const worldStateSchema = z.object({
@@ -65,7 +102,15 @@ export const worldStateSchema = z.object({
 });
 
 export const advanceDayStepSchema = z.object({
-  name: z.enum(["advance_clock", "refresh_trends", "refresh_market_snapshot"]),
+  name: z.enum([
+    "advance_clock",
+    "refresh_trends",
+    "release_completed_production",
+    "settle_delayed_events",
+    "resolve_market_sales",
+    "allocate_production",
+    "refresh_market_snapshot"
+  ]),
   description: z.string()
 });
 

@@ -1,7 +1,7 @@
 import { integer, jsonb, numeric, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
 
-import type { ListingInventory, Order, Payment, Review, TaxonomyNode } from "../schemas/domain";
-import type { MarketSnapshot, TrendState } from "../simulation/state-types";
+import type { ListingInventory, Order, Payment, ProductionQueueItem, Review, TaxonomyNode } from "../schemas/domain";
+import type { DayResolutionSummary, MarketSnapshot, PendingReview, TrendState } from "../simulation/state-types";
 
 export const shopsTable = pgTable("shops", {
   shopId: integer("shop_id").primaryKey(),
@@ -11,6 +11,10 @@ export const shopsTable = pgTable("shops", {
   saleMessage: text("sale_message").notNull(),
   currencyCode: varchar("currency_code", { length: 3 }).notNull(),
   digitalProductPolicy: text("digital_product_policy").notNull(),
+  productionCapacityPerDay: integer("production_capacity_per_day").notNull(),
+  backlogUnits: integer("backlog_units").notNull(),
+  materialCostsPaidTotal: numeric("material_costs_paid_total", { precision: 10, scale: 2 }).notNull(),
+  productionQueue: jsonb("production_queue").$type<ProductionQueueItem[]>().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull()
 });
@@ -25,6 +29,9 @@ export const listingsTable = pgTable("listings", {
   state: varchar("state", { length: 16 }).notNull(),
   type: varchar("type", { length: 32 }).notNull(),
   quantity: integer("quantity").notNull(),
+  fulfillmentMode: varchar("fulfillment_mode", { length: 32 }).notNull(),
+  quantityOnHand: integer("quantity_on_hand").notNull(),
+  backlogUnits: integer("backlog_units").notNull(),
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
   currencyCode: varchar("currency_code", { length: 3 }).notNull(),
   whoMade: varchar("who_made", { length: 64 }).notNull(),
@@ -32,6 +39,9 @@ export const listingsTable = pgTable("listings", {
   taxonomyId: integer("taxonomy_id").notNull(),
   tags: jsonb("tags").$type<string[]>().notNull(),
   materials: jsonb("materials").$type<string[]>().notNull(),
+  materialCostPerUnit: numeric("material_cost_per_unit", { precision: 10, scale: 2 }).notNull(),
+  capacityUnitsPerItem: integer("capacity_units_per_item").notNull(),
+  leadTimeDays: integer("lead_time_days").notNull(),
   imageIds: jsonb("image_ids").$type<number[]>().notNull(),
   views: integer("views").notNull(),
   favorites: integer("favorites").notNull(),
@@ -83,6 +93,7 @@ export const paymentsTable = pgTable("payments", {
   amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
   currencyCode: varchar("currency_code", { length: 3 }).notNull(),
   status: varchar("status", { length: 16 }).notNull(),
+  availableAt: timestamp("available_at", { withTimezone: true }).notNull(),
   postedAt: timestamp("posted_at", { withTimezone: true }).notNull()
 });
 
@@ -101,5 +112,7 @@ export const simulationStateTable = pgTable("simulation_state", {
   advancedAt: timestamp("advanced_at", { withTimezone: true }),
   marketSnapshot: jsonb("market_snapshot").$type<MarketSnapshot>().notNull(),
   trendState: jsonb("trend_state").$type<TrendState>().notNull(),
+  pendingReviews: jsonb("pending_reviews").$type<PendingReview[]>().notNull(),
+  lastResolution: jsonb("last_resolution").$type<DayResolutionSummary | null>(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull()
 });

@@ -19,8 +19,10 @@ describe("System 2 simulation module", () => {
 
     assert.equal(currentDay.day, 3);
     assert.equal(currentDay.date, "2026-02-28T00:00:00.000Z");
-    assert.equal(marketSnapshot.active_listing_count, 3);
-    assert.equal(marketSnapshot.active_shop_count, 2);
+    assert.equal(marketSnapshot.active_listing_count, 4);
+    assert.equal(marketSnapshot.active_shop_count, 4);
+    assert.equal(marketSnapshot.total_quantity_on_hand, 8);
+    assert.equal(marketSnapshot.total_backlog_units, 2);
     assert.equal(trendState.active_trends[0]?.taxonomy_id, 9103);
     assert.equal(trendState.active_trends[1]?.taxonomy_id, 9104);
   });
@@ -37,7 +39,15 @@ describe("System 2 simulation module", () => {
     assert.equal(result.current_day.date, "2026-03-01T00:00:00.000Z");
     assert.deepEqual(
       result.steps.map((step) => step.name),
-      ["advance_clock", "refresh_trends", "refresh_market_snapshot"]
+      [
+        "advance_clock",
+        "refresh_trends",
+        "release_completed_production",
+        "settle_delayed_events",
+        "resolve_market_sales",
+        "allocate_production",
+        "refresh_market_snapshot"
+      ]
     );
     assert.equal(persisted.current_day.day, 4);
     assert.equal(persisted.trend_state.active_trends[0]?.taxonomy_id, 9104);
@@ -50,20 +60,20 @@ describe("System 2 simulation module", () => {
     const service = new MarketplaceService(repository, simulation);
 
     const before = await service.searchMarketplace({
-      keywords: "celestial",
+      keywords: "espresso",
       limit: 10,
       offset: 0
     });
-    const beforeScore = before.results.find((listing) => listing.listing_id === 2003)?.ranking_score;
+    const beforeScore = before.results.find((listing) => listing.listing_id === 2005)?.ranking_score;
 
     await simulation.advanceDay();
 
     const after = await service.searchMarketplace({
-      keywords: "celestial",
+      keywords: "espresso",
       limit: 10,
       offset: 0
     });
-    const afterScore = after.results.find((listing) => listing.listing_id === 2003)?.ranking_score;
+    const afterScore = after.results.find((listing) => listing.listing_id === 2005)?.ranking_score;
 
     assert.ok(beforeScore !== undefined);
     assert.ok(afterScore !== undefined);
@@ -81,13 +91,18 @@ describe("System 2 simulation module", () => {
 
     const created = await service.createDraftListing(1001, {
       quantity: 2,
-      title: "Day-aligned planner",
+      title: "Day-aligned planter stand",
       description: "Created after the simulation advanced.",
-      price: 12,
+      price: 36,
+      fulfillment_mode: "made_to_order",
+      quantity_on_hand: 0,
       who_made: "i_did",
       when_made: "2020_2025",
-      taxonomy_id: 9102,
-      type: "download"
+      taxonomy_id: 9101,
+      type: "physical",
+      material_cost_per_unit: 9,
+      capacity_units_per_item: 2,
+      lead_time_days: 3
     });
     const updated = await service.updateListing(1001, created.listing_id, {
       state: "active"

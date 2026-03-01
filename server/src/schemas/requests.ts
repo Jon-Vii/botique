@@ -77,6 +77,8 @@ export const createDraftListingBodySchema = z.object({
   title: z.string().trim().min(1),
   description: z.string().trim().min(1),
   price: nonNegativeNumberField(),
+  fulfillment_mode: z.enum(["stocked", "made_to_order"]).optional(),
+  quantity_on_hand: nonNegativeIntField().optional(),
   who_made: z.string().trim().min(1),
   when_made: z.string().trim().min(1),
   taxonomy_id: positiveIntField(),
@@ -84,6 +86,9 @@ export const createDraftListingBodySchema = z.object({
   type: z.string().trim().min(1).optional(),
   tags: csvStringArray.optional(),
   materials: csvStringArray.optional(),
+  material_cost_per_unit: nonNegativeNumberField().optional(),
+  capacity_units_per_item: positiveIntField().optional(),
+  lead_time_days: positiveIntField().optional(),
   image_ids: csvIntArray.optional(),
   url: z.string().trim().optional()
 });
@@ -94,6 +99,8 @@ export const updateListingBodySchema = z
     title: z.string().trim().min(1).optional(),
     description: z.string().trim().min(1).optional(),
     price: nonNegativeNumberField().optional(),
+    fulfillment_mode: z.enum(["stocked", "made_to_order"]).optional(),
+    quantity_on_hand: nonNegativeIntField().optional(),
     who_made: z.string().trim().min(1).optional(),
     when_made: z.string().trim().min(1).optional(),
     taxonomy_id: positiveIntField().optional(),
@@ -101,6 +108,9 @@ export const updateListingBodySchema = z
     type: z.string().trim().min(1).optional(),
     tags: csvStringArray.optional(),
     materials: csvStringArray.optional(),
+    material_cost_per_unit: nonNegativeNumberField().optional(),
+    capacity_units_per_item: positiveIntField().optional(),
+    lead_time_days: positiveIntField().optional(),
     image_ids: csvIntArray.optional(),
     url: z.string().trim().optional()
   })

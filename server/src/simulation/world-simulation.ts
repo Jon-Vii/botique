@@ -1,4 +1,4 @@
-import { buildMarketSnapshot, buildTrendState, nextSimulationDay } from "./state";
+import { resolveAdvanceDay } from "./day-resolution";
 import type {
   AdvanceDayResult,
   MarketSnapshot,
@@ -12,6 +12,7 @@ import type {
 
 export interface SimulationStateStore {
   getMarketplaceState(): Promise<StoredMarketplaceState>;
+  replaceWorldState(state: StoredWorldState): Promise<StoredWorldState>;
   getSimulationState(): Promise<SimulationState>;
   setSimulationState(state: SimulationState): Promise<SimulationState>;
 }
@@ -63,37 +64,12 @@ export class WorldSimulation implements SimulationModule {
 
   async advanceDay(): Promise<AdvanceDayResult> {
     const world = await this.getWorldState();
-    const advancedAt = new Date().toISOString();
-    const nextDay = nextSimulationDay(world.simulation.current_day, advancedAt);
-    const nextTrendState = buildTrendState(world.marketplace, nextDay, advancedAt);
-    const nextMarketSnapshot = buildMarketSnapshot(world.marketplace, nextTrendState, advancedAt);
-    const nextSimulation = await this.store.setSimulationState({
-      current_day: nextDay,
-      trend_state: nextTrendState,
-      market_snapshot: nextMarketSnapshot
-    });
+    const result = resolveAdvanceDay(world);
+    const persistedWorld = await this.store.replaceWorldState(result.world);
 
     return {
-      world: {
-        marketplace: world.marketplace,
-        simulation: nextSimulation
-      },
-      previous_day: world.simulation.current_day,
-      current_day: nextSimulation.current_day,
-      steps: [
-        {
-          name: "advance_clock",
-          description: "Increment the simulation day and roll the world clock forward by one UTC day."
-        },
-        {
-          name: "refresh_trends",
-          description: "Rotate the active taxonomy-led trends using a deterministic day-based schedule."
-        },
-        {
-          name: "refresh_market_snapshot",
-          description: "Recompute inspectable market totals and per-taxonomy demand multipliers from the updated trend state."
-        }
-      ]
+      ...result,
+      world: persistedWorld
     };
   }
 }

@@ -1,5 +1,21 @@
 import { z } from "zod";
 
+export const fulfillmentModeSchema = z.enum(["stocked", "made_to_order"]);
+
+export const productionQueueItemSchema = z.object({
+  job_id: z.string(),
+  listing_id: z.number().int().positive(),
+  order_id: z.number().int().positive().nullable(),
+  kind: z.enum(["stock", "customer_order"]),
+  status: z.enum(["queued", "in_progress", "waiting_ready"]),
+  created_at: z.string(),
+  started_at: z.string().nullable(),
+  ready_at: z.string().nullable(),
+  capacity_units_required: z.number().int().positive(),
+  capacity_units_remaining: z.number().int().nonnegative(),
+  material_cost: z.number().nonnegative()
+});
+
 export const inventoryOfferingSchema = z.object({
   offering_id: z.number().int().nonnegative(),
   price: z.number().nonnegative(),
@@ -30,6 +46,9 @@ export const listingSchema = z.object({
   state: z.enum(["draft", "active", "inactive", "sold_out"]),
   type: z.string(),
   quantity: z.number().int().nonnegative(),
+  fulfillment_mode: fulfillmentModeSchema,
+  quantity_on_hand: z.number().int().nonnegative(),
+  backlog_units: z.number().int().nonnegative(),
   price: z.number().nonnegative(),
   currency_code: z.string(),
   who_made: z.string(),
@@ -37,6 +56,9 @@ export const listingSchema = z.object({
   taxonomy_id: z.number().int().positive(),
   tags: z.array(z.string()),
   materials: z.array(z.string()),
+  material_cost_per_unit: z.number().nonnegative(),
+  capacity_units_per_item: z.number().int().positive(),
+  lead_time_days: z.number().int().positive(),
   image_ids: z.array(z.number().int()),
   views: z.number().int().nonnegative(),
   favorites: z.number().int().nonnegative(),
@@ -55,6 +77,10 @@ export const storedShopSchema = z.object({
   sale_message: z.string(),
   currency_code: z.string(),
   digital_product_policy: z.string(),
+  production_capacity_per_day: z.number().int().nonnegative(),
+  backlog_units: z.number().int().nonnegative(),
+  material_costs_paid_total: z.number().nonnegative(),
+  production_queue: z.array(productionQueueItemSchema),
   created_at: z.string(),
   updated_at: z.string()
 });
@@ -105,6 +131,7 @@ export const paymentSchema = z.object({
   amount: z.number().nonnegative(),
   currency_code: z.string(),
   status: z.enum(["posted", "pending"]),
+  available_at: z.string(),
   posted_at: z.string()
 });
 
@@ -133,6 +160,8 @@ export function paginatedResultsSchema<T extends z.ZodTypeAny>(itemSchema: T) {
 
 export type Listing = z.infer<typeof listingSchema>;
 export type ListingInventory = z.infer<typeof inventorySchema>;
+export type FulfillmentMode = z.infer<typeof fulfillmentModeSchema>;
+export type ProductionQueueItem = z.infer<typeof productionQueueItemSchema>;
 export type Shop = z.infer<typeof shopSchema>;
 export type StoredShop = z.infer<typeof storedShopSchema>;
 export type Order = z.infer<typeof orderSchema>;

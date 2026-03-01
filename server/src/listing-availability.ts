@@ -1,4 +1,5 @@
 import type { Listing, ListingInventory } from "./schemas/domain";
+import { isMadeToOrderListing } from "./simulation/production";
 
 function hasEnabledInventory(inventory: ListingInventory): boolean {
   return inventory.products.some((product) =>
@@ -7,5 +8,13 @@ function hasEnabledInventory(inventory: ListingInventory): boolean {
 }
 
 export function isMarketplaceActiveListing(listing: Listing): boolean {
-  return listing.state === "active" && listing.quantity > 0 && hasEnabledInventory(listing.inventory);
+  if (listing.state !== "active") {
+    return false;
+  }
+
+  if (isMadeToOrderListing(listing)) {
+    return hasEnabledInventory(listing.inventory) || listing.quantity > 0;
+  }
+
+  return listing.quantity_on_hand > 0 && hasEnabledInventory(listing.inventory);
 }

@@ -37,10 +37,11 @@ describe("Botique server core endpoints", () => {
     ]);
 
     assert.equal(shopResponse.statusCode, 200);
-    assert.equal(shopResponse.json().shop_name, "northwind-printables");
+    assert.equal(shopResponse.json().shop_name, "layercake-labs");
+    assert.equal(shopResponse.json().production_capacity_per_day, 10);
 
     assert.equal(searchResponse.statusCode, 200);
-    assert.ok(searchResponse.json().count >= 3);
+    assert.ok(searchResponse.json().count >= 4);
 
     assert.equal(paymentsResponse.statusCode, 200);
     assert.equal(paymentsResponse.json().results[0].payment_id, 8001);
@@ -58,13 +59,18 @@ describe("Botique server core endpoints", () => {
       },
       payload: new URLSearchParams({
         quantity: "5",
-        title: "Botique Test Listing",
-        description: "Draft listing created through the compatibility contract.",
-        price: "11.5",
+        title: "Botique Test Key Rail",
+        description: "Draft physical listing created through the compatibility contract.",
+        price: "72",
+        fulfillment_mode: "made_to_order",
+        quantity_on_hand: "0",
         who_made: "i_did",
         when_made: "2020_2025",
-        taxonomy_id: "9102",
-        type: "download"
+        taxonomy_id: "9104",
+        type: "physical",
+        material_cost_per_unit: "18",
+        capacity_units_per_item: "3",
+        lead_time_days: "5"
       }).toString()
     });
 
@@ -72,6 +78,8 @@ describe("Botique server core endpoints", () => {
     const createdListing = createResponse.json();
     assert.equal(createdListing.shop_id, 1001);
     assert.equal(createdListing.state, "draft");
+    assert.equal(createdListing.fulfillment_mode, "made_to_order");
+    assert.equal(createdListing.quantity_on_hand, 0);
 
     const updateResponse = await app.inject({
       method: "PATCH",
@@ -125,7 +133,7 @@ describe("Botique server core endpoints", () => {
 
     const searchResponse = await app.inject({
       method: "GET",
-      url: "/v3/application/listings/active?keywords=mushroom&limit=5&offset=0"
+      url: "/v3/application/listings/active?keywords=seed%20starter&limit=5&offset=0"
     });
 
     assert.equal(searchResponse.statusCode, 200);
@@ -145,7 +153,7 @@ describe("Botique server core endpoints", () => {
     ]);
 
     assert.equal(shopResponse.statusCode, 200);
-    assert.equal(shopResponse.json().shop_name, "northwind-printables");
+    assert.equal(shopResponse.json().shop_name, "layercake-labs");
 
     assert.equal(reviewsResponse.statusCode, 200);
     assert.equal(reviewsResponse.json().results[0].review_id, 7001);
@@ -188,8 +196,8 @@ describe("Botique server core endpoints", () => {
 
     assert.equal(response.statusCode, 200);
     const payload = response.json();
-    assert.equal(payload.count, 0);
-    assert.deepEqual(payload.results, []);
+    assert.equal(payload.count, 1);
+    assert.equal(payload.results[0].payment_id, 8003);
   });
 
   test("replaces full listing inventory with the JSON inventory contract, including zero stock", async () => {
@@ -267,7 +275,7 @@ describe("Botique server core endpoints", () => {
 
     const soldOutSearch = await app.inject({
       method: "GET",
-      url: "/v3/application/listings/active?keywords=mushroom&limit=10&offset=0"
+      url: "/v3/application/listings/active?keywords=seed%20starter&limit=10&offset=0"
     });
     assert.equal(soldOutSearch.statusCode, 200);
     assert.equal(soldOutSearch.json().count, 0);

@@ -34,13 +34,18 @@ class CoreToolsClientTests(unittest.TestCase):
             {
                 "shop_id": 42,
                 "quantity": 5,
-                "title": "Botique planner",
-                "description": "Daily digital planner.",
-                "price": 900,
+                "title": "Botique key rail",
+                "description": "Small-batch oak key rail.",
+                "price": 72,
+                "fulfillment_mode": "made_to_order",
+                "quantity_on_hand": 0,
                 "who_made": "i_did",
                 "when_made": "2020_2025",
                 "taxonomy_id": 123,
-                "type": "download",
+                "type": "physical",
+                "material_cost_per_unit": 18,
+                "capacity_units_per_item": 3,
+                "lead_time_days": 5,
             },
         )
 
@@ -51,7 +56,8 @@ class CoreToolsClientTests(unittest.TestCase):
         self.assertEqual(plan.body_encoding.value, "form")
         self.assertEqual(plan.headers["x-api-key"], "test-key")
         self.assertEqual(plan.headers["Authorization"], "Bearer seller-token")
-        self.assertEqual(plan.body["type"], "download")
+        self.assertEqual(plan.body["type"], "physical")
+        self.assertEqual(plan.body["fulfillment_mode"], "made_to_order")
 
     def test_prepare_delete_listing_uses_delete_method(self) -> None:
         client = SellerCoreClient(config=ClientConfig(base_url="https://api.example.test"))
@@ -96,7 +102,7 @@ class CoreToolsClientTests(unittest.TestCase):
             transport=transport,
         )
 
-        result = client.search_marketplace(keywords="mushroom sticker", limit=10, offset=20)
+        result = client.search_marketplace(keywords="laser cut sign", limit=10, offset=20)
 
         self.assertEqual(result, {"results": []})
         self.assertEqual(len(transport.plans), 1)
@@ -105,7 +111,7 @@ class CoreToolsClientTests(unittest.TestCase):
         self.assertEqual(plan.url, "https://botique.example/api/listings/active")
         self.assertEqual(
             plan.query,
-            {"keywords": "mushroom sticker", "limit": 10, "offset": 20},
+            {"keywords": "laser cut sign", "limit": 10, "offset": 20},
         )
 
     def test_prepare_requires_minimum_create_draft_listing_fields(self) -> None:
