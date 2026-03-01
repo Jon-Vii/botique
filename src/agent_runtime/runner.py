@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from uuid import uuid4
 
@@ -223,6 +224,7 @@ class OwnerAgentRunner:
         run_id: str | None = None,
         reset_world: bool = False,
         scenario_id: str | None = None,
+        progress_callback: Callable[[str, ShopId, int, list[LiveDayRunResult]], None] | None = None,
     ) -> MultiDayRunResult:
         if days < 1:
             raise ValueError("days must be at least 1.")
@@ -237,6 +239,9 @@ class OwnerAgentRunner:
                 controlled_shop_ids=(int(shop_id),),
             )
 
+        if scenario_id == "bootstrap":
+            self._run_identity_step(shop_id=shop_id, run_id=active_run_id)
+
         for index in range(days):
             live_day = self.run_live_day(
                 shop_id=shop_id,
@@ -247,6 +252,8 @@ class OwnerAgentRunner:
                 scenario_id=None,
             )
             live_days.append(live_day)
+            if progress_callback is not None:
+                progress_callback(active_run_id, shop_id, days, live_days)
             previous_shop_state = live_day.state_after
 
         return MultiDayRunResult(
@@ -275,6 +282,72 @@ class OwnerAgentRunner:
                 "Live runtime flows require a configured control API client."
             )
         return self.control_client
+
+    def _run_identity_step(
+        self,
+        *,
+        shop_id: ShopId,
+        run_id: str,
+    ) -> str | None:
+        """Pre-loop LLM call for the agent to name its shop in bootstrap scenarios."""
+        response = self.provider.complete(
+            messages=(
+                ProviderMessage(
+                    role=ProviderMessageRole.SYSTEM,
+                    content=self.policy.config.system_prompt,
+                ),
+                ProviderMessage(
+                    role=ProviderMessageRole.USER,
+                    content=(
+                        "You're opening a new 3D printing shop on Botique. "
+                        "Choose a name for your shop. Your first day of business "
+                        "starts next — you'll need to create your first product listings."
+                    ),
+                ),
+            ),
+            tools=(
+                ProviderToolDefinition(
+                    name="set_shop_name",
+                    description="Set the display name for your new shop.",
+                    parameters_schema={
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "description": "The display name for your shop.",
+                            },
+                        },
+                        "required": ["name"],
+                        "additionalProperties": False,
+                    },
+                ),
+            ),
+            tool_choice="any",
+            allow_parallel_tool_calls=False,
+        )
+
+        name: str | None = None
+        if hasattr(response, "tool_calls") and response.tool_calls:
+            tool_call = response.tool_calls[0]
+            if tool_call.name == "set_shop_name":
+                raw_name = tool_call.arguments.get("name")
+                if isinstance(raw_name, str) and raw_name.strip():
+                    name = raw_name.strip()
+
+        if name:
+            self.seller_client.update_shop(shop_id=shop_id, title=name)
+
+        self.event_log.append(
+            kind=EventKind.IDENTITY_STEP,
+            run_id=run_id,
+            shop_id=shop_id,
+            day=0,
+            payload={
+                "chosen_name": name,
+                "applied": name is not None,
+            },
+        )
+        return name
 
     def _write_end_of_day_scratchpad(
         self,

@@ -27,6 +27,70 @@ from .tournament import TournamentResult
 ArtifactResult = DayRunResult | LiveDayRunResult | MultiDayRunResult | TournamentResult
 
 
+def write_run_progress(
+    *,
+    output_dir: str | Path,
+    run_id: str,
+    shop_id: ShopId,
+    total_days: int,
+    completed_days: list[LiveDayRunResult],
+    status: str = "running",
+) -> None:
+    """Write a lightweight progress.json sidecar for live run tracking."""
+    dir_path = Path(output_dir)
+    dir_path.mkdir(parents=True, exist_ok=True)
+
+    day_summaries = []
+    for live_day in completed_days:
+        tool_calls: list[str] = []
+        for turn in live_day.day_result.turns:
+            if turn.tool_result is not None:
+                tool_calls.append(turn.tool_result.tool_name)
+
+        state = live_day.state_after or live_day.state_before
+        day_summaries.append({
+            "day": live_day.day,
+            "simulation_date": (
+                live_day.state_before.simulation_date
+                if live_day.state_before is not None
+                else None
+            ),
+            "turn_count": len(live_day.day_result.turns),
+            "tool_calls": tool_calls,
+            "available_balance": (
+                state.balance_summary.available if state is not None else 0
+            ),
+            "active_listing_count": (
+                state.active_listing_count if state is not None else 0
+            ),
+            "total_sales_count": (
+                state.total_sales_count if state is not None else 0
+            ),
+            "review_average": (
+                state.review_average if state is not None else 0
+            ),
+            "review_count": (
+                state.review_count if state is not None else 0
+            ),
+        })
+
+    payload = {
+        "run_id": run_id,
+        "shop_id": jsonify(shop_id),
+        "status": status,
+        "total_days": total_days,
+        "completed_day_count": len(completed_days),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "days": day_summaries,
+    }
+
+    progress_path = dir_path / "progress.json"
+    progress_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class RunArtifactBundle:
     output_dir: str
@@ -106,6 +170,11 @@ def persist_run_artifacts(
     events_jsonl_path = root_dir / "events.jsonl"
 
     summary_payload = _build_run_summary(normalized, created_at=created_at)
+    # Inject run identity from invocation so the frontend can display
+    # which model/provider was used without needing the manifest.
+    identity = _build_identity_from_invocation(invocation)
+    if identity:
+        summary_payload["identity"] = identity
     manifest_payload = _build_manifest(
         normalized,
         summary_payload=summary_payload,
@@ -281,7 +350,9 @@ def _prepare_output_dir(
     if output_path.exists():
         if not output_path.is_dir():
             raise ValueError(f"Artifact output path {output_path} is not a directory.")
-        if any(output_path.iterdir()):
+        # Allow directories that only contain progress.json (written during run)
+        existing = set(f.name for f in output_path.iterdir())
+        if existing and existing != {"progress.json"}:
             raise ValueError(f"Artifact output directory {output_path} is not empty.")
     else:
         output_path.mkdir(parents=True, exist_ok=False)
@@ -955,6 +1026,30 @@ def _mapping(value: Any, field_name: str) -> Mapping[str, JSONValue]:
     if not isinstance(value, Mapping):
         raise ValueError(f"{field_name} must be a JSON object.")
     return value
+
+
+def _build_identity_from_invocation(invocation: Mapping[str, Any] | None) -> dict[str, JSONValue] | None:
+    if invocation is None:
+        return None
+    identity: dict[str, JSONValue] = {}
+    provider = invocation.get("provider")
+    model = invocation.get("model") or invocation.get("mistral_model")
+    turns_per_day = invocation.get("turns_per_day") or invocation.get("max_turns") or invocation.get("work_budget")
+    temperature = invocation.get("mistral_temperature") or invocation.get("temperature")
+    top_p = invocation.get("mistral_top_p") or invocation.get("top_p")
+
+    if isinstance(provider, str) and provider.strip():
+        identity["provider"] = provider
+    if isinstance(model, str) and model.strip():
+        identity["model"] = model
+    if isinstance(turns_per_day, (int, float)) and turns_per_day > 0:
+        identity["turns_per_day"] = int(turns_per_day)
+    if isinstance(temperature, (int, float)):
+        identity["temperature"] = float(temperature)
+    if isinstance(top_p, (int, float)):
+        identity["top_p"] = float(top_p)
+
+    return identity if identity else None
 
 
 def _slugify(value: Any) -> str:

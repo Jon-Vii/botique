@@ -394,6 +394,7 @@ class LiveMorningBriefingBuilder:
             orders=orders,
             payments=payments,
             currency_code=str(shop.get("currency_code", "USD")),
+            seed_capital=float(shop.get("seed_capital", 0)),
         )
         shop_state = self._build_shop_state_snapshot(
             shop=shop,
@@ -435,6 +436,20 @@ class LiveMorningBriefingBuilder:
             listings=listings,
         )
         workspace = self._memory.read_workspace(shop_id=shop_id)
+
+        is_bootstrap_start = (
+            shop_state.active_listing_count == 0
+            and shop_state.draft_listing_count == 0
+            and shop_state.total_sales_count == 0
+        )
+        priorities_prompt = (
+            "Your shop is brand new with zero listings. Study the marketplace, "
+            "decide your niche, and create your first product listings. Focus on "
+            "getting active listings generating traffic."
+            if is_bootstrap_start
+            else DEFAULT_PRIORITIES_PROMPT
+        )
+
         briefing = self._briefing_builder.build(
             run_id=run_id,
             shop_id=shop_id,
@@ -456,6 +471,7 @@ class LiveMorningBriefingBuilder:
                 shop_id=shop_id,
                 limit=DEFAULT_RECENT_WORKSPACE_ENTRY_LIMIT,
             ),
+            priorities_prompt=priorities_prompt,
         )
         return LiveBriefingBuildResult(
             briefing=briefing,
@@ -797,6 +813,7 @@ def _build_balance_summary(
     orders: tuple[Any, ...],
     payments: tuple[Any, ...],
     currency_code: str,
+    seed_capital: float = 0.0,
 ) -> BalanceSummary:
     posted_total = sum(
         float(_mapping(item, "payment").get("amount", 0.0)) for item in payments
@@ -812,7 +829,7 @@ def _build_balance_summary(
         and str(_mapping(item, "order").get("status", "")) != "refunded"
     )
     return BalanceSummary(
-        available=posted_total,
+        available=posted_total + seed_capital,
         pending=pending_total,
         currency_code=currency_code,
     )

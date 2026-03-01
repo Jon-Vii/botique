@@ -170,6 +170,11 @@ class ControlApiClient:
         )
         return cls(config=config)
 
+    def get_scenario(self) -> SimulationScenario:
+        return _parse_simulation_scenario(
+            self._request("get_scenario", "GET", "/simulation/scenario")
+        )
+
     def get_global_market_state(self) -> GlobalMarketState:
         return GlobalMarketState(
             current_day=_parse_simulation_day(
@@ -230,12 +235,15 @@ class ControlApiClient:
         *,
         scenario_id: str | None = None,
         controlled_shop_ids: tuple[int | str, ...] | list[int | str] = (),
+        seed_capital: float | None = None,
     ) -> ControlWorldState:
         body: dict[str, Any] = {}
         if scenario_id:
             body["scenario_id"] = str(scenario_id)
         if controlled_shop_ids:
             body["controlled_shop_ids"] = [int(shop_id) for shop_id in controlled_shop_ids]
+        if seed_capital is not None:
+            body["seed_capital"] = seed_capital
         return _parse_control_world_state(
             self._request(
                 "reset_world",

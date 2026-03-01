@@ -16,7 +16,7 @@ from .providers import (
     MistralToolCallingProvider,
     ProviderPolicyConfig,
 )
-from .runner import LiveDayRunResult, OwnerAgentRunner, OwnerAgentRunnerConfig
+from .runner import LiveDayRunResult, MultiDayRunResult, OwnerAgentRunner, OwnerAgentRunnerConfig
 
 
 T = TypeVar("T")
@@ -146,6 +146,18 @@ class TournamentResult:
     standings: tuple[TournamentAggregateStanding, ...]
 
 
+class TournamentRoundArtifactCallback(Protocol):
+    """Called after each round with per-entrant multi-day results for artifact persistence."""
+    def __call__(
+        self,
+        *,
+        round_index: int,
+        entrant: TournamentEntrant,
+        result: MultiDayRunResult,
+        runner: OwnerAgentRunner,
+    ) -> None: ...
+
+
 class TournamentEntrantRunnerFactory(Protocol):
     def __call__(self, entrant: TournamentEntrantConfig) -> OwnerAgentRunner: ...
 
@@ -157,10 +169,12 @@ class ArenaTournamentRunner:
         control_client: ControlApiClient,
         entrant_runner_factory: TournamentEntrantRunnerFactory,
         config: TournamentConfig,
+        on_round_artifact: TournamentRoundArtifactCallback | None = None,
     ) -> None:
         self.control_client = control_client
         self.entrant_runner_factory = entrant_runner_factory
         self.config = config
+        self.on_round_artifact = on_round_artifact
 
     def run(
         self,
@@ -207,7 +221,18 @@ class ArenaTournamentRunner:
             previous_states: dict[str, ShopStateSnapshot | None] = {
                 entrant.entrant.entrant_id: None for entrant in normalized_entrants
             }
+            entrant_live_days: dict[str, list[LiveDayRunResult]] = {
+                entrant.entrant.entrant_id: [] for entrant in normalized_entrants
+            }
             round_days: list[TournamentRoundDayResult] = []
+
+            if self.config.scenario_id == "bootstrap":
+                for entrant in normalized_entrants:
+                    eid = entrant.entrant.entrant_id
+                    runners[eid]._run_identity_step(
+                        shop_id=assignments[eid],
+                        run_id=round_run_id,
+                    )
 
             for day_offset in range(self.config.days_per_round):
                 ordered_entrants = self._build_turn_order(
@@ -225,6 +250,7 @@ class ArenaTournamentRunner:
                         advance_day=False,
                     )
                     previous_states[entrant_id] = live_day.state_after
+                    entrant_live_days[entrant_id].append(live_day)
                     entrant_results.append(
                         TournamentEntrantDayResult(
                             entrant=entrant.entrant,
@@ -277,6 +303,41 @@ class ArenaTournamentRunner:
             )
             for standing in round_standings:
                 standings_by_entrant[standing.entrant.entrant_id].append(standing)
+
+            # Persist per-entrant run artifacts if callback is configured
+            if self.on_round_artifact is not None:
+                for entrant in normalized_entrants:
+                    eid = entrant.entrant.entrant_id
+                    days_for_entrant = entrant_live_days[eid]
+                    if not days_for_entrant:
+                        continue
+                    runner = runners[eid]
+                    entrant_run_id = f"{round_run_id}_{eid}"
+                    multi_day = MultiDayRunResult(
+                        run_id=entrant_run_id,
+                        shop_id=assignments[eid],
+                        days=tuple(days_for_entrant),
+                        events=tuple(runner.event_log.events),
+                        workspace_entries=tuple(
+                            runner.memory.list_workspace_entries(shop_id=assignments[eid])
+                        ),
+                        reminders=tuple(
+                            runner.memory.list_reminders(shop_id=assignments[eid])
+                        ),
+                        workspace=runner.memory.read_workspace(shop_id=assignments[eid]),
+                        workspace_revisions=tuple(
+                            runner.memory.list_workspace_revisions(shop_id=assignments[eid])
+                        ),
+                    )
+                    try:
+                        self.on_round_artifact(
+                            round_index=round_index,
+                            entrant=entrant.entrant,
+                            result=multi_day,
+                            runner=runner,
+                        )
+                    except Exception:
+                        pass  # Don't fail the tournament if artifact persistence fails
 
         return TournamentResult(
             run_id=active_run_id,
@@ -572,6 +633,30 @@ def build_default_tournament_runner(
             policy_config=policy_config,
         )
 
+    def _persist_entrant_artifact(
+        *,
+        round_index: int,
+        entrant: TournamentEntrant,
+        result: MultiDayRunResult,
+        runner: OwnerAgentRunner,
+    ) -> None:
+        # Lazy import to avoid circular dependency (artifacts imports tournament)
+        from .artifacts import persist_run_artifacts
+
+        invocation = {
+            "command": "run-tournament",
+            "provider": entrant.provider,
+            "model": entrant.model,
+            "scenario": scenario_id,
+            "turns_per_day": turns_per_day,
+            "days": days_per_round,
+            "round_index": round_index,
+            "entrant_id": entrant.entrant_id,
+            "display_name": entrant.display_name,
+        }
+        # output_dir=None lets persist_run_artifacts auto-generate the path
+        persist_run_artifacts(result, output_dir=None, invocation=invocation)
+
     return ArenaTournamentRunner(
         control_client=control_client,
         entrant_runner_factory=entrant_runner_factory,
@@ -582,6 +667,7 @@ def build_default_tournament_runner(
             rotate_shop_assignments=rotate_shop_assignments,
             rotate_turn_order=rotate_turn_order,
         ),
+        on_round_artifact=_persist_entrant_artifact,
     )
 
 

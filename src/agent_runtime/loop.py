@@ -190,7 +190,7 @@ class SingleShopDailyLoop:
 
         turn_index = 1
         while True:
-            turns_used = len(turns)
+            turns_used = sum(t.turn_cost for t in turns)
             turns_remaining = self.config.turns_per_day - turns_used
             if turns_remaining <= 0:
                 return self._finish_day(
@@ -289,7 +289,20 @@ class SingleShopDailyLoop:
                         "message": str(exc),
                     },
                 )
-                raise
+                # Feed the error back to the model so it can recover
+                # instead of crashing the entire run.
+                tool_entry = self.tool_registry.get_manifest(decision.tool_call.name)
+                tool_result = ToolExecutionResult(
+                    tool=tool_entry,
+                    arguments=decision.tool_call.arguments
+                    if isinstance(decision.tool_call.arguments, dict)
+                    else {},
+                    output={
+                        "error": True,
+                        "error_type": exc.__class__.__name__,
+                        "message": str(exc),
+                    },
+                )
 
             self.event_log.append(
                 kind=EventKind.TOOL_RESULT,
@@ -300,7 +313,7 @@ class SingleShopDailyLoop:
                 payload={
                     "tool_name": tool_result.tool_name,
                     "surface": tool_result.tool.surface.value,
-                    "turns_remaining_after": self.config.turns_per_day - (len(turns) + 1),
+                    "turns_remaining_after": self.config.turns_per_day - (sum(t.turn_cost for t in turns) + (tool_result.tool.work_cost if tool_result else 1)),
                     "result": jsonify(tool_result.output),
                 },
             )
@@ -339,7 +352,7 @@ class SingleShopDailyLoop:
                     decision_summary=decision.summary,
                     started_at=started_at,
                     completed_at=_utcnow(),
-                    turn_cost=1,
+                    turn_cost=tool_result.tool.work_cost if tool_result else 1,
                     tool_call=decision.tool_call,
                     tool_result=tool_result,
                 )
@@ -354,7 +367,7 @@ class SingleShopDailyLoop:
         turns: list[TurnRecord],
         end_reason: DayEndReason,
     ) -> DayRunResult:
-        turns_used = len(turns)
+        turns_used = sum(t.turn_cost for t in turns)
         turns_remaining = self.config.turns_per_day - turns_used
         self.event_log.append(
             kind=EventKind.DAY_ENDED,

@@ -5,7 +5,7 @@ import json
 import sys
 from typing import Any
 
-from .artifacts import persist_run_artifacts, supports_run_artifacts
+from .artifacts import persist_run_artifacts, supports_run_artifacts, write_run_progress
 from .briefing import morning_briefing_from_payload
 from .runner import build_default_owner_agent_runner
 from .tournament import (
@@ -71,6 +71,21 @@ def _print_json(payload: dict[str, Any], *, pretty: bool) -> None:
 
 
 SCENARIO_CHOICES = ("operate", "bootstrap")
+
+
+def _resolve_provider_config(namespace: argparse.Namespace) -> Any:
+    """Try to build the MistralProviderConfig from CLI args + env so we can
+    record the resolved model/temperature/top_p in the manifest."""
+    try:
+        from .providers.mistral import MistralProviderConfig
+        return MistralProviderConfig.from_env(
+            api_key=namespace.mistral_api_key,
+            model=namespace.mistral_model,
+            temperature=namespace.mistral_temperature,
+            top_p=namespace.mistral_top_p,
+        )
+    except Exception:
+        return None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -218,12 +233,28 @@ def main(argv: list[str] | None = None) -> int:
                 mistral_temperature=namespace.mistral_temperature,
                 mistral_top_p=namespace.mistral_top_p,
             )
+            output_dir = namespace.output_dir
+            progress_cb = None
+            if output_dir:
+                from pathlib import Path as _Path
+                _Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+                def progress_cb(run_id, shop_id, total, day_results):
+                    write_run_progress(
+                        output_dir=output_dir,
+                        run_id=run_id,
+                        shop_id=shop_id,
+                        total_days=total,
+                        completed_days=day_results,
+                    )
+
             result = runner.run_live_days(
                 shop_id=_parse_shop_id_argument(namespace.shop_id),
                 days=namespace.days,
                 run_id=namespace.run_id,
                 reset_world=namespace.reset_world,
                 scenario_id=namespace.scenario,
+                progress_callback=progress_cb,
             )
         else:
             tournament_runner = build_default_tournament_runner(
@@ -255,19 +286,41 @@ def main(argv: list[str] | None = None) -> int:
 
         response_payload: dict[str, Any] = {"ok": True, "result": jsonify(result)}
         if supports_run_artifacts(result):
+            invocation_dict = {
+                key: value
+                for key, value in vars(namespace).items()
+                if key not in {"pretty"}
+            }
+            # Resolve actual provider config so model/provider are always
+            # recorded in the manifest even when supplied via env vars.
+            if hasattr(namespace, "mistral_model"):
+                resolved_config = _resolve_provider_config(namespace)
+                if resolved_config is not None:
+                    invocation_dict["provider"] = invocation_dict.get("provider") or "mistral"
+                    invocation_dict["mistral_model"] = invocation_dict.get("mistral_model") or resolved_config.model
+                    invocation_dict["model"] = invocation_dict.get("model") or resolved_config.model
+                    if invocation_dict.get("mistral_temperature") is None:
+                        invocation_dict["mistral_temperature"] = resolved_config.temperature
+                    if invocation_dict.get("mistral_top_p") is None:
+                        invocation_dict["mistral_top_p"] = resolved_config.top_p
             artifact_bundle = persist_run_artifacts(
                 result,
                 output_dir=namespace.output_dir,
-                invocation={
-                    key: value
-                    for key, value in vars(namespace).items()
-                    if key
-                    not in {
-                        "pretty",
-                    }
-                },
+                invocation=invocation_dict,
             )
             response_payload["artifacts"] = artifact_bundle.to_payload()
+            # Update progress sidecar to completed status
+            if namespace.output_dir and hasattr(result, "days"):
+                from .runner import MultiDayRunResult as _MDR
+                if isinstance(result, _MDR):
+                    write_run_progress(
+                        output_dir=namespace.output_dir,
+                        run_id=result.run_id,
+                        shop_id=result.shop_id,
+                        total_days=len(result.days),
+                        completed_days=list(result.days),
+                        status="completed",
+                    )
 
         _print_json(response_payload, pretty=namespace.pretty)
         return 0

@@ -28,8 +28,8 @@ class ToolManifestEntry:
     parameters_schema: dict[str, JSONValue] | None = None
 
     def __post_init__(self) -> None:
-        if self.work_cost < 1:
-            raise ValueError("work_cost must be at least 1.")
+        if self.work_cost < 0:
+            raise ValueError("work_cost must be non-negative.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +69,12 @@ class AgentToolRegistry:
 
     def manifest(self) -> list[ToolManifestEntry]:
         return [tool.manifest for tool in self._tools.values()]
+
+    def get_manifest(self, tool_name: str) -> ToolManifestEntry:
+        try:
+            return self._tools[tool_name].manifest
+        except KeyError as exc:
+            raise ToolNotFoundError(f"Unknown agent tool {tool_name!r}.") from exc
 
     def invoke(self, tool_name: str, arguments: Mapping[str, Any]) -> ToolExecutionResult:
         try:

@@ -136,3 +136,39 @@ def register_seller_tools(
 
 
 register_seller_core_tools = register_seller_tools
+
+
+def register_rename_shop_tool(
+    registry: AgentToolRegistry,
+    client: SellerCoreClient,
+    *,
+    shop_id: int | str | None = None,
+) -> None:
+    manifest = ToolManifestEntry(
+        name="rename_shop",
+        description="Rename your shop. Free action — does not consume a work slot.",
+        surface=ToolSurface.CORE,
+        work_cost=0,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "The new display name for your shop.",
+                },
+            },
+            "required": ["title"],
+            "additionalProperties": False,
+        },
+    )
+
+    def handler(arguments: dict[str, object]) -> object:
+        title = arguments["title"]
+        if not isinstance(title, str) or not title.strip():
+            return {"error": True, "message": "title must be a non-empty string."}
+        effective_shop_id = shop_id
+        if effective_shop_id is None:
+            return {"error": True, "message": "shop_id is not bound for this agent."}
+        return client.update_shop(shop_id=effective_shop_id, title=title.strip())
+
+    registry.register(manifest, handler)

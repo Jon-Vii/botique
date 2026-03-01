@@ -8,6 +8,7 @@ from .core import (
     DEFAULT_OWNER_AGENT_CORE_TOOLS,
     DEFAULT_OWNER_AGENT_EXTENSION_TOOLS,
     DEFAULT_OWNER_AGENT_SELLER_TOOLS,
+    register_rename_shop_tool,
     register_seller_tools,
 )
 from .extensions import register_memory_tools
@@ -33,12 +34,13 @@ def build_owner_agent_tool_registry(
     registry = AgentToolRegistry()
     register_owner_summary_tools(registry, client, shop_id=shop_id)
     register_seller_tools(registry, client, shop_id=shop_id)
+    register_rename_shop_tool(registry, client, shop_id=shop_id)
     register_memory_tools(
         registry,
         memory or InMemoryAgentMemory(),
         shop_id=shop_id,
         include_scratchpad_tools=False,
-        include_journal_tools=True,
+        include_journal_tools=False,
     )
     return registry
 
