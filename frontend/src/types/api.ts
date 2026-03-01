@@ -338,6 +338,30 @@ export type RunListEntry = {
   has_summary: boolean;
   has_manifest: boolean;
   created_at?: string;
+  status?: "running" | "completed" | "failed";
+  completed_day_count?: number;
+};
+
+export type RunProgressDay = {
+  day: number;
+  simulation_date: string | null;
+  turn_count: number;
+  tool_calls: string[];
+  available_balance: number;
+  active_listing_count: number;
+  total_sales_count: number;
+  review_average: number;
+  review_count: number;
+};
+
+export type RunProgress = {
+  run_id: string;
+  shop_id: number;
+  status: "running" | "completed" | "failed";
+  total_days: number;
+  completed_day_count: number;
+  updated_at: string;
+  days: RunProgressDay[];
 };
 
 export type DaySnapshot = {
@@ -350,6 +374,9 @@ export type DaySnapshot = {
   total_sales_count: number;
   review_average: number;
   review_count: number;
+  turn_count?: number;
+  yesterday_revenue?: number;
+  tool_calls?: string[];
 };
 
 export type BalanceSummary = {
@@ -456,6 +483,17 @@ export type MemoryReminder = {
   created_at: string;
 };
 
+export type WorkspaceRevision = {
+  shop_id: number | string;
+  content: string;
+  revision: number;
+  updated_day: number | null;
+  is_truncated?: boolean;
+  updated_at: string;
+};
+
+export type Workspace = WorkspaceRevision | null;
+
 /* ── Tournament types ── */
 
 export type TournamentEntrant = {
@@ -496,7 +534,8 @@ export type TournamentShopAssignment = {
 };
 
 export type TournamentEntrantDayResult = {
-  entrant_id: string;
+  entrant?: TournamentEntrant;
+  entrant_id?: string;
   live_day: number;
 };
 
@@ -507,12 +546,19 @@ export type TournamentRoundDayResult = {
   entrant_results: TournamentEntrantDayResult[];
 };
 
+export type TournamentBalancePoint = {
+  entrant_id: string;
+  day: number;
+  balance: number;
+};
+
 export type TournamentRoundResult = {
   round_index: number;
   run_id: string;
   shop_assignments: TournamentShopAssignment[];
   days: TournamentRoundDayResult[];
   standings: TournamentStanding[];
+  balance_timeline?: TournamentBalancePoint[];
 };
 
 export type TournamentAggregateStanding = {
@@ -547,4 +593,5 @@ export type TournamentListItem = {
   created_at: string;
   status: "running" | "completed" | "failed";
   winner?: TournamentEntrant;
+  entrants?: TournamentEntrant[];
 };

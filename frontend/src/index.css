@@ -595,3 +595,176 @@ body::after {
   outline: none;
   box-shadow: 0 0 0 2px var(--color-cream), 0 0 0 4px var(--color-orange);
 }
+
+/* ── Docs prose — markdown rendering ─────────────── */
+
+.docs-prose {
+  color: var(--color-ink);
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+
+.docs-prose h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-ink);
+  margin: 2.5rem 0 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-rule);
+}
+
+.docs-prose h1:first-child {
+  margin-top: 0;
+}
+
+.docs-prose h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
+  margin: 2rem 0 0.75rem;
+  padding-bottom: 0.375rem;
+  border-bottom: 1px solid var(--color-gray-a1);
+}
+
+.docs-prose h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--color-ink);
+  margin: 1.5rem 0 0.5rem;
+}
+
+.docs-prose h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-secondary);
+  margin: 1.25rem 0 0.375rem;
+}
+
+.docs-prose p {
+  margin: 0.75rem 0;
+}
+
+.docs-prose ul,
+.docs-prose ol {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+.docs-prose ul { list-style-type: disc; }
+.docs-prose ol { list-style-type: decimal; }
+
+.docs-prose li {
+  margin: 0.25rem 0;
+  padding-left: 0.25rem;
+}
+
+.docs-prose li > ul,
+.docs-prose li > ol {
+  margin: 0.125rem 0;
+}
+
+.docs-prose strong {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.docs-prose em {
+  font-style: italic;
+}
+
+.docs-prose a {
+  color: var(--color-orange);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s ease;
+}
+
+.docs-prose a:hover {
+  color: var(--color-orange-dark);
+}
+
+.docs-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  padding: 0.15em 0.4em;
+  background: var(--color-gray-2);
+  border: 1px solid var(--color-gray-a1);
+  color: var(--color-orange-dark);
+}
+
+.docs-prose pre {
+  margin: 1rem 0;
+  padding: 1rem 1.25rem;
+  background: var(--color-snippet-bg);
+  border: 1px solid var(--color-snippet-border);
+  overflow-x: auto;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.docs-prose pre code {
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--color-snippet-text);
+  font-size: inherit;
+}
+
+.docs-prose blockquote {
+  margin: 1rem 0;
+  padding: 0.5rem 1rem;
+  border-left: 3px solid var(--color-orange-5);
+  background: var(--color-orange-1);
+  color: var(--color-secondary);
+}
+
+.docs-prose blockquote p {
+  margin: 0.25rem 0;
+}
+
+.docs-prose hr {
+  margin: 2rem 0;
+  border: none;
+  border-top: 1px solid var(--color-rule);
+}
+
+.docs-prose table {
+  width: 100%;
+  margin: 1rem 0;
+  font-size: 0.8125rem;
+  border-collapse: collapse;
+}
+
+.docs-prose th {
+  padding: 0.625rem 1rem;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-muted);
+  background: var(--color-gray-2);
+  border-bottom: 1px solid var(--color-rule);
+}
+
+.docs-prose td {
+  padding: 0.625rem 1rem;
+  border-bottom: 1px solid var(--color-gray-a1);
+}
+
+.docs-prose tbody tr:hover td {
+  background: var(--color-gray-1);
+}
+
+/* Status labels inside docs */
+.docs-prose code:where(:has(+ :not(*))) {
+  /* fallback — handle inline codes like `Current decision` */
+}
+
+.docs-prose img {
+  max-width: 100%;
+  border: 1px solid var(--color-rule);
+}

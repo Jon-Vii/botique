@@ -7,6 +7,8 @@ export type {
   RunSummary,
   ShopStateSnapshot,
   TurnRecord,
+  Workspace,
+  WorkspaceRevision,
 } from "./api";
 
 import type { DaySnapshot, ShopStateSnapshot } from "./api";

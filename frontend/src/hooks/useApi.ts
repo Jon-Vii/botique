@@ -108,6 +108,17 @@ export function useRunList() {
   return useQuery({
     queryKey: ["runs"],
     queryFn: () => api.getRunList(),
+    refetchInterval: 5000,
+  });
+}
+
+export function useRunProgress(runId: string) {
+  return useQuery({
+    queryKey: ["runs", runId, "progress"],
+    queryFn: () => api.getRunProgress(runId),
+    enabled: !!runId,
+    refetchInterval: 2000,
+    retry: false,
   });
 }
 
@@ -155,6 +166,16 @@ export function useRunDaySnapshots(runId: string) {
   });
 }
 
+export function useRunDaySnapshotsBatch(runIds: string[]) {
+  return useQueries({
+    queries: runIds.map((runId) => ({
+      queryKey: ["runs", runId, "days"],
+      queryFn: () => api.getRunDaySnapshots(runId),
+      enabled: !!runId,
+    })),
+  });
+}
+
 export function useRunDayBriefing(runId: string, day: number) {
   return useQuery({
     queryKey: ["runs", runId, "day", day, "briefing"],
@@ -183,6 +204,22 @@ export function useRunMemoryReminders(runId: string) {
   return useQuery({
     queryKey: ["runs", runId, "memory", "reminders"],
     queryFn: () => api.getRunMemoryReminders(runId),
+    enabled: !!runId,
+  });
+}
+
+export function useRunWorkspace(runId: string) {
+  return useQuery({
+    queryKey: ["runs", runId, "memory", "workspace"],
+    queryFn: () => api.getRunWorkspace(runId),
+    enabled: !!runId,
+  });
+}
+
+export function useRunWorkspaceRevisions(runId: string) {
+  return useQuery({
+    queryKey: ["runs", runId, "memory", "workspace", "revisions"],
+    queryFn: () => api.getRunWorkspaceRevisions(runId),
     enabled: !!runId,
   });
 }
@@ -227,6 +264,19 @@ export function useLaunchRun() {
       api.launchRun(payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["runs"] });
+    },
+  });
+}
+
+export function useSimulateRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Parameters<typeof api.simulateRun>[0]) =>
+      api.simulateRun(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["runs"] });
+      qc.invalidateQueries({ queryKey: ["simulation"] });
+      qc.invalidateQueries({ queryKey: ["world-state"] });
     },
   });
 }

@@ -19,9 +19,11 @@ const MODEL_OPTIONS = [
 export function RunLaunchPanel({
   onSuccess,
   onError,
+  apiKey,
 }: {
   onSuccess: (msg: string) => void;
   onError: (msg: string) => void;
+  apiKey?: string;
 }) {
   const { data: world } = useWorldState();
   const launchRun = useLaunchRun();
@@ -44,6 +46,11 @@ export function RunLaunchPanel({
     }
     const rid = runId.trim() || `run-${Date.now()}`;
 
+    if (!apiKey) {
+      onError("Mistral API key is required — set it above");
+      return;
+    }
+
     launchRun.mutate(
       {
         shop_id: sid,
@@ -53,6 +60,7 @@ export function RunLaunchPanel({
         model,
         provider: "mistral",
         scenario_id: scenarioId,
+        api_key: apiKey,
       },
       {
         onSuccess: (data) => {

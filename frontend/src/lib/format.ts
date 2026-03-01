@@ -39,12 +39,14 @@ export function formatCurrency(
   currency = "USD",
   options?: Intl.NumberFormatOptions,
 ): string {
+  const maxDigits = options?.maximumFractionDigits ?? 2;
+  const minDigits = options?.minimumFractionDigits ?? Math.min(2, maxDigits);
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
     ...options,
+    minimumFractionDigits: minDigits,
+    maximumFractionDigits: maxDigits,
   }).format(amount);
 }
 

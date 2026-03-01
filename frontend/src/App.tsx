@@ -12,6 +12,7 @@ import { RunList } from "./pages/RunList";
 import { RunDetail } from "./pages/RunDetail";
 import { TournamentList } from "./pages/TournamentList";
 import { TournamentDetail } from "./pages/TournamentDetail";
+import { Docs } from "./pages/Docs";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="benchmarks" element={<Benchmarks />} />
             <Route path="tournaments" element={<TournamentList />} />
             <Route path="tournaments/:tournamentId" element={<TournamentDetail />} />
+            <Route path="docs" element={<Docs />} />
             <Route path="operator" element={<Operator />} />
             <Route path="*" element={<NotFound />} />
           </Route>

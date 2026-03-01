@@ -95,7 +95,37 @@ function TournamentCard({ item }: { item: TournamentListItem }) {
           </div>
         </div>
 
-        {item.winner && (
+        {/* Entrants matchup */}
+        {item.entrants && item.entrants.length > 0 ? (
+          <div className="space-y-1.5 pt-1 border-t border-rule">
+            {item.entrants.map((entrant) => {
+              const isWinner =
+                item.winner?.entrant_id === entrant.entrant_id;
+              return (
+                <div
+                  key={entrant.entrant_id}
+                  className="flex items-center gap-2"
+                >
+                  {isWinner ? (
+                    <Crown size={12} weight="fill" className="text-amber shrink-0" />
+                  ) : (
+                    <span className="w-3" />
+                  )}
+                  <span
+                    className={`text-sm truncate ${
+                      isWinner ? "font-semibold text-ink" : "text-secondary"
+                    }`}
+                  >
+                    {entrant.display_name}
+                  </span>
+                  <span className="text-[10px] font-mono text-muted ml-auto">
+                    {entrant.model}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : item.winner ? (
           <div className="flex items-center gap-2 pt-1 border-t border-rule">
             <Crown size={14} weight="fill" className="text-amber" />
             <span className="text-sm font-semibold text-ink truncate">
@@ -105,7 +135,7 @@ function TournamentCard({ item }: { item: TournamentListItem }) {
               {item.winner.model}
             </span>
           </div>
-        )}
+        ) : null}
       </div>
     </Link>
   );
@@ -143,6 +173,9 @@ export function TournamentList() {
     <div className="space-y-10">
       {/* Hero */}
       <section className="tech-card relative overflow-hidden px-8 py-10">
+        <div className="absolute top-0 right-0 opacity-[0.06]">
+          <Trophy size={120} weight="thin" className="text-orange" />
+        </div>
         <div className="relative max-w-xl">
           <div className="flex items-center gap-2 mb-3">
             <Trophy size={14} weight="fill" className="text-orange" />

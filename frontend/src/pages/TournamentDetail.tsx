@@ -3,6 +3,7 @@ import { useParams, Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   CaretRight,
+  ChartLineUp,
   Crown,
   CurrencyDollar,
   FlagBanner,
@@ -16,6 +17,8 @@ import {
   Trophy,
 } from "@phosphor-icons/react";
 import { BackendNotice } from "../components/BackendNotice";
+import { BalanceTimeline, MODEL_COLORS } from "../components/BalanceTimeline";
+import type { ModelCurve } from "../components/BalanceTimeline";
 import { Badge } from "../components/Badge";
 import {
   ControlledShopsBadge,
@@ -30,10 +33,88 @@ import { formatCurrency } from "../lib/format";
 import { getScenarioLabel } from "../lib/scenarios";
 import type {
   TournamentAggregateStanding,
+  TournamentBalancePoint,
   TournamentResult,
   TournamentRoundResult,
   TournamentStanding,
 } from "../types/api";
+
+/* ── Build balance curves from tournament timeline data ── */
+
+function buildTournamentCurves(
+  tournament: TournamentResult,
+): ModelCurve[] {
+  // Collect all balance points across all rounds, keyed by entrant
+  const byEntrant = new Map<
+    string,
+    { model: string; roundPoints: Map<number, { day: number; balance: number }[]> }
+  >();
+
+  for (const entrant of tournament.entrants) {
+    byEntrant.set(entrant.entrant_id, {
+      model: `${entrant.display_name} (${entrant.model})`,
+      roundPoints: new Map(),
+    });
+  }
+
+  for (const round of tournament.rounds) {
+    const timeline = round.balance_timeline;
+    if (!timeline || timeline.length === 0) continue;
+
+    for (const point of timeline) {
+      const entry = byEntrant.get(point.entrant_id);
+      if (!entry) continue;
+
+      if (!entry.roundPoints.has(round.round_index)) {
+        entry.roundPoints.set(round.round_index, []);
+      }
+      entry.roundPoints.get(round.round_index)!.push({
+        day: point.day,
+        balance: point.balance,
+      });
+    }
+  }
+
+  const entrantIds = [...byEntrant.keys()].sort();
+  return entrantIds.map((entrantId, i) => {
+    const entry = byEntrant.get(entrantId)!;
+    const color = MODEL_COLORS[i % MODEL_COLORS.length];
+
+    // Each round is a "run curve" for ghost lines
+    const runCurves = [...entry.roundPoints.entries()].map(
+      ([roundIndex, points]) => ({
+        runId: `round-${roundIndex}`,
+        points: points.slice().sort((a, b) => a.day - b.day),
+      }),
+    );
+
+    // Main curve: if only 1 round, use it directly; otherwise average across rounds by day index
+    let points: { day: number; balance: number }[];
+    if (runCurves.length <= 1) {
+      points = runCurves[0]?.points ?? [];
+    } else {
+      const maxLen = Math.max(...runCurves.map((rc) => rc.points.length));
+      points = [];
+      for (let di = 0; di < maxLen; di++) {
+        let sum = 0;
+        let count = 0;
+        let refDay = di + 1;
+        for (const rc of runCurves) {
+          if (di < rc.points.length) {
+            sum += rc.points[di].balance;
+            count++;
+            if (count === 1) refDay = rc.points[di].day;
+          }
+        }
+        if (count > 0) {
+          points.push({ day: refDay, balance: sum / count });
+        }
+      }
+    }
+
+    return { model: entry.model, color, points, runCurves };
+  });
+}
 
 /* ── Rank badge — gold / silver / bronze ── */
 
@@ -163,8 +244,10 @@ function AggregateStandingsTable({
 
 function RoundStandingsTable({
   standings,
+  roundRunId,
 }: {
   standings: TournamentStanding[];
+  roundRunId: string;
 }) {
   return (
     <div className="bg-white border border-rule overflow-hidden">
@@ -180,75 +263,89 @@ function RoundStandingsTable({
             <th align="right">Reviews</th>
             <th align="right">Listings</th>
             <th align="right">Notes</th>
+            <th style={{ width: 48 }}></th>
           </tr>
         </thead>
         <tbody>
-          {standings.map((s) => (
-            <tr key={s.entrant.entrant_id}>
-              <td>
-                <RankBadge rank={s.rank} />
-              </td>
-              <td>
-                <div>
-                  <span className="font-semibold text-ink block">
-                    {s.entrant.display_name}
-                  </span>
-                  <ModelTag
-                    provider={s.entrant.provider}
-                    model={s.entrant.model}
-                  />
-                </div>
-              </td>
-              <td>
-                <Link
-                  to={`/shop/${s.shop_id}`}
-                  className="text-orange hover:text-orange-dark text-sm font-medium transition-colors"
-                >
-                  {s.shop_name}
-                </Link>
-                <span className="text-[10px] font-mono text-muted block">
-                  #{s.shop_id}
-                </span>
-              </td>
-              <td className="text-right">
-                <span className="num font-bold text-orange">
-                  {formatCurrency(s.scorecard.available_cash)}
-                </span>
-              </td>
-              <td className="text-right num text-muted">
-                {formatCurrency(s.scorecard.pending_cash)}
-              </td>
-              <td className="text-right num text-secondary">
-                {s.scorecard.total_sales_count}
-              </td>
-              <td className="text-right">
-                {s.scorecard.review_average !== null ? (
-                  <span className="inline-flex items-center gap-1 num text-secondary">
-                    {s.scorecard.review_average.toFixed(1)}
-                    <Star size={10} weight="fill" className="text-amber" />
-                    <span className="text-muted text-[10px]">
-                      ({s.scorecard.review_count})
+          {standings.map((s) => {
+            const entrantRunId = `${roundRunId}_${s.entrant.entrant_id}`;
+            return (
+              <tr key={s.entrant.entrant_id}>
+                <td>
+                  <RankBadge rank={s.rank} />
+                </td>
+                <td>
+                  <div>
+                    <span className="font-semibold text-ink block">
+                      {s.entrant.display_name}
                     </span>
+                    <ModelTag
+                      provider={s.entrant.provider}
+                      model={s.entrant.model}
+                    />
+                  </div>
+                </td>
+                <td>
+                  <Link
+                    to={`/shop/${s.shop_id}`}
+                    className="text-orange hover:text-orange-dark text-sm font-medium transition-colors"
+                  >
+                    {s.shop_name}
+                  </Link>
+                  <span className="text-[10px] font-mono text-muted block">
+                    #{s.shop_id}
                   </span>
-                ) : (
-                  <span className="text-muted">&mdash;</span>
-                )}
-              </td>
-              <td className="text-right">
-                <span className="num text-secondary">
-                  {s.scorecard.active_listing_count}
-                </span>
-                {s.scorecard.draft_listing_count > 0 && (
-                  <span className="text-[10px] text-muted ml-1">
-                    +{s.scorecard.draft_listing_count}d
+                </td>
+                <td className="text-right">
+                  <span className="num font-bold text-orange">
+                    {formatCurrency(s.scorecard.available_cash)}
                   </span>
-                )}
-              </td>
-              <td className="text-right num text-muted">
-                {s.scorecard.workspace_entries_written}
-              </td>
-            </tr>
-          ))}
+                </td>
+                <td className="text-right num text-muted">
+                  {formatCurrency(s.scorecard.pending_cash)}
+                </td>
+                <td className="text-right num text-secondary">
+                  {s.scorecard.total_sales_count}
+                </td>
+                <td className="text-right">
+                  {s.scorecard.review_average !== null ? (
+                    <span className="inline-flex items-center gap-1 num text-secondary">
+                      {s.scorecard.review_average.toFixed(1)}
+                      <Star size={10} weight="fill" className="text-amber" />
+                      <span className="text-muted text-[10px]">
+                        ({s.scorecard.review_count})
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-muted">&mdash;</span>
+                  )}
+                </td>
+                <td className="text-right">
+                  <span className="num text-secondary">
+                    {s.scorecard.active_listing_count}
+                  </span>
+                  {s.scorecard.draft_listing_count > 0 && (
+                    <span className="text-[10px] text-muted ml-1">
+                      +{s.scorecard.draft_listing_count}d
+                    </span>
+                  )}
+                </td>
+                <td className="text-right num text-muted">
+                  {s.scorecard.workspace_entries_written}
+                </td>
+                <td>
+                  <Link
+                    to={`/runs/${entrantRunId}`}
+                    className="inline-flex items-center gap-0.5 text-[10px] font-mono text-orange hover:text-orange-dark transition-colors"
+                    title={`View ${s.entrant.display_name}'s run artifact`}
+                  >
+                    Run
+                    <CaretRight size={10} weight="bold" />
+                  </Link>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -266,7 +363,7 @@ function ShopAssignmentMatrix({ tournament }: { tournament: TournamentResult }) 
             <th>Entrant</th>
             {tournament.rounds.map((r) => (
               <th key={r.round_index} className="text-center">
-                R{r.round_index + 1}
+                R{r.round_index}
               </th>
             ))}
           </tr>
@@ -320,7 +417,7 @@ function RoundDetail({
   return (
     <div className="space-y-5">
       {/* Round standings */}
-      <RoundStandingsTable standings={round.standings} />
+      <RoundStandingsTable standings={round.standings} roundRunId={round.run_id} />
 
       {/* Day-by-day drilldown */}
       <div>
@@ -400,18 +497,24 @@ function RoundDetail({
         </div>
       </div>
 
-      {/* Link to run */}
-      <div className="flex items-center gap-2 pt-2">
-        <Link
-          to={`/runs/${round.run_id}`}
-          className="text-sm text-orange hover:text-orange-dark font-medium flex items-center gap-1 transition-colors"
-        >
-          View full run detail
-          <CaretRight size={12} weight="bold" />
-        </Link>
-        <span className="text-[10px] font-mono text-muted">
-          {round.run_id}
-        </span>
+      {/* Per-entrant run links */}
+      <div className="pt-2 space-y-1.5">
+        <div className="text-[10px] font-mono font-semibold text-muted uppercase tracking-wider">
+          Entrant Run Artifacts
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {tournament.entrants.map((entrant) => (
+            <Link
+              key={entrant.entrant_id}
+              to={`/runs/${round.run_id}_${entrant.entrant_id}`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white border border-rule hover:border-orange/40 text-ink hover:text-orange transition-colors"
+            >
+              <Robot size={12} weight="duotone" className="text-muted" />
+              {entrant.display_name}
+              <CaretRight size={10} weight="bold" className="text-muted" />
+            </Link>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -444,6 +547,11 @@ export function TournamentDetail() {
     else next.set("round", String(activeRound));
     setSearchParams(next, { replace: true });
   }, [activeRound, searchParams, setSearchParams, tournament]);
+
+  const balanceCurves = useMemo(
+    () => (tournament ? buildTournamentCurves(tournament) : []),
+    [tournament],
+  );
 
   if (isLoading) {
     return (
@@ -495,6 +603,9 @@ export function TournamentDetail() {
         </Link>
 
         <div className="tech-card relative overflow-hidden px-8 py-8">
+          <div className="absolute top-0 right-0 opacity-[0.06]">
+            <Trophy size={120} weight="thin" className="text-orange" />
+          </div>
           <div className="flex items-start justify-between gap-8">
             <div>
               <div className="flex items-center gap-2 mb-3">
@@ -588,6 +699,29 @@ export function TournamentDetail() {
         />
       </section>
 
+      {/* Balance over time chart */}
+      {balanceCurves.length > 0 && balanceCurves.some((c) => c.points.length > 0) && (
+        <section className="tech-card overflow-hidden">
+          <div className="px-5 py-3 border-b border-rule flex items-center gap-2">
+            <ChartLineUp size={14} weight="duotone" className="text-orange" />
+            <span className="font-pixel-grid text-[10px] text-orange uppercase tracking-widest">
+              Balance Over Time
+            </span>
+            {tournament.round_count > 1 && (
+              <span className="text-[10px] font-mono text-muted ml-auto">
+                faint lines = individual rounds, bold = average
+              </span>
+            )}
+          </div>
+          <div className="px-5 py-4">
+            <BalanceTimeline
+              curves={balanceCurves}
+              ghostLines={tournament.round_count > 1}
+            />
+          </div>
+        </section>
+      )}
+
       {/* Aggregate standings */}
       <section>
         <h2 className="text-lg font-semibold text-ink mb-4 flex items-center gap-2">
@@ -620,6 +754,11 @@ export function TournamentDetail() {
             const standing = tournament.standings.find(
               (s) => s.entrant.entrant_id === entrant.entrant_id
             );
+            // Link to per-entrant runs for each round
+            const entrantRuns = tournament.rounds.map((r) => ({
+              roundIndex: r.round_index,
+              runId: `${r.run_id}_${entrant.entrant_id}`,
+            }));
             return (
               <div
                 key={entrant.entrant_id}
@@ -665,6 +804,21 @@ export function TournamentDetail() {
                     </div>
                   </div>
                 )}
+                {/* Per-round run artifact links */}
+                <div className="mt-3 pt-3 border-t border-rule flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] font-mono text-muted mr-1">Runs:</span>
+                  {entrantRuns.map((er) => (
+                    <Link
+                      key={er.runId}
+                      to={`/runs/${er.runId}`}
+                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-mono bg-gray-1 border border-rule hover:border-orange/40 text-secondary hover:text-orange transition-colors"
+                      title={er.runId}
+                    >
+                      R{er.roundIndex}
+                      <CaretRight size={8} weight="bold" />
+                    </Link>
+                  ))}
+                </div>
               </div>
             );
           })}
@@ -702,7 +856,7 @@ export function TournamentDetail() {
                   : "tab-inactive"
               }`}
             >
-              Round {round.round_index + 1}
+              Round {round.round_index}
             </button>
           ))}
         </div>

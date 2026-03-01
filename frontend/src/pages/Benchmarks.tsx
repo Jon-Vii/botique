@@ -1,8 +1,8 @@
 import {
   ArrowDown,
   ArrowUp,
+  CaretDown,
   ChartLineUp,
-  ClipboardText,
   CurrencyDollar,
   Lightning,
   ListChecks,
@@ -14,310 +14,391 @@ import {
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { BackendNotice } from "../components/BackendNotice";
+import { BalanceTimeline, MODEL_COLORS } from "../components/BalanceTimeline";
+import type { ModelCurve } from "../components/BalanceTimeline";
 import { Badge } from "../components/Badge";
-import { ScenarioBadge } from "../components/ScenarioBadge";
 import { EmptyState } from "../components/EmptyState";
 import { Skeleton } from "../components/Skeleton";
-import { useRunList, useRunManifests, useRunSummaries } from "../hooks/useApi";
+import {
+  useRunList,
+  useRunManifests,
+  useRunSummaries,
+  useRunDaySnapshotsBatch,
+} from "../hooks/useApi";
 import { formatCurrency } from "../lib/format";
-import { buildRunIdentityTokens, getRunIdentity, getRunScenario } from "../lib/run-identity";
-import type { RunManifest, RunSummary } from "../types/api";
+import { getRunIdentity } from "../lib/run-identity";
+import type { DaySnapshot, RunManifest, RunSummary } from "../types/api";
 
-/* ── Sort logic ── */
+/* ── Aggregation types ── */
 
-type SortField =
-  | "run_id"
-  | "shop_id"
-  | "mode"
-  | "scenario"
-  | "day_count"
-  | "balance"
-  | "delta"
-  | "sales"
-  | "review_avg"
-  | "tool_calls"
-  | "turns";
+type ModelAggregate = {
+  model: string;
+  provider: string | null;
+  runs: RunSummary[];
+  avgBalance: number;
+  avgDelta: number;
+  avgSales: number;
+  avgReviewScore: number;
+  avgToolCalls: number;
+  avgTurns: number;
+  totalToolCalls: number;
+};
 
-type SortDir = "asc" | "desc";
+/* ── Aggregation helper ── */
 
-function getSortValue(s: RunSummary, field: SortField): number | string {
-  switch (field) {
-    case "run_id":
-      return s.run_id;
-    case "shop_id":
-      return s.shop_id;
-    case "mode":
-      return s.mode;
-    case "scenario":
-      return s.scenario?.scenario_id ?? "";
-    case "day_count":
-      return s.day_count;
-    case "balance":
-      return s.ending_state.available_balance;
-    case "delta":
-      return (
-        s.ending_state.available_balance - s.starting_state.available_balance
-      );
-    case "sales":
-      return s.ending_state.total_sales_count;
-    case "review_avg":
-      return s.ending_state.review_average;
-    case "tool_calls":
-      return s.totals.tool_call_count;
-    case "turns":
-      return s.totals.turn_count;
-  }
+function resolveModel(
+  s: RunSummary,
+  manifestsByRunId: Map<string, RunManifest>,
+): { model: string; provider: string | null } {
+  const identity = getRunIdentity({
+    summary: s,
+    manifest: manifestsByRunId.get(s.run_id),
+  });
+  return {
+    model: identity?.model ?? "unknown",
+    provider: identity?.provider ?? null,
+  };
 }
 
-/* ── Column rank helpers ── */
-
-function rankColumn(
+function aggregateByModel(
   summaries: RunSummary[],
-  field: SortField
-): Map<string, "best" | "worst" | null> {
-  if (summaries.length < 2) return new Map();
-  const vals = summaries.map((s) => ({
-    id: s.run_id,
-    v: getSortValue(s, field),
-  }));
-  if (typeof vals[0].v === "string") return new Map();
-  const numVals = vals as { id: string; v: number }[];
-  const maxVal = Math.max(...numVals.map((x) => x.v));
-  const minVal = Math.min(...numVals.map((x) => x.v));
-  if (maxVal === minVal) return new Map();
-  const m = new Map<string, "best" | "worst" | null>();
-  for (const { id, v } of numVals) {
-    if (v === maxVal) m.set(id, "best");
-    else if (v === minVal) m.set(id, "worst");
-    else m.set(id, null);
+  manifestsByRunId: Map<string, RunManifest>,
+): ModelAggregate[] {
+  const groups = new Map<
+    string,
+    { provider: string | null; runs: RunSummary[] }
+  >();
+
+  for (const s of summaries) {
+    const { model, provider } = resolveModel(s, manifestsByRunId);
+    const existing = groups.get(model);
+    if (existing) {
+      existing.runs.push(s);
+    } else {
+      groups.set(model, { provider, runs: [s] });
+    }
   }
-  return m;
+
+  const aggregates: ModelAggregate[] = [];
+
+  for (const [model, { provider, runs }] of groups) {
+    const n = runs.length;
+    const avgBalance =
+      runs.reduce((sum, r) => sum + r.ending_state.available_balance, 0) / n;
+    const avgDelta =
+      runs.reduce(
+        (sum, r) =>
+          sum +
+          (r.ending_state.available_balance -
+            r.starting_state.available_balance),
+        0,
+      ) / n;
+    const avgSales =
+      runs.reduce((sum, r) => sum + r.ending_state.total_sales_count, 0) / n;
+    const avgReviewScore =
+      runs.reduce((sum, r) => sum + r.ending_state.review_average, 0) / n;
+    const totalToolCalls = runs.reduce(
+      (sum, r) => sum + r.totals.tool_call_count,
+      0,
+    );
+    const avgToolCalls = totalToolCalls / n;
+    const avgTurns =
+      runs.reduce((sum, r) => sum + r.totals.turn_count, 0) / n;
+
+    aggregates.push({
+      model,
+      provider,
+      runs,
+      avgBalance,
+      avgDelta,
+      avgSales,
+      avgReviewScore,
+      avgToolCalls,
+      avgTurns,
+      totalToolCalls,
+    });
+  }
+
+  aggregates.sort((a, b) => b.avgBalance - a.avgBalance);
+  return aggregates;
 }
 
-function rankClass(rank: "best" | "worst" | null): string {
-  if (rank === "best") return "text-emerald font-bold";
-  if (rank === "worst") return "text-rose";
-  return "";
+/* ── Timeline chart builder ── */
+
+function buildModelCurves(
+  summaries: RunSummary[],
+  manifestsByRunId: Map<string, RunManifest>,
+  daysByRunId: Map<string, DaySnapshot[]>,
+): ModelCurve[] {
+  // Group runs by model
+  const groups = new Map<
+    string,
+    { runIds: string[]; dayArrays: DaySnapshot[][] }
+  >();
+
+  for (const s of summaries) {
+    const { model } = resolveModel(s, manifestsByRunId);
+    const days = daysByRunId.get(s.run_id);
+    if (!days || days.length === 0) continue;
+
+    const existing = groups.get(model);
+    if (existing) {
+      existing.runIds.push(s.run_id);
+      existing.dayArrays.push(days);
+    } else {
+      groups.set(model, { runIds: [s.run_id], dayArrays: [days] });
+    }
+  }
+
+  const models = [...groups.keys()].sort();
+  return models.map((model, i) => {
+    const { runIds, dayArrays } = groups.get(model)!;
+    const color = MODEL_COLORS[i % MODEL_COLORS.length];
+
+    // Build individual run curves
+    const runCurves = runIds.map((runId, ri) => ({
+      runId,
+      points: dayArrays[ri]
+        .slice()
+        .sort((a, b) => a.day - b.day)
+        .map((d) => ({ day: d.day, balance: d.available_balance })),
+    }));
+
+    // Build averaged curve: for each day index, average across all runs that have it
+    const maxDay = Math.max(...dayArrays.map((d) => d.length));
+    const points: { day: number; balance: number }[] = [];
+
+    for (let di = 0; di < maxDay; di++) {
+      let sum = 0;
+      let count = 0;
+      for (const days of dayArrays) {
+        const sorted = days.slice().sort((a, b) => a.day - b.day);
+        if (di < sorted.length) {
+          sum += sorted[di].available_balance;
+          count++;
+        }
+      }
+      if (count > 0) {
+        // Use the actual day number from first run that has this index
+        const refSorted = dayArrays[0].slice().sort((a, b) => a.day - b.day);
+        const dayNum = di < refSorted.length ? refSorted[di].day : di + 1;
+        points.push({ day: dayNum, balance: sum / count });
+      }
+    }
+
+    return { model, color, points, runCurves };
+  });
 }
 
-/* ── Tool distribution bar ── */
+/* ── Stat cell ── */
 
-function ToolBar({ tools }: { tools: Record<string, number> }) {
-  const entries = Object.entries(tools).sort((a, b) => b[1] - a[1]);
-  const total = entries.reduce((s, [, c]) => s + c, 0);
-  if (total === 0) return <span className="text-muted text-xs">--</span>;
+function StatCell({
+  label,
+  value,
+  icon,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  highlight?: boolean;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1 text-[10px] font-mono font-semibold text-muted uppercase tracking-wider">
+        {icon}
+        {label}
+      </div>
+      <div
+        className={`num text-sm font-bold ${highlight ? "text-orange" : "text-ink"}`}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
 
-  const palette = [
-    "bg-orange",
-    "bg-teal",
-    "bg-violet",
-    "bg-emerald",
-    "bg-amber",
-    "bg-rose",
-    "bg-sky",
-  ];
+/* ── Model card ── */
+
+function ModelCard({
+  aggregate,
+  isBest,
+}: {
+  aggregate: ModelAggregate;
+  isBest: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const { avgDelta } = aggregate;
 
   return (
-    <div className="space-y-1.5">
-      <div className="flex h-2 w-full overflow-hidden bg-gray-3">
-        {entries.map(([name, count], i) => (
-          <div
-            key={name}
-            className={`${palette[i % palette.length]} transition-[width] duration-300`}
-            style={{ width: `${(count / total) * 100}%` }}
-            title={`${name}: ${count}`}
-          />
-        ))}
+    <div
+      className={`tech-card overflow-hidden transition-shadow ${
+        isBest ? "ring-1 ring-emerald/30" : ""
+      }`}
+    >
+      {/* Card header */}
+      <div className="px-5 py-4 border-b border-rule">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h3 className="font-mono text-base font-bold text-ink">
+              {aggregate.model}
+            </h3>
+            {aggregate.provider && (
+              <Badge variant="violet" subtle>
+                {aggregate.provider}
+              </Badge>
+            )}
+            {isBest && (
+              <Badge
+                variant="emerald"
+                subtle
+                icon={<Trophy size={9} weight="fill" />}
+              >
+                Best
+              </Badge>
+            )}
+          </div>
+          <Badge variant="gray" subtle>
+            {aggregate.runs.length} run
+            {aggregate.runs.length !== 1 ? "s" : ""}
+          </Badge>
+        </div>
       </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-        {entries.slice(0, 4).map(([name, count], i) => (
-          <span
-            key={name}
-            className="text-[10px] font-mono text-muted flex items-center gap-1"
-          >
-            <span
-              className={`inline-block w-1.5 h-1.5 ${palette[i % palette.length]}`}
-            />
-            {name}
-            <span className="text-secondary num">{count}</span>
-          </span>
-        ))}
-        {entries.length > 4 && (
-          <span className="text-[10px] font-mono text-muted">
-            +{entries.length - 4} more
-          </span>
+
+      {/* Stat grid */}
+      <div className="px-5 py-4">
+        <div className="grid grid-cols-3 gap-x-6 gap-y-4">
+          <StatCell
+            label="Avg Balance"
+            value={formatCurrency(aggregate.avgBalance)}
+            icon={<CurrencyDollar size={10} weight="duotone" />}
+            highlight
+          />
+          <StatCell
+            label="Avg Delta"
+            value={`${avgDelta >= 0 ? "+" : ""}${avgDelta.toFixed(2)}`}
+            icon={
+              avgDelta >= 0 ? (
+                <ArrowUp size={10} weight="bold" className="text-emerald" />
+              ) : (
+                <ArrowDown size={10} weight="bold" className="text-rose" />
+              )
+            }
+          />
+          <StatCell
+            label="Avg Sales"
+            value={aggregate.avgSales.toFixed(1)}
+            icon={<ListChecks size={10} weight="duotone" />}
+          />
+          <StatCell
+            label="Avg Reviews"
+            value={`${aggregate.avgReviewScore.toFixed(2)} ★`}
+            icon={<Star size={10} weight="fill" className="text-amber" />}
+          />
+          <StatCell
+            label="Avg Tool Calls"
+            value={aggregate.avgToolCalls.toFixed(0)}
+            icon={<Wrench size={10} weight="duotone" />}
+          />
+          <StatCell
+            label="Avg Turns"
+            value={aggregate.avgTurns.toFixed(1)}
+            icon={<ChartLineUp size={10} weight="duotone" />}
+          />
+        </div>
+      </div>
+
+      {/* Expand / collapse individual runs */}
+      <div className="border-t border-rule">
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          className="w-full px-5 py-2.5 flex items-center justify-between text-xs font-mono text-muted hover:text-secondary transition-colors"
+        >
+          <span>{expanded ? "Hide" : "Show"} individual runs</span>
+          <CaretDown
+            size={12}
+            weight="bold"
+            className={`transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+          />
+        </button>
+
+        {expanded && (
+          <div className="px-5 pb-4 animate-card-in">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-[10px] font-mono text-muted uppercase tracking-wider">
+                  <th className="text-left pb-2 font-semibold">Run ID</th>
+                  <th className="text-right pb-2 font-semibold">Days</th>
+                  <th className="text-right pb-2 font-semibold">Balance</th>
+                  <th className="text-right pb-2 font-semibold">Delta</th>
+                  <th className="text-right pb-2 font-semibold">Sales</th>
+                  <th className="text-right pb-2 font-semibold">Reviews</th>
+                  <th className="text-right pb-2 font-semibold">Turns</th>
+                </tr>
+              </thead>
+              <tbody>
+                {aggregate.runs.map((r) => {
+                  const delta =
+                    r.ending_state.available_balance -
+                    r.starting_state.available_balance;
+                  return (
+                    <tr key={r.run_id} className="border-t border-rule/50">
+                      <td className="py-1.5">
+                        <Link
+                          to={`/runs/${encodeURIComponent(r.run_id)}`}
+                          className="font-mono font-medium text-ink hover:text-orange transition-colors"
+                        >
+                          {r.run_id}
+                        </Link>
+                      </td>
+                      <td className="text-right num text-secondary py-1.5">
+                        {r.day_count}
+                      </td>
+                      <td className="text-right num font-semibold text-orange py-1.5">
+                        {formatCurrency(r.ending_state.available_balance)}
+                      </td>
+                      <td className="text-right py-1.5">
+                        <span
+                          className={`num font-semibold ${delta >= 0 ? "text-emerald" : "text-rose"}`}
+                        >
+                          {delta >= 0 ? "+" : ""}
+                          {delta.toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="text-right num text-secondary py-1.5">
+                        {r.ending_state.total_sales_count}
+                      </td>
+                      <td className="text-right num text-secondary py-1.5">
+                        {r.ending_state.review_average.toFixed(1)}
+                      </td>
+                      <td className="text-right num text-secondary py-1.5">
+                        {r.totals.turn_count}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-/* ── Score card (expanded row detail) ── */
-
-function ScoreCard({ summary }: { summary: RunSummary }) {
-  const delta =
-    summary.ending_state.available_balance -
-    summary.starting_state.available_balance;
-  const deltaPercent =
-    summary.starting_state.available_balance > 0
-      ? (delta / summary.starting_state.available_balance) * 100
-      : 0;
-
-  return (
-    <tr>
-      <td colSpan={99} className="!p-0">
-        <div className="border-t-2 border-orange/20 bg-orange-1/30 px-6 py-5 animate-card-in">
-          <div className="grid grid-cols-4 gap-6">
-            {/* Balance progression */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-1.5 text-[10px] font-mono font-semibold text-muted uppercase tracking-wider">
-                <CurrencyDollar size={11} weight="duotone" />
-                Balance Progression
-              </div>
-              <div className="flex items-baseline gap-3">
-                <span className="num text-xs text-secondary">
-                  {formatCurrency(summary.starting_state.available_balance)}
-                </span>
-                <span className="text-muted text-[10px]">&rarr;</span>
-                <span className="num text-lg font-bold text-orange">
-                  {formatCurrency(summary.ending_state.available_balance)}
-                </span>
-              </div>
-              <div
-                className={`text-xs font-mono font-semibold flex items-center gap-1 ${delta >= 0 ? "text-emerald" : "text-rose"}`}
-              >
-                {delta >= 0 ? (
-                  <ArrowUp size={10} weight="bold" />
-                ) : (
-                  <ArrowDown size={10} weight="bold" />
-                )}
-                {delta >= 0 ? "+" : "-"}
-                {Math.abs(delta).toFixed(2)} ({deltaPercent.toFixed(1)}%)
-              </div>
-            </div>
-
-            {/* Workspace activity */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-1.5 text-[10px] font-mono font-semibold text-muted uppercase tracking-wider">
-                <ClipboardText size={11} weight="duotone" />
-                Workspace Activity
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <span className="text-muted">Notes</span>
-                  <div className="num font-semibold text-ink">
-                    {summary.totals.notes_written}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-muted">Reminders</span>
-                  <div className="num font-semibold text-ink">
-                    {summary.totals.reminders_set}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-muted">Completed</span>
-                  <div className="num font-semibold text-ink">
-                    {summary.totals.reminders_completed}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-muted">Pending</span>
-                  <div className="num font-semibold text-ink">
-                    {summary.memory.pending_reminder_count}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Tool call breakdown */}
-            <div className="space-y-2 col-span-2">
-              <div className="flex items-center gap-1.5 text-[10px] font-mono font-semibold text-muted uppercase tracking-wider">
-                <Wrench size={11} weight="duotone" />
-                Tool Call Distribution
-              </div>
-              <ToolBar tools={summary.totals.tool_calls_by_name} />
-            </div>
-          </div>
-
-          {/* Surface breakdown */}
-          {Object.keys(summary.totals.tool_calls_by_surface).length > 0 && (
-            <div className="mt-4 pt-4 border-t border-orange/10 flex items-center gap-4">
-              <span className="text-[10px] font-mono font-semibold text-muted uppercase tracking-wider">
-                Surfaces:
-              </span>
-              {Object.entries(summary.totals.tool_calls_by_surface).map(
-                ([surface, count]) => (
-                  <Badge key={surface} variant="gray" subtle>
-                    {surface}: {count}
-                  </Badge>
-                )
-              )}
-            </div>
-          )}
-        </div>
-      </td>
-    </tr>
-  );
-}
-
-/* ── Sortable column header ── */
-
-function SortHeader({
-  label,
-  field,
-  currentSort,
-  currentDir,
-  onSort,
-  align = "left",
-}: {
-  label: string;
-  field: SortField;
-  currentSort: SortField;
-  currentDir: SortDir;
-  onSort: (field: SortField) => void;
-  align?: "left" | "right";
-}) {
-  const isActive = currentSort === field;
-  return (
-    <th
-      aria-sort={
-        isActive ? (currentDir === "asc" ? "ascending" : "descending") : "none"
-      }
-      align={align === "right" ? "right" : undefined}
-      className="select-none"
-    >
-      <button
-        type="button"
-        onClick={() => onSort(field)}
-        className="group inline-flex items-center gap-1 transition-colors hover:text-ink"
-      >
-        {label}
-        <span
-          className={`transition-opacity ${isActive ? "opacity-100" : "opacity-0 group-hover:opacity-40"}`}
-        >
-          {isActive && currentDir === "asc" ? (
-            <ArrowUp size={10} weight="bold" />
-          ) : (
-            <ArrowDown size={10} weight="bold" />
-          )}
-        </span>
-      </button>
-    </th>
-  );
-}
-
 /* ── Main page ── */
 
 export function Benchmarks() {
-  const { data: runList, isLoading: listLoading, error: listError } = useRunList();
+  const {
+    data: runList,
+    isLoading: listLoading,
+    error: listError,
+  } = useRunList();
   const runIds = useMemo(() => (runList ?? []).map((r) => r.run_id), [runList]);
   const summaryResults = useRunSummaries(runIds);
   const manifestResults = useRunManifests(runIds);
-
-  const [sortField, setSortField] = useState<SortField>("balance");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const daySnapshotResults = useRunDaySnapshotsBatch(runIds);
 
   const summaries = useMemo(() => {
     const loaded: RunSummary[] = [];
@@ -326,6 +407,7 @@ export function Benchmarks() {
     }
     return loaded;
   }, [summaryResults]);
+
   const manifestsByRunId = useMemo(() => {
     const loaded = new Map<string, RunManifest>();
     for (const result of manifestResults) {
@@ -336,51 +418,34 @@ export function Benchmarks() {
     return loaded;
   }, [manifestResults]);
 
-  const sorted = useMemo(() => {
-    const arr = [...summaries];
-    arr.sort((a, b) => {
-      const aVal = getSortValue(a, sortField);
-      const bVal = getSortValue(b, sortField);
-      if (typeof aVal === "string" && typeof bVal === "string") {
-        return sortDir === "asc"
-          ? aVal.localeCompare(bVal)
-          : bVal.localeCompare(aVal);
+  const daysByRunId = useMemo(() => {
+    const loaded = new Map<string, DaySnapshot[]>();
+    for (let i = 0; i < runIds.length; i++) {
+      const result = daySnapshotResults[i];
+      if (result?.data) {
+        loaded.set(runIds[i], result.data);
       }
-      const diff = (aVal as number) - (bVal as number);
-      return sortDir === "asc" ? diff : -diff;
-    });
-    return arr;
-  }, [summaries, sortField, sortDir]);
-
-  // Column rankings for color coding
-  const balanceRanks = useMemo(
-    () => rankColumn(summaries, "balance"),
-    [summaries]
-  );
-  const deltaRanks = useMemo(
-    () => rankColumn(summaries, "delta"),
-    [summaries]
-  );
-  const salesRanks = useMemo(
-    () => rankColumn(summaries, "sales"),
-    [summaries]
-  );
-  const reviewRanks = useMemo(
-    () => rankColumn(summaries, "review_avg"),
-    [summaries]
-  );
-
-  function handleSort(field: SortField) {
-    if (sortField === field) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortField(field);
-      setSortDir("desc");
     }
-  }
+    return loaded;
+  }, [runIds, daySnapshotResults]);
+
+  const modelAggregates = useMemo(
+    () => aggregateByModel(summaries, manifestsByRunId),
+    [summaries, manifestsByRunId],
+  );
+
+  const modelCurves = useMemo(
+    () => buildModelCurves(summaries, manifestsByRunId, daysByRunId),
+    [summaries, manifestsByRunId, daysByRunId],
+  );
+
+  const bestModel =
+    modelAggregates.length > 0 ? modelAggregates[0].model : null;
 
   const isLoading = listLoading || summaryResults.some((r) => r.isLoading);
-  const listErrorMessage = listError instanceof Error ? listError.message : null;
+  const daysLoading = daySnapshotResults.some((r) => r.isLoading);
+  const listErrorMessage =
+    listError instanceof Error ? listError.message : null;
 
   return (
     <div className="space-y-8">
@@ -394,14 +459,17 @@ export function Benchmarks() {
             </span>
           </div>
           <h1 className="text-3xl font-bold text-ink leading-tight tracking-tight">
-            Run{" "}
+            Model{" "}
             <span className="font-pixel text-orange">Benchmarks</span>
           </h1>
           <p className="mt-3 text-secondary text-[14px] leading-relaxed max-w-2xl">
-            Compare agent run performance across models, configurations, and
-            scenarios. Each row is a completed simulation run scored on ending
-            balance, sales efficiency, review quality, and tool usage patterns.
+            Aggregated performance comparison across models. Metrics are
+            averaged over all completed runs for each model to reveal which
+            configuration performs best.
           </p>
+          <div className="absolute top-0 right-0 opacity-[0.06]">
+            <ChartLineUp size={120} weight="thin" className="text-orange" />
+          </div>
 
           {/* Quick stats */}
           {summaries.length > 0 && (
@@ -418,27 +486,6 @@ export function Benchmarks() {
                 <span className="text-muted text-xs">runs</span>
               </span>
               <span className="flex items-center gap-2 text-secondary">
-                <span className="w-7 h-7 bg-emerald-dim flex items-center justify-center border border-emerald/15">
-                  <Trophy
-                    size={14}
-                    weight="duotone"
-                    className="text-emerald"
-                  />
-                </span>
-                <strong className="num text-ink">
-                  {summaries.length > 0
-                    ? formatCurrency(
-                        Math.max(
-                          ...summaries.map(
-                            (s) => s.ending_state.available_balance
-                          )
-                        )
-                      )
-                    : formatCurrency(0)}
-                </strong>
-                <span className="text-muted text-xs">best balance</span>
-              </span>
-              <span className="flex items-center gap-2 text-secondary">
                 <span className="w-7 h-7 bg-violet-dim flex items-center justify-center border border-violet/15">
                   <ChartLineUp
                     size={14}
@@ -447,20 +494,58 @@ export function Benchmarks() {
                   />
                 </span>
                 <strong className="num text-ink">
-                  {summaries.length > 0
-                    ? Math.max(
-                        ...summaries.map((s) => s.totals.turn_count)
-                      )
-                    : 0}
+                  {modelAggregates.length}
                 </strong>
-                <span className="text-muted text-xs">max turns</span>
+                <span className="text-muted text-xs">models</span>
               </span>
+              {bestModel && (
+                <span className="flex items-center gap-2 text-secondary">
+                  <span className="w-7 h-7 bg-emerald-dim flex items-center justify-center border border-emerald/15">
+                    <Trophy
+                      size={14}
+                      weight="duotone"
+                      className="text-emerald"
+                    />
+                  </span>
+                  <strong className="font-mono text-xs text-ink">
+                    {bestModel}
+                  </strong>
+                  <span className="text-muted text-xs">top model</span>
+                </span>
+              )}
             </div>
           )}
         </div>
       </section>
 
-      {/* Leaderboard table */}
+      {/* Balance timeline chart */}
+      {!listError && modelCurves.length > 0 && (
+        <section className="tech-card overflow-hidden">
+          <div className="px-5 py-3 border-b border-rule flex items-center gap-2">
+            <ChartLineUp size={14} weight="duotone" className="text-orange" />
+            <span className="font-pixel-grid text-[10px] text-orange uppercase tracking-widest">
+              Balance Over Time
+            </span>
+            {daysLoading && (
+              <span className="text-[10px] font-mono text-muted ml-auto">
+                loading day data...
+              </span>
+            )}
+          </div>
+          <div className="px-5 py-4">
+            <BalanceTimeline curves={modelCurves} />
+          </div>
+        </section>
+      )}
+
+      {/* Skeleton for chart while loading */}
+      {!listError && isLoading && modelCurves.length === 0 && summaries.length > 0 && (
+        <div className="tech-card p-6">
+          <Skeleton className="h-[280px] w-full" />
+        </div>
+      )}
+
+      {/* Model comparison cards */}
       {listError ? (
         <BackendNotice
           title="Benchmark data could not be loaded"
@@ -476,166 +561,58 @@ export function Benchmarks() {
           badgeLabel="Load Failure"
         />
       ) : isLoading && summaries.length === 0 ? (
-        <div className="tech-card overflow-hidden">
-          <div className="p-6 space-y-3">
-            <Skeleton className="h-4 w-48" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="tech-card p-6 space-y-3">
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-4 w-32" />
+            <div className="grid grid-cols-3 gap-4 mt-4">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          </div>
+          <div className="tech-card p-6 space-y-3">
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-4 w-32" />
+            <div className="grid grid-cols-3 gap-4 mt-4">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
           </div>
         </div>
-      ) : sorted.length === 0 ? (
+      ) : modelAggregates.length === 0 ? (
         <div className="tech-card p-8">
           <EmptyState
             icon={<Lightning size={48} weight="duotone" />}
             title="No runs yet"
-            description="Complete a simulation run to see benchmark results. Run data from summary.json artifacts will populate this table."
+            description="Complete a simulation run to see model benchmarks. Run data from summary.json artifacts will populate the comparison cards."
           />
         </div>
       ) : (
-        <section className="bg-white border border-rule overflow-hidden shadow-[var(--shadow-card)]">
-          <div className="px-5 py-3 border-b border-rule flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Trophy size={14} weight="duotone" className="text-orange" />
-              <span className="font-pixel-grid text-[10px] text-orange uppercase tracking-widest">
-                Leaderboard
-              </span>
-            </div>
-            <span className="text-[10px] font-mono text-muted">
-              {sorted.length} run{sorted.length !== 1 ? "s" : ""} &middot;
-              sorted by{" "}
-              <span className="text-secondary">{sortField.replace("_", " ")}</span>{" "}
-              {sortDir}
-            </span>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="geist-table">
-              <thead>
-                <tr>
-                  <th className="w-8 text-center">#</th>
-                  <SortHeader
-                    label="Run ID"
-                    field="run_id"
-                    currentSort={sortField}
-                    currentDir={sortDir}
-                    onSort={handleSort}
-                  />
-                  <SortHeader
-                    label="Shop"
-                    field="shop_id"
-                    currentSort={sortField}
-                    currentDir={sortDir}
-                    onSort={handleSort}
-                  />
-                  <SortHeader
-                    label="Mode"
-                    field="mode"
-                    currentSort={sortField}
-                    currentDir={sortDir}
-                    onSort={handleSort}
-                  />
-                  <SortHeader
-                    label="Scenario"
-                    field="scenario"
-                    currentSort={sortField}
-                    currentDir={sortDir}
-                    onSort={handleSort}
-                  />
-                  <SortHeader
-                    label="Days"
-                    field="day_count"
-                    currentSort={sortField}
-                    currentDir={sortDir}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <SortHeader
-                    label="End Balance"
-                    field="balance"
-                    currentSort={sortField}
-                    currentDir={sortDir}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <SortHeader
-                    label="Delta"
-                    field="delta"
-                    currentSort={sortField}
-                    currentDir={sortDir}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <SortHeader
-                    label="Sales"
-                    field="sales"
-                    currentSort={sortField}
-                    currentDir={sortDir}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <SortHeader
-                    label="Reviews"
-                    field="review_avg"
-                    currentSort={sortField}
-                    currentDir={sortDir}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <SortHeader
-                    label="Tools"
-                    field="tool_calls"
-                    currentSort={sortField}
-                    currentDir={sortDir}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <SortHeader
-                    label="Turns"
-                    field="turns"
-                    currentSort={sortField}
-                    currentDir={sortDir}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <th className="w-8" />
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map((s, i) => {
-                  const delta =
-                    s.ending_state.available_balance -
-                    s.starting_state.available_balance;
-                  const isExpanded = expandedId === s.run_id;
-                  const rank = i + 1;
-
-                  return (
-                    <RunRow
-                      key={s.run_id}
-                      summary={s}
-                      manifest={manifestsByRunId.get(s.run_id)}
-                      rank={rank}
-                      delta={delta}
-                      isExpanded={isExpanded}
-                      onToggle={() =>
-                        setExpandedId(isExpanded ? null : s.run_id)
-                      }
-                      balanceRank={balanceRanks.get(s.run_id) ?? null}
-                      deltaRank={deltaRanks.get(s.run_id) ?? null}
-                      salesRank={salesRanks.get(s.run_id) ?? null}
-                      reviewRank={reviewRanks.get(s.run_id) ?? null}
-                    />
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {modelAggregates.map((agg) => (
+            <ModelCard
+              key={agg.model}
+              aggregate={agg}
+              isBest={agg.model === bestModel && modelAggregates.length > 1}
+            />
+          ))}
         </section>
       )}
 
+      {/* Footer */}
       <section className="tech-card px-5 py-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-sm font-semibold text-ink">Benchmark data sources</h2>
+          <h2 className="text-sm font-semibold text-ink">
+            Benchmark data sources
+          </h2>
           <Badge variant="gray" subtle>
             Read Only
           </Badge>
@@ -662,171 +639,5 @@ export function Benchmarks() {
         </div>
       </section>
     </div>
-  );
-}
-
-/* ── Table row (extracted for readability) ── */
-
-function RunRow({
-  summary: s,
-  manifest,
-  rank,
-  delta,
-  isExpanded,
-  onToggle,
-  balanceRank,
-  deltaRank,
-  salesRank,
-  reviewRank,
-}: {
-  summary: RunSummary;
-  manifest?: RunManifest;
-  rank: number;
-  delta: number;
-  isExpanded: boolean;
-  onToggle: () => void;
-  balanceRank: "best" | "worst" | null;
-  deltaRank: "best" | "worst" | null;
-  salesRank: "best" | "worst" | null;
-  reviewRank: "best" | "worst" | null;
-}) {
-  const scenario = getRunScenario({ summary: s, manifest });
-  const identity = getRunIdentity({ summary: s, manifest });
-  const identityTokens = buildRunIdentityTokens(identity);
-
-  return (
-    <>
-      <tr className={isExpanded ? "bg-orange-1/40" : ""}>
-        {/* Rank */}
-        <td className="text-center">
-          {rank === 1 ? (
-            <span className="inline-flex items-center justify-center w-6 h-6 bg-orange text-white text-[10px] font-mono font-bold">
-              1
-            </span>
-          ) : rank === 2 ? (
-            <span className="inline-flex items-center justify-center w-6 h-6 bg-gray-3 text-secondary text-[10px] font-mono font-bold">
-              2
-            </span>
-          ) : rank === 3 ? (
-            <span className="inline-flex items-center justify-center w-6 h-6 bg-amber-dim text-amber text-[10px] font-mono font-bold">
-              3
-            </span>
-          ) : (
-            <span className="text-[10px] font-mono text-muted">{rank}</span>
-          )}
-        </td>
-
-        {/* Run ID */}
-        <td>
-          <Link
-            to={`/runs/${encodeURIComponent(s.run_id)}`}
-            className="font-mono text-xs font-medium text-ink transition-colors hover:text-orange"
-          >
-            {s.run_id}
-          </Link>
-          {identityTokens.length > 0 ? (
-            <div className="mt-1 text-[10px] font-mono text-muted">
-              {identityTokens.join(" · ")}
-            </div>
-          ) : null}
-        </td>
-
-        {/* Shop */}
-        <td className="num text-xs text-secondary">{s.shop_id}</td>
-
-        {/* Mode */}
-        <td>
-          <Badge variant={s.mode === "live" ? "emerald" : "gray"} subtle>
-            {s.mode}
-          </Badge>
-        </td>
-
-        {/* Scenario */}
-        <td>
-          {scenario ? (
-            <ScenarioBadge scenario={scenario} subtle />
-          ) : (
-            <span className="text-[10px] font-mono text-muted">--</span>
-          )}
-        </td>
-
-        {/* Days */}
-        <td className="text-right num text-xs text-secondary">
-          {s.day_count}
-        </td>
-
-        {/* End balance (headline score) */}
-        <td className="text-right">
-          <span
-            className={`num text-sm font-bold ${rankClass(balanceRank) || "text-orange"}`}
-          >
-            {formatCurrency(s.ending_state.available_balance)}
-          </span>
-        </td>
-
-        {/* Delta */}
-        <td className="text-right">
-          <span
-            className={`num text-xs font-semibold flex items-center justify-end gap-0.5 ${
-              rankClass(deltaRank) ||
-              (delta >= 0 ? "text-emerald" : "text-rose")
-            }`}
-          >
-            {delta >= 0 ? (
-              <ArrowUp size={9} weight="bold" />
-            ) : (
-              <ArrowDown size={9} weight="bold" />
-            )}
-            {delta >= 0 ? "+" : "-"}
-            {Math.abs(delta).toFixed(2)}
-          </span>
-        </td>
-
-        {/* Sales */}
-        <td className="text-right">
-          <span className={`num text-xs ${rankClass(salesRank)}`}>
-            {s.ending_state.total_sales_count}
-          </span>
-        </td>
-
-        {/* Review avg */}
-        <td className="text-right">
-          <span
-            className={`num text-xs flex items-center justify-end gap-1 ${rankClass(reviewRank)}`}
-          >
-            <Star size={10} weight="fill" className="text-amber" />
-            {s.ending_state.review_average.toFixed(1)}
-            <span className="text-muted text-[10px]">
-              ({s.ending_state.review_count})
-            </span>
-          </span>
-        </td>
-
-        {/* Tool calls */}
-        <td className="text-right num text-xs text-secondary">
-          {s.totals.tool_call_count}
-        </td>
-
-        {/* Turns */}
-        <td className="text-right num text-xs text-secondary">
-          {s.totals.turn_count}
-        </td>
-
-        {/* Expand indicator */}
-        <td className="text-center">
-          <button
-            type="button"
-            onClick={onToggle}
-            aria-expanded={isExpanded}
-            aria-label={isExpanded ? `Collapse ${s.run_id}` : `Expand ${s.run_id}`}
-            className={`inline-block text-muted transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
-          >
-            <ArrowDown size={12} weight="bold" />
-          </button>
-        </td>
-      </tr>
-
-      {isExpanded && <ScoreCard summary={s} />}
-    </>
   );
 }

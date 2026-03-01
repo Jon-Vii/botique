@@ -1,13 +1,15 @@
 import { Sliders, Terminal } from "@phosphor-icons/react";
-import { BackendNotice } from "../components/BackendNotice";
 import { useToast } from "../components/toast-context";
 import { SimStatusBar } from "../components/operator/SimStatusBar";
 import { WorldResetPanel } from "../components/operator/WorldResetPanel";
 import { RunLaunchPanel } from "../components/operator/RunLaunchPanel";
 import { TournamentLaunchPanel } from "../components/operator/TournamentLaunchPanel";
+import { ApiKeyPanel } from "../components/operator/ApiKeyPanel";
+import { useApiKey } from "../hooks/useApiKey";
 
 export function Operator() {
   const { toast } = useToast();
+  const { apiKey, setApiKey } = useApiKey();
 
   const onSuccess = (message: string) =>
     toast({ message, variant: "success" });
@@ -40,27 +42,20 @@ export function Operator() {
         </div>
       </section>
 
+      {/* API Key */}
+      <ApiKeyPanel apiKey={apiKey} onChange={setApiKey} />
+
       {/* Current simulation state */}
       <SimStatusBar />
 
-      <BackendNotice
-        title="Operator control-plane contract"
-        description="World inspection, reset, single-run launch, and tournament launch are available through the control plane."
-        endpoints={[
-          "POST /control/runs/launch",
-          "POST /control/tournaments/launch",
-        ]}
-        compact
-      />
-
       {/* World state controls (advance day + reset) */}
-      <WorldResetPanel onSuccess={onSuccess} onError={onError} />
+      <WorldResetPanel onSuccess={onSuccess} onError={onError} apiKey={apiKey} />
 
       {/* Single run launch */}
-      <RunLaunchPanel onSuccess={onSuccess} onError={onError} />
+      <RunLaunchPanel onSuccess={onSuccess} onError={onError} apiKey={apiKey} />
 
       {/* Tournament launch */}
-      <TournamentLaunchPanel onSuccess={onSuccess} onError={onError} />
+      <TournamentLaunchPanel onSuccess={onSuccess} onError={onError} apiKey={apiKey} />
 
       {/* Footer */}
       <footer className="text-center py-6 border-t border-rule">

@@ -3,6 +3,7 @@ import {
   FileText,
   Lightning,
   Package,
+  Spinner,
 } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
 import { BackendNotice } from "../components/BackendNotice";
@@ -62,6 +63,7 @@ export function RunList() {
         <div className="space-y-2">
           {runs.map((run, index) => {
             const identityTokens = buildRunIdentityTokens(run.identity);
+            const isRunning = run.status === "running";
 
             return (
               <Link
@@ -81,6 +83,14 @@ export function RunList() {
                       </div>
                     ) : null}
                     <div className="mt-1 flex flex-wrap items-center gap-2">
+                      {isRunning ? (
+                        <Badge variant="amber">
+                          <span className="flex items-center gap-1">
+                            <Spinner size={10} className="animate-spin" />
+                            running
+                          </span>
+                        </Badge>
+                      ) : null}
                       <Badge variant="orange" subtle>
                         shop {run.shop_id}
                       </Badge>
@@ -102,18 +112,34 @@ export function RunList() {
                   <div className="flex-1" />
 
                   <div className="flex flex-wrap items-center gap-5 text-xs font-mono">
-                    <div
-                      className="flex items-center gap-1.5 text-muted"
-                      title="Days simulated"
-                    >
-                      <Lightning
-                        size={12}
-                        weight="fill"
-                        className="text-amber"
-                        aria-hidden="true"
-                      />
-                      <span className="num">{run.day_count}d</span>
-                    </div>
+                    {isRunning && run.completed_day_count != null ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-24 h-1.5 rounded-full bg-gray-3 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-amber transition-all duration-500"
+                            style={{
+                              width: `${Math.round((run.completed_day_count / run.day_count) * 100)}%`,
+                            }}
+                          />
+                        </div>
+                        <span className="text-muted num">
+                          {run.completed_day_count}/{run.day_count}d
+                        </span>
+                      </div>
+                    ) : (
+                      <div
+                        className="flex items-center gap-1.5 text-muted"
+                        title="Days simulated"
+                      >
+                        <Lightning
+                          size={12}
+                          weight="fill"
+                          className="text-amber"
+                          aria-hidden="true"
+                        />
+                        <span className="num">{run.day_count}d</span>
+                      </div>
+                    )}
                     <div className="flex items-center gap-1.5 text-muted">
                       <FileText
                         size={12}

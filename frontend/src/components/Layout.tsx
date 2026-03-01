@@ -1,5 +1,5 @@
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
-import { ChartBar, ClockCounterClockwise, Sliders, Storefront, SquaresFour, Trophy } from "@phosphor-icons/react";
+import { BookOpenText, ChartBar, ClockCounterClockwise, Sliders, Storefront, SquaresFour, Trophy } from "@phosphor-icons/react";
 import { NavLink, Outlet } from "react-router-dom";
 import { SimBar } from "./SimBar";
 
@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { to: "/runs", icon: ClockCounterClockwise, label: "Runs" },
   { to: "/benchmarks", icon: ChartBar, label: "Benchmarks" },
   { to: "/tournaments", icon: Trophy, label: "Tournaments" },
+  { to: "/docs", icon: BookOpenText, label: "Docs" },
   { to: "/operator", icon: Sliders, label: "Operator" },
 ] as const;
 

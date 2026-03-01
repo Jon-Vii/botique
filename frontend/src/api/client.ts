@@ -10,6 +10,7 @@ import type {
   Review,
   RunListEntry,
   RunManifest,
+  RunProgress,
   RunSummary,
   Shop,
   SimulationDay,
@@ -18,6 +19,8 @@ import type {
   TournamentResult,
   TrendState,
   TurnRecord,
+  Workspace,
+  WorkspaceRevision,
   WorldState,
 } from "../types/api";
 
@@ -234,6 +237,20 @@ export const api = {
     );
   },
 
+  getRunWorkspace(runId: string): Promise<Workspace> {
+    return requestJSON<Workspace>(
+      `/runs/${encodeURIComponent(runId)}/memory/workspace`,
+      { base: CONTROL },
+    );
+  },
+
+  getRunWorkspaceRevisions(runId: string): Promise<WorkspaceRevision[]> {
+    return requestJSON<WorkspaceRevision[]>(
+      `/runs/${encodeURIComponent(runId)}/memory/workspace/revisions`,
+      { base: CONTROL },
+    );
+  },
+
   /* ── Tournaments ── */
 
   getTournamentList(): Promise<TournamentListItem[]> {
@@ -264,6 +281,7 @@ export const api = {
     model: string;
     provider: string;
     scenario_id: "operate" | "bootstrap";
+    api_key?: string;
   }): Promise<{ run_id: string }> {
     return requestJSON<{ run_id: string }>("/runs/launch", {
       base: CONTROL,
@@ -273,6 +291,35 @@ export const api = {
         body: JSON.stringify(payload),
       },
     });
+  },
+
+  async simulateRun(payload: {
+    shop_id: number;
+    days: number;
+    scenario_id?: "operate" | "bootstrap";
+  }): Promise<{ run_id: string }> {
+    return requestJSON<{ run_id: string }>("/runs/simulate", {
+      base: CONTROL,
+      init: {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    });
+  },
+
+  getRunProgress(runId: string): Promise<RunProgress> {
+    return requestJSON<RunProgress>(
+      `/runs/${encodeURIComponent(runId)}/progress`,
+      { base: CONTROL },
+    );
+  },
+
+  getRunStatus(runId: string): Promise<{ run_id: string; status: string }> {
+    return requestJSON<{ run_id: string; status: string }>(
+      `/runs/${encodeURIComponent(runId)}/status`,
+      { base: CONTROL },
+    );
   },
 
   async launchTournament(payload: {
@@ -288,6 +335,7 @@ export const api = {
     turns_per_day: number;
     scenario_id?: "operate" | "bootstrap";
     run_id?: string;
+    api_key?: string;
   }): Promise<{ tournament_id: string }> {
     return requestJSON<{ tournament_id: string }>("/tournaments/launch", {
       base: CONTROL,

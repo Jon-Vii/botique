@@ -5,11 +5,13 @@ export function Stat({
   value,
   icon,
   accent,
+  secondary,
 }: {
   label: string;
   value: string | number;
   icon?: ReactNode;
   accent?: "orange" | "amber" | "emerald" | "rose" | "sky" | "teal" | "violet";
+  secondary?: string;
 }) {
   const accentMap = {
     orange: "text-orange",
@@ -32,6 +34,9 @@ export function Stat({
       >
         {value}
       </div>
+      {secondary && (
+        <div className="mt-1 text-[10px] font-mono text-muted">{secondary}</div>
+      )}
     </div>
   );
 }

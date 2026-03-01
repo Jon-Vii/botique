@@ -1,9 +1,14 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
+  Brain,
+  CaretDown,
   CurrencyDollar,
   Lightning,
+  Spinner,
+  Star,
+  Storefront,
   Sun,
   Wrench,
 } from "@phosphor-icons/react";
@@ -18,7 +23,9 @@ import { Stat } from "../components/Stat";
 import { Skeleton } from "../components/Skeleton";
 import { BriefingPanel } from "../components/run/BriefingPanel";
 import { DayTimeline } from "../components/run/DayTimeline";
-import { MemoryPanel } from "../components/run/MemoryPanel";
+import { RunActivityTimeline } from "../components/run/RunActivityTimeline";
+import { ActivitySummary } from "../components/run/ActivitySummary";
+import { AgentMemorySection } from "../components/run/AgentMemorySection";
 import { TurnInspector } from "../components/run/TurnInspector";
 import {
   useRunDayBriefing,
@@ -26,7 +33,11 @@ import {
   useRunDayTurns,
   useRunManifest,
   useRunMemoryNotes,
+  useRunMemoryReminders,
+  useRunProgress,
   useRunSummary,
+  useRunWorkspace,
+  useRunWorkspaceRevisions,
 } from "../hooks/useApi";
 import { formatCurrency, formatDateMedium } from "../lib/format";
 import {
@@ -39,11 +50,16 @@ export function RunDetail() {
   const { runId } = useParams<{ runId: string }>();
   const id = runId ?? "";
   const [searchParams, setSearchParams] = useSearchParams();
+  const [rawTurnsOpen, setRawTurnsOpen] = useState(false);
 
   const summaryQuery = useRunSummary(id);
   const manifestQuery = useRunManifest(id);
   const daySnapshotsQuery = useRunDaySnapshots(id);
   const notesQuery = useRunMemoryNotes(id);
+  const remindersQuery = useRunMemoryReminders(id);
+  const workspaceQuery = useRunWorkspace(id);
+  const workspaceRevisionsQuery = useRunWorkspaceRevisions(id);
+  const progressQuery = useRunProgress(id);
 
   const summary = summaryQuery.data;
   const manifest = manifestQuery.data;
@@ -67,12 +83,22 @@ export function RunDetail() {
   const currentDay =
     daySnapshots.find((day) => day.day === selectedDay) ?? null;
 
-  const notesForSelectedDay = (notesQuery.data ?? []).filter(
-    (note) => note.created_day === selectedDay,
-  );
+  const allNotes = notesQuery.data ?? [];
+  const allReminders = remindersQuery.data ?? [];
+  const workspace = workspaceQuery.data ?? null;
+  const workspaceRevisions = workspaceRevisionsQuery.data ?? [];
   const scenario = getRunScenario({ summary, manifest });
   const identity = getRunIdentity({ summary, manifest });
   const identityTokens = buildRunIdentityTokens(identity);
+
+  const handleSelectDay = useCallback(
+    (day: number) => {
+      const next = new URLSearchParams(searchParams);
+      next.set("day", String(day));
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
 
   if (summaryQuery.isLoading) {
     return (
@@ -90,6 +116,105 @@ export function RunDetail() {
   }
 
   if (!summary) {
+    const progress = progressQuery.data;
+    if (progress && progress.status === "running") {
+      return (
+        <div className="space-y-6">
+          <div>
+            <Link
+              to="/runs"
+              className="mb-3 inline-flex items-center gap-1.5 text-xs font-mono text-muted transition-colors hover:text-orange"
+            >
+              <ArrowLeft size={12} aria-hidden="true" />
+              All Runs
+            </Link>
+            <h1 className="font-mono text-xl font-bold text-ink">{id}</h1>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <Badge variant="amber">
+                <span className="flex items-center gap-1">
+                  <Spinner size={10} className="animate-spin" />
+                  running
+                </span>
+              </Badge>
+              <Badge variant="orange" subtle>
+                shop {progress.shop_id}
+              </Badge>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="tech-card p-5 space-y-3">
+            <div className="flex items-center justify-between text-sm font-mono">
+              <span className="text-muted">Progress</span>
+              <span className="text-ink font-semibold">
+                {progress.completed_day_count} / {progress.total_days} days
+              </span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-gray-3 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-amber transition-all duration-500"
+                style={{
+                  width: `${Math.round((progress.completed_day_count / progress.total_days) * 100)}%`,
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Completed day stats */}
+          {progress.days.length > 0 ? (
+            <div className="space-y-2">
+              <h2 className="text-sm font-mono font-semibold text-muted uppercase tracking-wider">
+                Completed Days
+              </h2>
+              {progress.days.map((day) => (
+                <div
+                  key={day.day}
+                  className="tech-card p-4 animate-card-in"
+                >
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="min-w-0">
+                      <span className="font-mono text-sm font-semibold text-ink">
+                        Day {day.day}
+                      </span>
+                      {day.simulation_date ? (
+                        <span className="ml-2 text-[10px] font-mono text-muted">
+                          {day.simulation_date}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="flex-1" />
+                    <div className="flex flex-wrap items-center gap-4 text-xs font-mono">
+                      <div className="flex items-center gap-1.5 text-muted" title="Balance">
+                        <CurrencyDollar size={12} weight="bold" className="text-orange" />
+                        <span className="num">${day.available_balance.toFixed(2)}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-muted" title="Active listings">
+                        <Storefront size={12} weight="duotone" className="text-teal" />
+                        <span className="num">{day.active_listing_count} listings</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-muted" title="Total sales">
+                        <Lightning size={12} weight="fill" className="text-emerald" />
+                        <span className="num">{day.total_sales_count} sales</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-muted" title="Turns">
+                        <Wrench size={12} weight="duotone" className="text-violet" />
+                        <span className="num">{day.turn_count} turns</span>
+                      </div>
+                      {day.tool_calls.length > 0 ? (
+                        <div className="flex items-center gap-1.5 text-muted" title="Tool calls">
+                          <span className="num">{day.tool_calls.length} calls</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-6">
         <EmptyState
@@ -108,11 +233,20 @@ export function RunDetail() {
 
   const dayDetailUnavailable =
     (selectedDay > 0 && briefingQuery.isError) ||
-    (selectedDay > 0 && turnsQuery.isError) ||
-    notesQuery.isError;
+    (selectedDay > 0 && turnsQuery.isError);
+
+  const hasMemoryStats =
+    summary.memory.note_count > 0 ||
+    summary.memory.reminder_count > 0 ||
+    summary.totals.notes_written > 0;
+
+  const balanceDelta =
+    summary.ending_state.available_balance -
+    summary.starting_state.available_balance;
 
   return (
     <div className="space-y-6">
+      {/* ── 1. Header ── */}
       <div>
         <Link
           to="/runs"
@@ -122,208 +256,231 @@ export function RunDetail() {
           All Runs
         </Link>
 
-        <div className="flex flex-wrap items-start gap-4">
-          <div className="min-w-0 flex-1">
-            <h1 className="font-mono text-xl font-bold text-ink">
-              {summary.run_id}
-            </h1>
-            <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              <Badge variant="orange" subtle>
-                shop {summary.shop_id}
+        <div className="min-w-0">
+          <h1 className="font-mono text-xl font-bold text-ink">
+            {summary.run_id}
+          </h1>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <Badge variant="orange" subtle>
+              shop {summary.shop_id}
+            </Badge>
+            <Badge variant={summary.mode === "live" ? "emerald" : "gray"}>
+              {summary.mode}
+            </Badge>
+            {scenario ? <ScenarioBadge scenario={scenario} /> : null}
+            {scenario ? (
+              <ControlledShopsBadge shopIds={scenario.controlled_shop_ids} />
+            ) : null}
+            <Badge variant="teal">
+              {summary.day_count} day{summary.day_count !== 1 ? "s" : ""}
+            </Badge>
+            <Badge variant="gray" subtle>
+              days {summary.start_day}-{summary.end_day}
+            </Badge>
+            {identityTokens.map((token) => (
+              <Badge key={token} variant="gray" subtle>
+                {token}
               </Badge>
-              <Badge variant={summary.mode === "live" ? "emerald" : "gray"}>
-                {summary.mode}
-              </Badge>
-              {scenario ? <ScenarioBadge scenario={scenario} /> : null}
-              {scenario ? (
-                <ControlledShopsBadge shopIds={scenario.controlled_shop_ids} />
-              ) : null}
-              <Badge variant="teal">
-                {summary.day_count} day{summary.day_count !== 1 ? "s" : ""}
-              </Badge>
-              <Badge variant="gray" subtle>
-                days {summary.start_day}-{summary.end_day}
-              </Badge>
-              {identityTokens.map((token) => (
-                <Badge key={token} variant="gray" subtle>
-                  {token}
-                </Badge>
-              ))}
-            </div>
+            ))}
           </div>
-
-          {manifest ? (
-            <div className="tech-card min-w-[280px] p-4">
-              <div className="mb-2 text-[10px] font-mono font-semibold uppercase tracking-wider text-muted">
-                Run Identity
-              </div>
-              {identityTokens.length > 0 ? (
-                <div className="mb-3 flex flex-wrap gap-2">
-                  {identityTokens.map((token) => (
-                    <Badge key={token} variant="gray" subtle>
-                      {token}
-                    </Badge>
-                  ))}
-                </div>
-              ) : null}
-              {manifest.invocation.command ? (
-                <p className="text-sm text-secondary">
-                  {manifest.invocation.command}
-                </p>
-              ) : (
-                <p className="text-sm text-muted">
-                  Invocation metadata loaded without a command string.
-                </p>
-              )}
-            </div>
-          ) : null}
+          {manifest?.invocation.command && (
+            <p className="mt-1 text-xs font-mono text-muted">
+              {manifest.invocation.command}
+            </p>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat
-          label="Balance Change"
-          value={`${formatCurrency(summary.starting_state.available_balance)} → ${formatCurrency(summary.ending_state.available_balance)}`}
-          icon={<CurrencyDollar size={12} weight="bold" />}
-          accent={
-            summary.ending_state.available_balance >
-            summary.starting_state.available_balance
-              ? "emerald"
-              : summary.ending_state.available_balance <
-                  summary.starting_state.available_balance
-                ? "rose"
-                : undefined
-          }
-        />
-        <Stat
-          label="Total Tool Calls"
-          value={summary.totals.tool_call_count}
-          icon={<Wrench size={12} weight="duotone" />}
-          accent="teal"
-        />
-        <Stat
-          label="Yesterday Revenue"
-          value={formatCurrency(summary.totals.yesterday_revenue)}
-          icon={<CurrencyDollar size={12} weight="bold" />}
-          accent="amber"
-        />
-        <Stat
-          label="Turns"
-          value={summary.totals.turn_count}
-          icon={<Lightning size={12} weight="fill" />}
-          accent="violet"
-        />
-      </div>
-
-      {Object.keys(summary.totals.tool_calls_by_name).length > 0 ? (
-        <div className="tech-card p-4">
-          <div className="mb-3 text-[10px] font-mono font-semibold uppercase tracking-wider text-muted">
-            Tool Call Distribution
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(summary.totals.tool_calls_by_name)
-              .sort(([, a], [, b]) => b - a)
-              .map(([name, count]) => (
-                <div
-                  key={name}
-                  className="flex items-center gap-2 border border-rule bg-gray-1 px-3 py-1.5 font-mono text-xs"
-                >
-                  <span className="text-secondary">{name}</span>
-                  <span className="num font-semibold text-ink">{count}</span>
-                </div>
-              ))}
-          </div>
-        </div>
-      ) : null}
-
+      {/* ── 2. Activity Timeline (chart + swim lanes) ── */}
       {daySnapshotsQuery.isError ? (
         <BackendNotice
           title="Day snapshots could not be loaded"
           description="The day timeline depends on per-day run artifact snapshots. The request failed or the artifact bundle is incomplete."
           endpoints={["GET /control/runs/:runId/days"]}
         />
+      ) : daySnapshots.length >= 3 ? (
+        <RunActivityTimeline
+          days={daySnapshots}
+          selectedDay={selectedDay}
+          onSelectDay={handleSelectDay}
+        />
       ) : daySnapshots.length > 0 ? (
-        <>
-          <DayTimeline
-            days={daySnapshots}
-            selectedDay={selectedDay}
-            onSelectDay={(day) => {
-              const next = new URLSearchParams(searchParams);
-              next.set("day", String(day));
-              setSearchParams(next, { replace: true });
-            }}
-          />
-
-          {currentDay ? (
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <h2 className="text-lg font-bold text-ink">Day {currentDay.day}</h2>
-                <span className="text-xs font-mono text-muted">
-                  {formatDateMedium(currentDay.simulation_date)}
-                </span>
-                <Badge variant="gray" subtle>
-                  balance {formatCurrency(currentDay.available_balance, currentDay.currency_code)}
-                </Badge>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                <Stat
-                  label="Balance"
-                  value={formatCurrency(currentDay.available_balance, currentDay.currency_code)}
-                  icon={<CurrencyDollar size={12} weight="bold" />}
-                  accent="orange"
-                />
-                <Stat
-                  label="Active Listings"
-                  value={currentDay.active_listing_count}
-                  icon={<Lightning size={12} weight="duotone" />}
-                  accent="emerald"
-                />
-                <Stat
-                  label="Draft Listings"
-                  value={currentDay.draft_listing_count}
-                  icon={<Sun size={12} weight="duotone" />}
-                  accent="teal"
-                />
-                <Stat
-                  label="Total Sales"
-                  value={currentDay.total_sales_count}
-                  icon={<Wrench size={12} weight="duotone" />}
-                  accent="violet"
-                />
-                <Stat
-                  label="Reviews"
-                  value={`${currentDay.review_average.toFixed(1)} (${currentDay.review_count})`}
-                  icon={<Sun size={12} weight="duotone" />}
-                  accent="amber"
-                />
-              </div>
-            </div>
-          ) : null}
-        </>
+        <DayTimeline
+          days={daySnapshots}
+          selectedDay={selectedDay}
+          onSelectDay={handleSelectDay}
+        />
       ) : null}
 
+      {/* ── 3. Consolidated stats row ── */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Stat
+          label="Balance"
+          value={`${formatCurrency(summary.ending_state.available_balance)}`}
+          icon={<CurrencyDollar size={12} weight="bold" />}
+          accent={
+            balanceDelta > 0
+              ? "emerald"
+              : balanceDelta < 0
+                ? "rose"
+                : undefined
+          }
+          secondary={`${balanceDelta >= 0 ? "+" : ""}${formatCurrency(balanceDelta)} change`}
+        />
+        <Stat
+          label="Turns / Tool Calls"
+          value={`${summary.totals.turn_count} / ${summary.totals.tool_call_count}`}
+          icon={<Lightning size={12} weight="fill" />}
+          accent="violet"
+        />
+        <Stat
+          label="Sales"
+          value={summary.ending_state.total_sales_count}
+          icon={<Storefront size={12} weight="duotone" />}
+          accent="emerald"
+          secondary={
+            summary.ending_state.review_count > 0
+              ? `${summary.ending_state.review_average.toFixed(1)} avg rating`
+              : undefined
+          }
+        />
+        <Stat
+          label="Agent Memory"
+          value={
+            hasMemoryStats
+              ? `${summary.memory.note_count} notes`
+              : "none"
+          }
+          icon={<Brain size={12} weight="duotone" />}
+          accent={hasMemoryStats ? "amber" : undefined}
+          secondary={
+            summary.memory.reminder_count > 0
+              ? `${summary.memory.reminder_count} reminders`
+              : undefined
+          }
+        />
+      </div>
+
+      {/* ── 4. Selected day detail ── */}
+      {currentDay ? (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="text-lg font-bold text-ink">
+              Day {currentDay.day}
+            </h2>
+            <span className="text-xs font-mono text-muted">
+              {formatDateMedium(currentDay.simulation_date)}
+            </span>
+            <Badge variant="gray" subtle>
+              balance{" "}
+              {formatCurrency(
+                currentDay.available_balance,
+                currentDay.currency_code,
+              )}
+            </Badge>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <Stat
+              label="Balance"
+              value={formatCurrency(
+                currentDay.available_balance,
+                currentDay.currency_code,
+              )}
+              icon={<CurrencyDollar size={12} weight="bold" />}
+              accent="orange"
+            />
+            <Stat
+              label="Active Listings"
+              value={currentDay.active_listing_count}
+              icon={<Storefront size={12} weight="duotone" />}
+              accent="teal"
+            />
+            <Stat
+              label="Draft Listings"
+              value={currentDay.draft_listing_count}
+              icon={<Sun size={12} weight="duotone" />}
+              accent="teal"
+            />
+            <Stat
+              label="Total Sales"
+              value={currentDay.total_sales_count}
+              icon={<Storefront size={12} weight="duotone" />}
+              accent="emerald"
+            />
+            <Stat
+              label="Reviews"
+              value={`${currentDay.review_average.toFixed(1)} (${currentDay.review_count})`}
+              icon={<Star size={12} weight="fill" />}
+              accent="emerald"
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {/* ── 5. Activity summary for selected day ── */}
+      {!dayDetailUnavailable &&
+        turnsQuery.data &&
+        turnsQuery.data.length > 0 && (
+          <ActivitySummary turns={turnsQuery.data} />
+        )}
+
+      {/* ── 6. Briefing panel ── */}
       {dayDetailUnavailable ? (
         <BackendNotice
           title="Per-day trace detail could not be loaded"
-          description="The selected run has summary metadata, but day briefing, turn playback, or memory requests failed."
+          description="The selected run has summary metadata, but day briefing or turn playback requests failed."
           endpoints={[
             "GET /control/runs/:runId/days/:day/briefing",
             "GET /control/runs/:runId/days/:day/turns",
-            "GET /control/runs/:runId/memory/notes",
           ]}
         />
       ) : (
         <>
-          {briefingQuery.data ? <BriefingPanel briefing={briefingQuery.data} /> : null}
-          {turnsQuery.data && turnsQuery.data.length > 0 ? (
-            <TurnInspector turns={turnsQuery.data} />
-          ) : null}
-          {notesForSelectedDay.length > 0 ? (
-            <MemoryPanel notes={notesForSelectedDay} />
+          {briefingQuery.data ? (
+            <BriefingPanel briefing={briefingQuery.data} />
           ) : null}
         </>
       )}
+
+      {/* ── 7. Turn inspector (collapsed by default) ── */}
+      {!dayDetailUnavailable &&
+        turnsQuery.data &&
+        turnsQuery.data.length > 0 && (
+          <>
+            <button
+              type="button"
+              onClick={() => setRawTurnsOpen(!rawTurnsOpen)}
+              className="flex items-center gap-2 w-full tech-card px-4 py-3 text-left cursor-pointer hover:bg-gray-1 transition-colors"
+            >
+              <Wrench size={12} weight="duotone" className="text-teal" />
+              <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-muted">
+                Raw Turn Inspector
+              </span>
+              <Badge variant="gray" subtle className="ml-1">
+                {turnsQuery.data.length}
+              </Badge>
+              <CaretDown
+                size={10}
+                className={`text-muted ml-auto transition-transform duration-200 ${rawTurnsOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+            {rawTurnsOpen && (
+              <div className="animate-card-in">
+                <TurnInspector turns={turnsQuery.data} />
+              </div>
+            )}
+          </>
+        )}
+
+      {/* ── 8. Agent memory section ── */}
+      <AgentMemorySection
+        notes={allNotes}
+        reminders={allReminders}
+        workspace={workspace}
+        workspaceRevisions={workspaceRevisions}
+        selectedDay={selectedDay}
+      />
     </div>
   );
 }

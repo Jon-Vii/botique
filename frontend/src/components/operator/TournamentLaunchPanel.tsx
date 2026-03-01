@@ -25,9 +25,11 @@ type Entrant = {
 export function TournamentLaunchPanel({
   onSuccess,
   onError,
+  apiKey,
 }: {
   onSuccess: (msg: string) => void;
   onError: (msg: string) => void;
+  apiKey?: string;
 }) {
   const { data: world } = useWorldState();
   const launchTournament = useLaunchTournament();
@@ -74,6 +76,11 @@ export function TournamentLaunchPanel({
       ? selectedShopIds
       : shops.map((s) => s.shop_id);
 
+    if (!apiKey) {
+      onError("Mistral API key is required — set it above");
+      return;
+    }
+
     launchTournament.mutate(
       {
         entrants,
@@ -82,6 +89,7 @@ export function TournamentLaunchPanel({
         rounds,
         turns_per_day: turnsPerDay,
         scenario_id: scenarioId,
+        api_key: apiKey,
       },
       {
         onSuccess: (data) => {
