@@ -459,9 +459,6 @@ export class RunControlService {
     }
 
     const manifest = await this.readJsonSafe(join(artifactDir, "manifest.json"));
-    if (manifest && manifest?.invocation?.command === "run-tournament") {
-      return null;
-    }
 
     const createdAt = await this.resolveCreatedAt(artifactDir, manifest, summary);
     return { artifactDir, manifest, summary, createdAt };
