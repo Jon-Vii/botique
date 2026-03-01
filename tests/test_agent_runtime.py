@@ -994,6 +994,7 @@ class MistralProviderTests(unittest.TestCase):
 class OwnerAgentRunnerTests(unittest.TestCase):
     def test_default_runner_wires_provider_policy_and_loop(self) -> None:
         seller_client = FakeSellerCoreClient()
+        memory = InMemoryAgentMemory()
         provider = RecordingProvider(
             [
                 ProviderResponse(
@@ -1011,6 +1012,15 @@ class OwnerAgentRunnerTests(unittest.TestCase):
                         ProviderToolCall(
                             name=END_DAY_TOOL_NAME,
                             arguments={"summary": "That is enough for today."},
+                        ),
+                    ),
+                ),
+                ProviderResponse(
+                    content="",
+                    tool_calls=(
+                        ProviderToolCall(
+                            name="save_end_of_day_note",
+                            arguments={"body": "The shop needs a clearer follow-up tomorrow."},
                         ),
                     ),
                 ),
@@ -1042,7 +1052,7 @@ class OwnerAgentRunnerTests(unittest.TestCase):
         runner = type(runner)(
             provider=provider,
             seller_client=seller_client,
-            memory=InMemoryAgentMemory(),
+            memory=memory,
             event_log=InMemoryEventLog(),
         )
 
@@ -1050,6 +1060,9 @@ class OwnerAgentRunnerTests(unittest.TestCase):
 
         self.assertEqual(result.end_reason, DayEndReason.AGENT_ENDED_DAY)
         self.assertEqual(len(result.turns), 1)
+        self.assertEqual(len(memory.list_notes(shop_id=7)), 1)
+        self.assertEqual(memory.list_notes(shop_id=7)[0].title, "Day 5 note")
+        self.assertIn("note_written", [event.kind.value for event in result.events])
         self.assertEqual(
             seller_client.calls,
             [
@@ -1116,6 +1129,18 @@ class OwnerAgentRunnerTests(unittest.TestCase):
                     ),
                 ),
                 ProviderResponse(
+                    content="",
+                    tool_calls=(
+                        ProviderToolCall(
+                            name="save_end_of_day_note",
+                            arguments={
+                                "title": "Day three note",
+                                "body": "Woodwork is worth checking if current listings stall.",
+                            },
+                        ),
+                    ),
+                ),
+                ProviderResponse(
                     content="Capture the trend note for tomorrow.",
                     tool_calls=(
                         ProviderToolCall(
@@ -1134,6 +1159,17 @@ class OwnerAgentRunnerTests(unittest.TestCase):
                         ProviderToolCall(
                             name=END_DAY_TOOL_NAME,
                             arguments={"summary": "Day four is complete."},
+                        ),
+                    ),
+                ),
+                ProviderResponse(
+                    content="",
+                    tool_calls=(
+                        ProviderToolCall(
+                            name="save_end_of_day_note",
+                            arguments={
+                                "body": "The planner angle may be stronger than the current catalog mix.",
+                            },
                         ),
                     ),
                 ),
@@ -1174,8 +1210,10 @@ class OwnerAgentRunnerTests(unittest.TestCase):
                 ("get_capacity_status", {"shop_id": 1001}),
             ],
         )
-        self.assertEqual(len(result.notes), 1)
-        self.assertEqual(result.notes[0].title, "Trend watch")
+        self.assertEqual(len(result.notes), 3)
+        self.assertEqual(result.notes[0].title, "Day three note")
+        self.assertEqual(result.notes[1].title, "Trend watch")
+        self.assertEqual(result.notes[2].title, "Day 4 note")
         self.assertIn(
             "simulation_advanced",
             [event.kind.value for event in result.events],

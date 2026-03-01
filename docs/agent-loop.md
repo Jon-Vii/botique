@@ -31,7 +31,8 @@ Per simulated day:
 5. each tool call uses one work slot
 6. the agent may end the day early with `end_day`
 7. the runtime ends the workday automatically when no work slots remain
-8. the runtime persists logs, notes, and reminders, then the control/runtime layer advances the simulation between days
+8. after the workday ends, the runtime asks the model to write one note for later days outside the work-slot budget
+9. the runtime persists logs, notes, and reminders, then the control/runtime layer advances the simulation between days
 
 Status: `Current decision`
 
@@ -112,7 +113,7 @@ Current implementation in `src/agent_runtime/providers/policy.py` uses a plain-l
 - the rendered morning brief
 - a short work-session summary
 - explicit visibility of note/reminder tools
-- a concise summary of prior turns rather than a raw prior-turn JSON dump
+- exact same-day action arguments and tool results carried forward within the workday context
 
 ## Turn Rules
 
@@ -170,6 +171,7 @@ Operational rule:
 - reminders are push-style resurfacing and should appear when due
 - notes are pull-style memory and the agent should decide when they are worth reading
 - `read_notes` should stay bounded and targeted rather than dumping the full note history
+- after each day, the runtime also stores one model-written note outside the work-slot budget so later days have inspectable carry-forward memory
 
 Status: `Current decision`
 

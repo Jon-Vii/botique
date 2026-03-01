@@ -31,6 +31,7 @@ Current behavior:
 - each tool call uses one slot
 - the agent still gets one tool call per turn
 - notes and reminders stay visible as ordinary support tools
+- after the day ends, the runtime writes one model-generated note for later days outside the slot budget
 - the runtime still owns day-end accounting and simulation advancement
 - the provider-facing payload is now a natural morning brief plus compact work-session state instead of a raw orchestration JSON envelope
 
@@ -44,6 +45,7 @@ This is a `Current decision`.
 - turn-slotted single-day loop execution
 - multi-day runs with runtime-owned simulation advancement between days
 - inspectable in-memory notes and reminders
+- automatic end-of-day note carry-forward between days
 - structured runtime event logs
 - production-aware seeded world state with delayed payments, pending reviews, and shop queues
 
