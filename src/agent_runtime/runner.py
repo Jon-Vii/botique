@@ -30,6 +30,7 @@ from .providers import (
     ProviderPolicyConfig,
     ProviderMessage,
     ProviderMessageRole,
+    ProviderToolCall,
     ProviderToolDefinition,
     ToolCallingAgentPolicy,
     ToolCallingProvider,
@@ -274,7 +275,19 @@ class OwnerAgentRunner:
         shop_id: ShopId,
         run_id: str,
     ) -> str | None:
-        """Pre-loop LLM call for the agent to name its shop in bootstrap scenarios."""
+        """Pre-loop identity call: agent names its shop in bootstrap scenarios.
+
+        The LLM exchange is captured and set as a conversation prefix on the
+        policy so the agent's reasoning carries into all subsequent work days.
+        """
+        import json as _json
+
+        identity_prompt = (
+            "You're opening a new 3D printing shop on Botique. "
+            "Choose a name for your shop. Your first day of business "
+            "starts next — you'll need to create your first product listings."
+        )
+
         response = self.provider.complete(
             messages=(
                 ProviderMessage(
@@ -283,11 +296,7 @@ class OwnerAgentRunner:
                 ),
                 ProviderMessage(
                     role=ProviderMessageRole.USER,
-                    content=(
-                        "You're opening a new 3D printing shop on Botique. "
-                        "Choose a name for your shop. Your first day of business "
-                        "starts next — you'll need to create your first product listings."
-                    ),
+                    content=identity_prompt,
                 ),
             ),
             tools=(
@@ -321,6 +330,32 @@ class OwnerAgentRunner:
 
         if name:
             self.seller_client.update_shop(shop_id=shop_id, title=name)
+
+        # Capture the exchange as conversation prefix so the agent's naming
+        # reasoning flows into all subsequent work sessions.
+        if name and hasattr(response, "tool_calls") and response.tool_calls:
+            tc = response.tool_calls[0]
+            self.policy.conversation_prefix = (
+                ProviderMessage(
+                    role=ProviderMessageRole.USER,
+                    content=identity_prompt,
+                ),
+                ProviderMessage(
+                    role=ProviderMessageRole.ASSISTANT,
+                    content=response.content.strip() if response.content else "",
+                    tool_calls=(ProviderToolCall(
+                        name=tc.name,
+                        arguments=dict(tc.arguments),
+                        call_id=tc.call_id,
+                    ),),
+                ),
+                ProviderMessage(
+                    role=ProviderMessageRole.TOOL,
+                    content=_json.dumps({"success": True, "shop_name": name}),
+                    name=tc.name,
+                    tool_call_id=tc.call_id,
+                ),
+            )
 
         self.event_log.append(
             kind=EventKind.IDENTITY_STEP,

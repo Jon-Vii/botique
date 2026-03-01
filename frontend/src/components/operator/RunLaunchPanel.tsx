@@ -9,11 +9,15 @@ import { DEFAULT_SCENARIO_ID, getScenarioMeta } from "../../lib/scenarios";
 import type { ScenarioId } from "../../types/api";
 
 const MODEL_OPTIONS = [
+  { label: "Mistral Large", value: "mistral-large-latest" },
   { label: "Mistral Medium", value: "mistral-medium-latest" },
   { label: "Mistral Small", value: "mistral-small-latest" },
-  { label: "Mistral Large", value: "mistral-large-latest" },
+  { label: "Magistral Medium", value: "magistral-medium-latest" },
+  { label: "Magistral Small", value: "magistral-small-latest" },
+  { label: "Ministral 14B", value: "ministral-3-14b-25-12" },
+  { label: "Ministral 8B", value: "ministral-3-8b-25-12" },
+  { label: "Devstral 2", value: "devstral-2-25-12" },
   { label: "Codestral", value: "codestral-latest" },
-  { label: "Mistral Nemo", value: "open-mistral-nemo" },
 ] as const;
 
 export function RunLaunchPanel({

@@ -80,6 +80,7 @@ class ToolCallingAgentPolicy(DailyAgentPolicy):
     ) -> None:
         self.provider = provider
         self.config = config or ProviderPolicyConfig()
+        self.conversation_prefix: tuple[ProviderMessage, ...] = ()
 
     def next_turn(self, context: AgentTurnContext) -> AgentTurnDecision:
         response = self.provider.complete(
@@ -114,11 +115,19 @@ class ToolCallingAgentPolicy(DailyAgentPolicy):
                 role=ProviderMessageRole.SYSTEM,
                 content=self.config.system_prompt,
             ),
+        ]
+
+        # Inject identity/bootstrap context (e.g. shop naming exchange)
+        # so the agent's reasoning carries into the work session.
+        if self.conversation_prefix:
+            messages.extend(self.conversation_prefix)
+
+        messages.append(
             ProviderMessage(
                 role=ProviderMessageRole.USER,
                 content=self._build_briefing_message(context),
             ),
-        ]
+        )
 
         # Replay prior turns as proper multi-turn conversation
         for record in context.prior_turns:
