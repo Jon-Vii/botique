@@ -17,6 +17,7 @@ class ToolManifestEntry:
     name: str
     description: str
     surface: ToolSurface
+    work_cost: int = 1
     operation_id: str | None = None
     path_params: tuple[str, ...] = ()
     query_params: tuple[str, ...] = ()
@@ -25,6 +26,10 @@ class ToolManifestEntry:
     scopes: tuple[str, ...] = ()
     notes: tuple[str, ...] = ()
     parameters_schema: dict[str, JSONValue] | None = None
+
+    def __post_init__(self) -> None:
+        if self.work_cost < 1:
+            raise ValueError("work_cost must be at least 1.")
 
 
 @dataclass(frozen=True, slots=True)

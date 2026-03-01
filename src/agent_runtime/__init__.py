@@ -26,6 +26,7 @@ from .loop import (
     SingleShopDailyLoop,
     ToolCall,
     TurnRecord,
+    WorkSessionState,
 )
 from .memory import InMemoryAgentMemory, NoteRecord, ReminderRecord, ReminderStatus
 from .providers import (
@@ -110,6 +111,7 @@ __all__ = [
     "ToolNotFoundError",
     "ToolSurface",
     "TurnRecord",
+    "WorkSessionState",
     "DEFAULT_SYSTEM_PROMPT",
     "END_DAY_TOOL_NAME",
     "build_owner_agent_tool_registry",

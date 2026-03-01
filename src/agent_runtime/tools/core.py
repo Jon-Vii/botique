@@ -23,6 +23,21 @@ DEFAULT_OWNER_AGENT_CORE_TOOLS: tuple[str, ...] = (
     "get_taxonomy_nodes",
 )
 
+OWNER_AGENT_TOOL_WORK_COSTS: dict[str, int] = {
+    "create_draft_listing": 2,
+    "update_listing": 2,
+    "delete_listing": 2,
+    "get_listing": 1,
+    "get_shop_listings": 1,
+    "search_marketplace": 1,
+    "get_shop_info": 1,
+    "update_shop": 2,
+    "get_orders": 1,
+    "get_order_details": 1,
+    "get_reviews": 1,
+    "get_taxonomy_nodes": 1,
+}
+
 
 def _bound_shop_id(
     arguments: dict[str, object],
@@ -101,6 +116,7 @@ def register_seller_core_tools(
                 name=item["tool_name"],
                 description=item["description"],
                 surface=ToolSurface.CORE,
+                work_cost=OWNER_AGENT_TOOL_WORK_COSTS.get(tool_name, 1),
                 operation_id=item["operation_id"],
                 path_params=tuple(item["path_params"]),
                 query_params=tuple(item["query_params"]),

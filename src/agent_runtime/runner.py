@@ -28,7 +28,7 @@ from .tools import build_owner_agent_tool_registry
 
 @dataclass(frozen=True, slots=True)
 class OwnerAgentRunnerConfig:
-    max_turns: int = 6
+    work_budget: int = 8
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +84,7 @@ class OwnerAgentRunner:
                 shop_id=briefing.shop_id,
             ),
             event_log=self.event_log,
-            config=DailyLoopConfig(max_turns=self.config.max_turns),
+            config=DailyLoopConfig(work_budget=self.config.work_budget),
         )
         return loop.run_day(briefing=briefing, policy=self.policy)
 
@@ -212,7 +212,8 @@ class OwnerAgentRunner:
 
 def build_default_owner_agent_runner(
     *,
-    max_turns: int = 6,
+    work_budget: int = 8,
+    max_turns: int | None = None,
     base_url: str | None = None,
     control_base_url: str | None = None,
     api_key: str | None = None,
@@ -226,6 +227,7 @@ def build_default_owner_agent_runner(
     event_log: EventLog | None = None,
     policy_config: ProviderPolicyConfig | None = None,
 ) -> OwnerAgentRunner:
+    effective_work_budget = work_budget if max_turns is None else max_turns
     seller_client = SellerCoreClient.from_env(
         base_url=base_url,
         api_key=api_key,
@@ -253,6 +255,6 @@ def build_default_owner_agent_runner(
         control_client=control_client,
         memory=memory,
         event_log=event_log,
-        config=OwnerAgentRunnerConfig(max_turns=max_turns),
+        config=OwnerAgentRunnerConfig(work_budget=effective_work_budget),
         policy_config=policy_config,
     )

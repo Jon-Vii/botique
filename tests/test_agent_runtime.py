@@ -31,6 +31,7 @@ from agent_runtime import (
     ShopStateSnapshot,
     ToolCallingAgentPolicy,
     ToolCall,
+    WorkSessionState,
     build_default_owner_agent_runner,
     build_owner_agent_tool_registry,
     morning_briefing_from_payload,
@@ -294,6 +295,10 @@ class MorningBriefingTests(unittest.TestCase):
             payload["due_reminders"][0]["content"],
             "Check whether the floral planner needs repricing.",
         )
+        rendered = briefing.render_for_agent()
+        self.assertIn("# Studio North workday", rendered)
+        self.assertIn("Reminders due:", rendered)
+        self.assertIn("Check whether the floral planner needs repricing.", rendered)
 
     def test_briefing_round_trips_from_json_payload(self) -> None:
         briefing = morning_briefing_from_payload(
@@ -570,6 +575,8 @@ class ToolRegistryTests(unittest.TestCase):
             manifests["write_note"].parameters_schema["required"],
             ["title", "body"],
         )
+        self.assertEqual(manifests["update_listing"].work_cost, 2)
+        self.assertEqual(manifests["write_note"].work_cost, 1)
         self.assertNotIn("shop_id", manifests["write_note"].parameters_schema["properties"])
         self.assertNotIn("shop_id", manifests["get_shop_info"].parameters_schema["properties"])
 
@@ -656,14 +663,18 @@ class DailyLoopTests(unittest.TestCase):
         loop = SingleShopDailyLoop(
             tool_registry=registry,
             event_log=event_log,
-            config=DailyLoopConfig(max_turns=5),
+            config=DailyLoopConfig(work_budget=5),
         )
 
         result = loop.run_day(briefing=briefing, policy=policy)
 
         self.assertEqual(result.end_reason, DayEndReason.AGENT_ENDED_DAY)
         self.assertEqual(len(result.turns), 2)
+        self.assertEqual(result.work_budget, 5)
+        self.assertEqual(result.work_budget_spent, 2)
+        self.assertEqual(result.work_budget_remaining, 3)
         self.assertEqual(policy.contexts[1].prior_turns[0].tool_call.name, "search_marketplace")
+        self.assertEqual(policy.contexts[1].work_budget_remaining, 4)
         self.assertEqual(client.calls, [("search_marketplace", {"keywords": "mushroom planner"})])
         self.assertIn("write_note", [turn.tool_result.tool_name for turn in result.turns if turn.tool_result])
         event_kinds = [event.kind.value for event in result.events]
@@ -671,7 +682,7 @@ class DailyLoopTests(unittest.TestCase):
         self.assertIn("note_written", event_kinds)
         self.assertEqual(event_kinds[-1], "day_ended")
 
-    def test_daily_loop_stops_at_max_turns_when_agent_never_ends_day(self) -> None:
+    def test_daily_loop_stops_when_work_budget_is_exhausted(self) -> None:
         client = FakeSellerCoreClient()
         registry = build_owner_agent_tool_registry(client, memory=InMemoryAgentMemory(), shop_id=7)
         briefing = MorningBriefingBuilder(InMemoryAgentMemory()).build(
@@ -699,12 +710,12 @@ class DailyLoopTests(unittest.TestCase):
         )
         loop = SingleShopDailyLoop(
             tool_registry=registry,
-            config=DailyLoopConfig(max_turns=1),
+            config=DailyLoopConfig(work_budget=1),
         )
 
         result = loop.run_day(briefing=briefing, policy=policy)
 
-        self.assertEqual(result.end_reason, DayEndReason.MAX_TURNS_REACHED)
+        self.assertEqual(result.end_reason, DayEndReason.WORK_BUDGET_EXHAUSTED)
         self.assertEqual(len(result.turns), 1)
 
 
@@ -736,9 +747,13 @@ class ProviderPolicyTests(unittest.TestCase):
         return AgentTurnContext(
             run_id=briefing.run_id,
             briefing=briefing,
-            turn_index=1,
-            max_turns=3,
-            remaining_turns=3,
+            session=WorkSessionState(
+                turn_index=1,
+                turns_completed=0,
+                work_budget=5,
+                work_budget_spent=0,
+                work_budget_remaining=5,
+            ),
             available_tools=tuple(registry.manifest()),
             prior_turns=(),
         )
@@ -769,6 +784,10 @@ class ProviderPolicyTests(unittest.TestCase):
         self.assertIn("search_marketplace", tool_names)
         self.assertIn(END_DAY_TOOL_NAME, tool_names)
         self.assertEqual(provider.calls[0]["messages"][0].role, ProviderMessageRole.SYSTEM)
+        user_prompt = provider.calls[0]["messages"][1].content
+        self.assertIn("# Studio North workday", user_prompt)
+        self.assertIn("Work budget: 5 left / 5 total", user_prompt)
+        self.assertIn("write_note", user_prompt)
 
     def test_tool_calling_policy_maps_end_day_tool(self) -> None:
         registry, briefing = self._make_context()
@@ -888,7 +907,7 @@ class OwnerAgentRunnerTests(unittest.TestCase):
             }
         )
         runner = build_default_owner_agent_runner(
-            max_turns=4,
+            work_budget=4,
             memory=InMemoryAgentMemory(),
             event_log=InMemoryEventLog(),
             policy_config=ProviderPolicyConfig(),
@@ -985,7 +1004,7 @@ class OwnerAgentRunnerTests(unittest.TestCase):
             ]
         )
         runner = build_default_owner_agent_runner(
-            max_turns=4,
+            work_budget=4,
             memory=InMemoryAgentMemory(),
             event_log=InMemoryEventLog(),
             policy_config=ProviderPolicyConfig(),
