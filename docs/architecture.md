@@ -6,8 +6,8 @@ Botique is a simulated e-commerce platform where autonomous AI agents run Etsy-l
 
 The project has two goals:
 
-1. Build a credible simulated marketplace where business-owner agents operate through tools.
-2. Preserve a seller-facing subset that is intentionally compatible in spirit with Etsy Open API v3 patterns.
+1. build a credible simulated marketplace where business-owner agents operate through tools
+2. preserve a seller-facing subset that is intentionally compatible in spirit with Etsy Open API v3 patterns
 
 Botique is not an Etsy client. The compatibility claim is limited to a subset of seller operations.
 
@@ -30,6 +30,7 @@ The main difference is that Botique includes creative and strategic choices:
 - how to position them
 - how to price them
 - how to react to competitors and customer feedback
+- how to allocate constrained production capacity
 
 ## Research-Informed Design Rules
 
@@ -38,9 +39,10 @@ These are architecture-level defaults drawn from recent agent-business and e-com
 - the environment owns outcomes, delays, and failures
 - agents act through tools, but the world decides what actually happens
 - evaluation should center on one clear business objective plus supporting diagnostics
-- simple notes and reminders are preferable to opaque memory systems in the initial build
-- a single-shop loop should be stable before adding richer competition or multi-agent delegation
+- explicit workspace/reminder memory is preferable to opaque hidden memory systems
+- a single-shop loop should be stable before richer competition or delegation becomes the norm
 - narrative events should enrich the world, not replace formula-driven core mechanics
+- operator-facing traceability is part of the product, not just a debugging convenience
 
 Status: `Recommended default`
 
@@ -65,8 +67,8 @@ Application code, not AI.
 
 Responsibilities:
 
-- store shops, listings, orders, reviews, and customers
-- resolve search, purchases, reviews, and trend shifts
+- store shops, listings, orders, reviews, payments, customers, and production state
+- resolve search, purchases, reviews, trend shifts, and production release
 - advance the simulation clock
 - own simulation time and world-state transitions
 
@@ -74,24 +76,17 @@ System 2 is the world the agents live in.
 
 Current implementation note:
 
-- Systems 1 and 2 currently ship inside the same TypeScript Fastify/Bun service, but the boundary is explicit in code: seller-facing routes/services live under `server/src/routes/` and `server/src/services/`, while simulation logic lives under `server/src/simulation/`.
+- Systems 1 and 2 currently ship inside the same TypeScript Fastify/Bun service, but the boundary is explicit in code: seller-facing routes/services live under `server/src/routes/` and `server/src/services/`, while simulation logic lives under `server/src/simulation/`
 
 ### System 1 / System 2 Boundary
 
 For the current TypeScript server, keep the boundary explicit:
 
-- System 1 owns HTTP routes, request validation, response shaping, and seller-facing compatibility behavior.
-- System 2 owns current day, market snapshot, trend state, ranking inputs, and day advancement rules.
-- System 1 may call into System 2 to resolve world-derived results such as ranking context, but it should not embed simulation formulas inline in route handlers.
-- System 2 should expose inspectable interfaces for `current_day`, `market_snapshot`, `trend_state`, and `advanceDay`.
-- advancing the world belongs to the control/runtime layer, not normal seller-facing routes.
-
-Current implementation note:
-
-- `server/src/routes/` and the seller-facing parts of `MarketplaceService` are System 1 concerns.
-- `server/src/routes/control-routes.ts` exposes a separate `/control` surface for runtime/operator access to simulation state and day advancement.
-- `server/src/simulation/` is the System 2 module boundary inside the current codebase.
-- the HTTP contract stays unchanged while System 2 evolves behind that boundary.
+- System 1 owns HTTP routes, request validation, response shaping, and seller-facing compatibility behavior
+- System 2 owns current day, market snapshot, trend state, ranking inputs, production state, and day advancement rules
+- System 1 may call into System 2 to resolve world-derived results such as ranking context, but it should not embed simulation formulas inline in route handlers
+- System 2 should expose inspectable interfaces for `current_day`, `market_snapshot`, `trend_state`, world reset, and day advancement
+- advancing or resetting the world belongs to the control/runtime layer, not normal seller-facing routes
 
 ### System 3: Agent Orchestrator
 
@@ -102,24 +97,28 @@ System 3 is the agent runtime layer, not the simulated world itself. The marketp
 Responsibilities:
 
 - generate morning briefings
-- run the per-day/per-turn loop
+- run the per-day/per-work-slot loop
 - expose the allowed tool surface to each agent role
+- manage explicit workspace/reminder memory
 - log decisions, tool calls, and outcomes
+- orchestrate single-run and tournament modes
 
 ### System 4: Frontend / Operator Layer
 
-Human observation and intervention layer.
+Human-facing observation, comparison, and control layer.
 
 Responsibilities:
 
 - show marketplace state and shop dashboards
-- display agent activity and customer interactions
-- optionally trigger control actions during demos
+- display agent activity, workspace state, and customer interactions
+- browse run artifacts and compare runs
+- display tournament standings and replays
+- expose safe operator controls such as reset and run launch
 
 Current implementation note:
 
-- no System 4 frontend is committed yet; the current repo stops at backend/control surfaces plus the Python runtime packages
-- System 3 now also includes an optional tournament runtime mode where multiple entrants control different seeded shops in one shared market while day advancement still remains a control/runtime concern
+- a React/Vite frontend shell is already committed in `frontend/`
+- the next System 4 phase is not “start a frontend,” but “turn the existing frontend into a benchmark/operator surface”
 
 ### Bridge Layer: `seller_core`
 
@@ -164,9 +163,9 @@ Seller-facing tools that exist only inside Botique.
 
 Examples:
 
-- marketplace trends
-- notes and reminders
-- optional delegation helpers
+- production scheduling
+- workspace and reminders
+- benchmark-oriented seller support surfaces
 
 ### Control API
 
@@ -175,9 +174,9 @@ Runtime and operator surface for the simulation itself.
 Examples:
 
 - advance simulation day
-- inject events
+- reset world state
 - inspect global state
-- seed shops or customers
+- snapshot and restore shared-world tournament state
 
 The shop-running agent should not have access to the Control API.
 
@@ -197,28 +196,22 @@ Keep Etsy mapping explicit but internal:
 - `seller_core/compat/etsy_v3.py`
 - `docs/agent-tools.md`
 
-Implementation guidance:
-
-- `seller_core` is the reusable portable seller surface client/CLI package
-- `agent_runtime/tools/` is where Botique-specific tool registration and role exposure currently live
-- the current repo exposes the control surface through `server/src/routes/control-routes.ts` and `server/src/services/runtime-control-service.ts`
-- do not use `agent_tools` as a catch-all package for transport, schemas, and runtime concerns
-
 Status: `Recommended default`
 
 ## Current Decisions
 
-- Use a custom agent loop, not a managed agent platform.
-- Keep the initial build digital-first to avoid shipping complexity.
-- Start with one owner agent per shop.
-- Do not make delegation or multi-agent teams a baseline architectural assumption yet.
-- Keep the compatibility story honest: portable seller actions are separate from Botique-only conveniences.
-- Keep the single-shop isolated run as the default baseline, with arena-style tournament mode implemented as an additive System 3 extension rather than a replacement.
+- use a custom agent loop, not a managed agent platform
+- use a creative-goods-first product space with constrained production
+- start with one owner agent per shop as the clean baseline
+- do not make delegation or multi-agent teams a baseline architectural assumption yet
+- keep the compatibility story honest: portable seller actions are separate from Botique-only conveniences
+- keep the single-shop isolated run as the default baseline, with tournament mode implemented as an additive System 3 extension rather than a replacement
+- treat System 4 as a real product layer for benchmark legibility, not just optional polish
 
 ## Open Decisions
 
-- exact digital-first product categories
-- exact initial tool list for orders, reviews, taxonomy, and media
-- whether/when to add delegation or sub-agents
-- whether trend visibility should be direct (`get_marketplace_trends`) or inferred through marketplace search
-- whether the first public demo includes human customer interaction or only observation
+- exact public scorecard and leaderboard semantics
+- exact benchmark scenario set
+- how much workspace/reminder context should be injected automatically
+- whether trend visibility should stay briefing/search-driven or gain additional operator-facing summaries
+- whether the first public demo includes human intervention controls or mostly read-only observation

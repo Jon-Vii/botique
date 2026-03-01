@@ -2,25 +2,26 @@
 
 ## Goal
 
-Produce one end-to-end run where at least one shop-owner agent can:
+Produce a benchmark and demo where at least one shop-owner agent can:
 
-1. read a briefing
-2. inspect the market
+1. read a morning briefing
+2. inspect the market and its own shop
 3. manage constrained production and listings
 4. receive orders, delayed outcomes, and feedback
 5. adapt over multiple simulated days
+6. leave behind traces a human can inspect and compare
 
-The first milestone should work in a terminal before any polished frontend work.
+The original milestone was “make one believable run work in a terminal.” That now exists. The active milestone is turning those runs into a compelling benchmark and demo surface.
 
-Status: `Recommended default`
+Status: `Current decision`
 
 ## Capability Framing
 
 Botique should evaluate autonomous-organization capability, not just tool calling or seller roleplay.
 
-The initial environment should be strong enough to reveal:
+The environment should be strong enough to reveal:
 
-- operational capability: can the agent restock, reprioritize, publish, price, and respond to feedback
+- operational capability: can the agent reprioritize, publish, price, produce, and respond to feedback
 - strategic capability: can it form a direction, test ideas, and shift based on evidence
 - organizational memory: can it preserve useful workspace text, workspace-history entries, reminders, and plans across days
 - adaptive capability: can it expand into adjacent opportunities or begin a pivot when the current lane weakens
@@ -41,14 +42,14 @@ Status: `Current decision`
 - seller-facing HTTP service for marketplace state and compatibility endpoints
 - one owner agent running against an allowed tool set
 - day-based simulation loop
-- listings, search, shop info, orders, and reviews
-- structured logs for decisions and tool calls
+- production-aware listings, search, shop info, orders, reviews, and payments
+- structured logs and persisted artifacts for decisions and tool calls
 
 ### Should Have
 
 - creative-goods-first product space with trendable attributes and production constraints
-- Botique-only workspace/reminders
-- simple frontend dashboard reading the same backend state
+- unified workspace/reminders memory
+- run explorer, comparison view, and tournament/demo surfaces built over the same runtime artifacts
 
 ### Can Wait
 
@@ -60,9 +61,8 @@ Status: `Current decision`
 
 Current implementation note:
 
-- the current repo already has a Fastify/Bun seller-facing service, a seeded creative-goods marketplace with production-aware listings, deterministic trend rotation, a Python `seller_core` CLI, and a Python single-shop runtime
-- the repo now also has an optional arena-style tournament runtime mode for multi-entrant shared-world experiments, but the single-shop isolated run remains the baseline milestone
-- the frontend/dashboard remains deferred
+- the repo already has a Fastify/Bun seller-facing service, a seeded creative-goods marketplace with production-aware listings, deterministic trend rotation, a Python `seller_core` CLI, a Python owner-agent runtime, automatic artifact bundles, and tournament mode
+- the repo also already has a React/Vite frontend shell for marketplace and shop observation; the next step is turning it into a benchmark/operator surface rather than starting System 4 from zero
 
 ## Product Scope Recommendation
 
@@ -75,7 +75,7 @@ Start creative-goods-first:
 
 Shared simplifying abstraction:
 
-- `production_mode`: `stocked` or `made_to_order`
+- `fulfillment_mode`: `stocked` or `made_to_order`
 - finite daily production capacity
 - stock depletion or backlog growth after sales
 - material cost and lead time, without full shipping-carrier complexity
@@ -85,10 +85,6 @@ Why:
 - creates real resource tradeoffs without requiring full logistics simulation
 - makes pricing, replenishment, and catalog strategy legible
 - lets the agent exhibit organizational capability instead of only copywriting behavior
-
-Current implementation note:
-
-- the current seed data and taxonomy are still digital-first; this section defines the next intended scope, not a completed migration
 
 Status: `Current decision`
 
@@ -100,12 +96,13 @@ The initial build is successful if it demonstrates all of the following:
 - the market resolves outcomes externally
 - the agent changes behavior based on results
 - the agent operates under meaningful cash/capacity/inventory constraints
-- the logs make the strategy legible to a human observer
+- traces and artifacts make the strategy legible to a human observer
+- runs can be compared and presented cleanly through an operator-facing surface
 
 ## Non-Goals For The Initial Build
 
 - exact Etsy parity
-- a complete benchmark
+- a complete academic benchmark suite
 - perfect customer realism
 - polished multi-agent company structures
 - full physical-commerce fulfillment realism
@@ -115,7 +112,8 @@ The initial build is successful if it demonstrates all of the following:
 1. simulation state and core endpoints
 2. agent tool wrappers
 3. owner-agent loop
-4. first successful multi-day run
-5. dashboard and demo polish
+4. first successful multi-day runs with artifacts
+5. benchmark/operator UX over those runs
+6. scenario and leaderboard polish
 
-Status: `Recommended default`
+Status: `Current decision`

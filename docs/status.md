@@ -9,8 +9,8 @@ This file is the lightweight build-status view for the project.
 Use it to answer four questions quickly:
 
 - what already works end to end
-- what is actively being deepened now
-- what likely comes next
+- what the team is actively pushing now
+- what clearly comes next
 - which important decisions are still open
 
 This doc should stay short and operational. Detailed reasoning belongs in the topic docs.
@@ -20,69 +20,67 @@ This doc should stay short and operational. Detailed reasoning belongs in the to
 These pieces already exist in the repo and are safe to build on.
 
 - System 1 seller-facing API service in `server/`
-- separate `/control` surface for simulation/runtime inspection and day advancement
-- seeded digital-first marketplace state with shops, listings, orders, reviews, payments, and taxonomy
-- System 2 simulation `v1` with current day, trend state, market snapshot, search context, pending-event hooks, and consequence-producing `advanceDay`
-- inspectable day resolution for active listings with formula-driven views, favorites, orders, delayed payment posting, and delayed review creation
+- separate `/control` surface for runtime resets, world-state inspection, tournament orchestration, and day advancement
+- seeded creative-goods marketplace with production-aware listings, orders, reviews, payments, taxonomy, and trend state
+- System 2 simulation with inspectable day resolution for views, favorites, orders, delayed payments, delayed reviews, and production queue release
 - transparent marketplace ranking based on relevance, listing quality, reviews, price fit, recency, and trend bonus
-- Python `seller_core` client/CLI for the portable seller-facing tool surface
-- Python single-shop agent runtime with live morning briefing generation
-- one-tool-per-turn agent loop with bounded inspection, a forced act-or-`no_action` decision, and automatic day settlement
-- phase-aware prompt/tool exposure that summarizes prior tool results in-model while keeping full raw payloads in artifacts
+- Python `seller_core` client/CLI for the portability-aware seller surface
+- Python single-shop owner-agent runtime with live morning briefing generation from seller-visible state
+- turn-slot workday loop with one action per slot, runtime-owned day settlement, and resettable reference runs
 - unified owner-agent workspace memory with mutable current workspace text, append-only workspace-history entries, and reminders
-- Mistral provider wiring for tool-calling runs
-- multi-day runtime path that can build briefings from live Botique state, advance the simulation between days, and persist artifact-rich reference-run bundles for inspection
-- additive arena-style tournament orchestration with rotating entrant order, rotating shop assignments, and shared-world round resets through the control API
+- Mistral provider wiring for live tool-calling runs
+- artifact-rich single-run bundles with briefings, turns, workspace state, workspace history, reminders, and run summaries
+- additive arena-style tournament orchestration with rotating entrant order, rotating shop assignments, and shared-world resets
+- a committed React/Vite frontend shell for marketplace, shop, listing, and simulation overview pages
 
 ## In Motion
 
-These are the current product and architecture priorities.
+These are the current product priorities.
 
-- get to a first believable reference run as quickly as possible
-- redesign the agent loop so it behaves like a seller workflow instead of an open-ended search loop
-- pivot the intended product scope from digital-first toward creative-goods businesses with production constraints
-- tune the new System 2 consequence pipeline so the world feels believable across multiple days
-- preserve the clean boundary between seller-facing tools and control/runtime surfaces
-- keep the Etsy-compatible `seller_core` story honest without letting portability concerns slow the core demo
-- use the new reference-run bundle as the baseline artifact for loop and simulation tuning
+- turn Botique into a human-legible benchmark and demo surface, not just a runtime
+- finish reconciling docs and operator-facing language with the current creative-goods / workspace / tournament reality
+- make run artifacts first-class inputs for exploration, comparison, and presentation
+- improve seller-facing briefings and tool ergonomics based on trace review when runs expose real issues
+- keep the seller-facing / control-plane boundary disciplined while tournament and operator features expand
 
 ## Next
 
-Near-term work that should most improve the first end-to-end run.
+Near-term work that should most improve the benchmark and demo.
 
-- tune `agent-loop v1` against live traces so the inspect/act contract feels natural across scenarios
-- decide the first production/capacity abstraction and which shop archetypes belong in the seeded world
-- migrate the seed taxonomy and marketplace examples away from digital-first products if the scope pivot holds
-- improve the morning briefing so it highlights opportunities, risks, and strongest/weakest listing signals
-- tune how the unified workspace and reminders support the v1 runtime without becoming the main action
-- tune the first consequence-producing day pipeline against multi-day traces
-- decide whether the next demand step should be explicit cohort sessions or a richer aggregate demand model
-- add delayed customer-message delivery on top of the existing pending-event queue if it materially improves the demo
-- review and tune against the first persisted reference-run bundle instead of ad hoc terminal output
+- build a run explorer over persisted artifact bundles
+- build a comparison / leaderboard surface for single runs and tournament results
+- add a tournament-focused frontend/operator view for entrants, rounds, standings, and replay
+- add operator controls for reset, run launch, model selection, and artifact navigation
+- define a cleaner benchmark scorecard and scenario labeling scheme for presentation
+- keep making small trace-driven runtime refinements where the UI reveals real behavior problems
+
+Note:
+
+- prompt/tooling refinement is an empirical tuning activity, not the main planned product phase
+- the system focus has shifted from “make one believable run possible” toward “make runs legible, comparable, and demo-ready”
 
 ## Later
 
-Likely expansions once the first believable run is working.
+Likely expansions once the benchmark and operator surfaces are in place.
 
-- persistent customer identities or cohort drift beyond the initial static cohort set
-- scripted competitor archetypes with distinct marketplace strategies
+- richer customer/cohort drift and longer-horizon demand modeling
+- stronger scenario seeding and evaluation suites
 - richer operator/debug traces explaining why listings did or did not perform
-- stronger evaluation metrics and scenario seeds
-- frontend/operator dashboard polish
-- optional deeper portability work around real Etsy-compatible integration
+- more direct model-vs-model benchmarking beyond the current tournament baseline
+- optional deeper portability work around a real Etsy-hookup story
 
 ## Open Questions
 
-- what the primary business score should be for evaluation
-- how explicit production should be in the first build: stock only, backlog only, or both
-- whether hackathon scope needs persistent repeat customers beyond cohort-level repeat affinity
-- when to add stronger inter-shop competition
-- when, if ever during the hackathon, optional LLM-written review or message text should be added on top of structured outcomes
-- how much demo value there is in the Etsy-hookup story relative to core Botique simulation quality
+- what the primary public score should be for comparison and tournament standings
+- which scenario seeds should become the canonical benchmark set
+- how much workspace/reminder context should be surfaced automatically versus pulled on demand
+- what the best benchmark-facing presentation is for production pressure, backlog, and inventory state
+- when to add stronger inter-shop competition beyond the current tournament/shared-world mechanics
+- how much demo value there is in the Etsy-portability story relative to the core Botique benchmark
 
 ## Updating Rule
 
-When the project state changes, update this file first if the answer to any of these changes:
+When project state changes, update this file first if the answer to any of these changes:
 
 - what works now
 - what is actively being built now

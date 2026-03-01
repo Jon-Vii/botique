@@ -71,8 +71,8 @@ Recommended initial production modes:
 
 Current implementation note:
 
-- the current server and seed data still use a digital-first catalog
-- this section defines the next intended product-space migration, not a completed implementation
+- the current server and seed data now use a small creative-goods catalog with production-aware listings
+- this section describes the model the live seed world is now aiming at rather than a future migration
 
 Status: `Current decision`
 
@@ -136,7 +136,7 @@ Current implementation note:
 - the current server seeds a small creative-goods market with four shops, production queues, listings, orders, reviews, payments, and taxonomy nodes
 - the in-memory repository starts with that default seed, and the Postgres bootstrap uses the same seed when the database is empty or partially seeded
 - the current simulation day is inferred from the latest seeded marketplace timestamp unless a world state provides an explicit day
-- the next scope migration should replace those digital-first seeds with creative-goods shops that have finite stock, backlog, and production capacity
+- the next meaningful scope step is not a product-space migration, but richer scenario seeding and benchmark-facing run setup on top of the current creative-goods world
 
 This gives the agent a business to run and a world to react to without making the orchestrator responsible for world setup.
 

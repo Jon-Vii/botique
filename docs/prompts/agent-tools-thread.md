@@ -1,6 +1,6 @@
 # Prompt: Agent Tools Thread
 
-You are working on Botique, a hackathon project about autonomous AI agents running Etsy-like shops in a simulated marketplace.
+You are working on Botique, a hackathon project about autonomous AI agents running Etsy-like creative-goods shops in a simulated marketplace.
 
 ## Context
 
@@ -11,7 +11,7 @@ You are working on Botique, a hackathon project about autonomous AI agents runni
   - extension agent tools: seller-facing, Botique-only
   - control API: simulation/runtime/operator surface, not for normal seller agents
 - The main research frame is VendingBench-like: a business-owner agent operates inside an environment through tools and is evaluated through outcomes over time.
-- The first build should stay narrow and digital-first.
+- The current product scope is creative-goods-first with production constraints and explicit workspace/reminder memory.
 
 ## Your Task
 
@@ -38,7 +38,7 @@ For each proposed tool, define:
 - Keep the portability story honest.
 - Do not put clearly simulation-only tools into the core surface.
 - Prefer a small, coherent starting set over a broad but fuzzy tool set.
-- Assume a digital-first first version.
+- Assume a creative-goods-first first version with stocked and made-to-order listings.
 - Keep names product-first and stable. Do not name the public tool surface after Etsy.
 
 ## Likely Priorities
@@ -56,10 +56,10 @@ Core first:
 
 Extension tools:
 
-- notes
+- production scheduling
+- workspace
+- workspace-history entry recall
 - reminders
-- balance
-- trends
 
 Later extensions:
 
@@ -69,9 +69,9 @@ Later extensions:
 Control API examples for boundary-setting only:
 
 - advance simulation day
-- inject events
+- reset world state
 - inspect global market state
-- seed shops/customers
+- snapshot and restore tournament state
 
 ## Output Format
 
