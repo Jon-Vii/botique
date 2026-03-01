@@ -119,6 +119,7 @@ Responsibilities:
 Current implementation note:
 
 - no System 4 frontend is committed yet; the current repo stops at backend/control surfaces plus the Python runtime packages
+- System 3 now also includes an optional tournament runtime mode where multiple entrants control different seeded shops in one shared market while day advancement still remains a control/runtime concern
 
 ### Bridge Layer: `seller_core`
 
@@ -212,6 +213,7 @@ Status: `Recommended default`
 - Start with one owner agent per shop.
 - Do not make delegation or multi-agent teams a baseline architectural assumption yet.
 - Keep the compatibility story honest: portable seller actions are separate from Botique-only conveniences.
+- Keep the single-shop isolated run as the default baseline, with arena-style tournament mode implemented as an additive System 3 extension rather than a replacement.
 
 ## Open Decisions
 

@@ -235,7 +235,13 @@ This should enrich the simulation, not carry the core mechanics.
 
 Start with a single owned shop operating in a seeded market. Add stronger inter-shop competition only after the basic business loop is stable and legible.
 
-Treat multi-business competition as a roadmap expansion unless it is explicitly pulled forward for a later demo milestone.
+Current implementation note:
+
+- the default runtime path is still the isolated single-shop run
+- an arena-style tournament mode has now been pulled forward as an optional System 3 extension
+- tournament rounds reuse the same System 2 market and day-resolution mechanics; they do not introduce a separate competition-only simulation model
+
+Treat multi-business competition as an explicit extension mode rather than the default runtime assumption.
 
 Status: `Recommended default`
 

@@ -132,6 +132,7 @@ Current runtime entrypoints:
 - `botique-agent-runtime run-day --shop-id <shop_id>`
 - `botique-agent-runtime run-day --shop-id <shop_id> --turns-per-day <n>`
 - `botique-agent-runtime run-days --shop-id <shop_id> --days <n>`
+- `botique-agent-runtime run-tournament --entrants-file <path> --shop-ids <comma-list> --days <n> [--rounds <n>]`
 
 The CLI still accepts older `--work-budget` and `--max-turns` flags as compatibility aliases, but the contract is now turn-slot based.
 
@@ -191,6 +192,24 @@ Every day and every turn should log:
 Logs remain part of the product because they make seller strategy legible.
 
 Status: `Current decision`
+
+## Tournament Mode
+
+Tournament mode is an additive arena-style extension over the same owner-agent workday loop.
+
+Per tournament day:
+
+1. each entrant receives a morning brief for its assigned shop from the same current world state
+2. entrants take their bounded workday turns one shop at a time
+3. the shared world advances once after every entrant ends the day
+
+Current fairness defaults:
+
+- rotate entrant execution order across days
+- rotate entrant-to-shop assignments across rounds
+- reset the world state between rounds using the control API
+
+This keeps the default single-shop loop untouched while making direct competitive runs possible through explicit runtime orchestration rather than hidden seller tools.
 
 ## Failure Modes To Guard Against
 

@@ -6,7 +6,7 @@ The repo currently has three implemented code areas:
 
 - `server/`: TypeScript Fastify/Bun seller-facing API, control routes, seeded marketplace state, and simulation logic
 - `src/seller_core/`: Python portability-aware seller tool client/CLI
-- `src/agent_runtime/`: Python owner-agent runtime, provider wiring, tool registry, and simple note/reminder memory
+- `src/agent_runtime/`: Python owner-agent runtime, provider wiring, tool registry, simple note/reminder memory, and arena-style tournament orchestration
 
 System 4 remains unimplemented in this repo.
 ## Current Default World
@@ -44,6 +44,7 @@ This is a `Current decision`.
 - shop-scoped core and extension tool exposure behind that narrower runtime surface
 - turn-slotted single-day loop execution
 - multi-day runs with runtime-owned simulation advancement between days
+- arena-style tournament runs with multiple entrants, rotating shop assignments, and round resets through the control API
 - inspectable in-memory notes and reminders
 - automatic end-of-day note carry-forward between days
 - structured runtime event logs

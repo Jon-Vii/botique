@@ -41,6 +41,7 @@ Status: `Recommended default`
 Current implementation note:
 
 - the current repo already has a Fastify/Bun seller-facing service, a seeded creative-goods marketplace with production-aware listings, deterministic trend rotation, a Python `seller_core` CLI, and a Python single-shop runtime
+- the repo now also has an optional arena-style tournament runtime mode for multi-entrant shared-world experiments, but the single-shop isolated run remains the baseline milestone
 - the frontend/dashboard remains deferred
 
 ## Product Scope Recommendation
