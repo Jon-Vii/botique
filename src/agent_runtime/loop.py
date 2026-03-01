@@ -314,6 +314,15 @@ class SingleShopDailyLoop:
                     turn_index=turn_index,
                     payload={"result": jsonify(tool_result.output)},
                 )
+            elif tool_result.tool_name == "update_scratchpad":
+                self.event_log.append(
+                    kind=EventKind.SCRATCHPAD_UPDATED,
+                    run_id=active_run_id,
+                    shop_id=briefing.shop_id,
+                    day=briefing.day,
+                    turn_index=turn_index,
+                    payload={"result": jsonify(tool_result.output)},
+                )
             elif tool_result.tool_name == "set_reminder":
                 self.event_log.append(
                     kind=EventKind.REMINDER_SET,

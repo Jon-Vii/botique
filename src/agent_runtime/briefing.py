@@ -106,6 +106,8 @@ class MorningBriefing:
     market_movements: tuple[MarketMovement, ...] = ()
     production_focus: tuple[str, ...] = ()
     saved_note_count: int = 0
+    scratchpad_has_content: bool = False
+    scratchpad_updated_day: int | None = None
     objective_progress: ObjectiveProgress = field(
         default_factory=lambda: ObjectiveProgress(
             primary_objective="Grow the shop sustainably.",
@@ -148,6 +150,17 @@ class MorningBriefing:
         if self.saved_note_count:
             lines.append(
                 f"- Saved notes: {self.saved_note_count} available via read_notes if useful today."
+            )
+
+        if self.scratchpad_has_content:
+            updated_suffix = (
+                ""
+                if self.scratchpad_updated_day is None
+                else f" (last updated on day {self.scratchpad_updated_day})"
+            )
+            lines.append(
+                "- Scratchpad: saved content available via read_scratchpad if useful today"
+                f"{updated_suffix}."
             )
 
         if self.listing_changes:
@@ -256,6 +269,8 @@ class MorningBriefingBuilder:
         market_movements: Iterable[MarketMovement] = (),
         production_focus: Iterable[str] = (),
         saved_note_count: int = 0,
+        scratchpad_has_content: bool = False,
+        scratchpad_updated_day: int | None = None,
         due_reminders: Iterable[ReminderRecord] | None = None,
         notes: Iterable[str] = (),
         priorities_prompt: str = DEFAULT_PRIORITIES_PROMPT,
@@ -282,6 +297,8 @@ class MorningBriefingBuilder:
             market_movements=tuple(market_movements),
             production_focus=tuple(production_focus),
             saved_note_count=max(saved_note_count, 0),
+            scratchpad_has_content=scratchpad_has_content,
+            scratchpad_updated_day=scratchpad_updated_day,
             objective_progress=objective_progress,
             notes=tuple(notes),
             priorities_prompt=priorities_prompt,
@@ -396,6 +413,7 @@ class LiveMorningBriefingBuilder:
             capacity_status=capacity_status,
             listings=listings,
         )
+        scratchpad = self._memory.read_scratchpad(shop_id=shop_id)
         briefing = self._briefing_builder.build(
             run_id=run_id,
             shop_id=shop_id,
@@ -413,6 +431,10 @@ class LiveMorningBriefingBuilder:
                 capacity_status=capacity_status,
             ),
             saved_note_count=len(self._memory.list_notes(shop_id=shop_id)),
+            scratchpad_has_content=bool(scratchpad and scratchpad.content),
+            scratchpad_updated_day=(
+                None if scratchpad is None else scratchpad.updated_day
+            ),
         )
         return LiveBriefingBuildResult(
             briefing=briefing,
@@ -520,6 +542,12 @@ def morning_briefing_from_payload(payload: Mapping[str, Any]) -> MorningBriefing
             str(item) for item in payload.get("production_focus", [])
         ),
         saved_note_count=int(payload.get("saved_note_count", 0)),
+        scratchpad_has_content=bool(payload.get("scratchpad_has_content", False)),
+        scratchpad_updated_day=(
+            None
+            if payload.get("scratchpad_updated_day") is None
+            else int(payload.get("scratchpad_updated_day"))
+        ),
         objective_progress=_parse_objective_progress(payload.get("objective_progress", {})),
         notes=tuple(str(item) for item in payload.get("notes", [])),
         priorities_prompt=str(

@@ -13,7 +13,7 @@ from seller_core.models import JSONValue
 from .briefing import MorningBriefing, ShopStateSnapshot
 from .events import RuntimeEvent
 from .loop import DayRunResult, TurnRecord
-from .memory import NoteRecord, ReminderRecord, ShopId
+from .memory import NoteRecord, ReminderRecord, ScratchpadRecord, ShopId
 from .runner import LiveDayRunResult, MultiDayRunResult
 from .serialization import jsonify
 
@@ -67,6 +67,8 @@ class _NormalizedRunArtifact:
     events: tuple[RuntimeEvent, ...]
     notes: tuple[NoteRecord, ...]
     reminders: tuple[ReminderRecord, ...]
+    scratchpad: ScratchpadRecord | None
+    scratchpad_history: tuple[ScratchpadRecord, ...]
     is_live: bool
 
 
@@ -117,6 +119,14 @@ def persist_run_artifacts(
     _write_json(
         memory_dir / "reminders.json",
         [reminder.to_payload() for reminder in normalized.reminders],
+    )
+    _write_json(
+        memory_dir / "scratchpad.json",
+        None if normalized.scratchpad is None else normalized.scratchpad.to_payload(),
+    )
+    _write_json(
+        memory_dir / "scratchpad_history.json",
+        [entry.to_payload() for entry in normalized.scratchpad_history],
     )
 
     days_dir = root_dir / "days"
@@ -169,6 +179,8 @@ def _normalize_result(result: ArtifactResult) -> _NormalizedRunArtifact:
             events=result.events,
             notes=result.notes,
             reminders=result.reminders,
+            scratchpad=getattr(result, "scratchpad", None),
+            scratchpad_history=tuple(getattr(result, "scratchpad_history", ())),
             is_live=True,
         )
 
@@ -194,6 +206,8 @@ def _normalize_result(result: ArtifactResult) -> _NormalizedRunArtifact:
             events=day.events,
             notes=getattr(result, "notes", ()),
             reminders=getattr(result, "reminders", ()),
+            scratchpad=getattr(result, "scratchpad", None),
+            scratchpad_history=tuple(getattr(result, "scratchpad_history", ())),
             is_live=True,
         )
 
@@ -213,6 +227,8 @@ def _normalize_result(result: ArtifactResult) -> _NormalizedRunArtifact:
         events=result.events,
         notes=(),
         reminders=(),
+        scratchpad=None,
+        scratchpad_history=(),
         is_live=False,
     )
 
@@ -269,6 +285,8 @@ def _build_manifest(
             "events_jsonl": "events.jsonl",
             "memory_notes": "memory/notes.json",
             "memory_reminders": "memory/reminders.json",
+            "memory_scratchpad": "memory/scratchpad.json",
+            "memory_scratchpad_history": "memory/scratchpad_history.json",
             "day_directories": "days/day-####/",
         },
         "summary": summary_payload,
@@ -343,6 +361,7 @@ def _build_run_summary(
             "tool_calls_by_name": dict(sorted(tool_counter.items())),
             "tool_calls_by_surface": dict(sorted(surface_counter.items())),
             "notes_written": event_kinds.get("note_written", 0),
+            "scratchpad_updates": event_kinds.get("scratchpad_updated", 0),
             "reminders_set": event_kinds.get("reminder_set", 0),
             "reminders_completed": event_kinds.get("reminder_completed", 0),
             "simulation_advances": event_kinds.get("simulation_advanced", 0),
@@ -354,6 +373,10 @@ def _build_run_summary(
             "reminder_count": len(normalized.reminders),
             "pending_reminder_count": sum(
                 1 for reminder in normalized.reminders if reminder.status.value == "pending"
+            ),
+            "scratchpad_revision_count": len(normalized.scratchpad_history),
+            "scratchpad_has_content": bool(
+                normalized.scratchpad is not None and normalized.scratchpad.content
             ),
         },
         "starting_state": starting_state,
@@ -396,6 +419,8 @@ def _render_readme(normalized: _NormalizedRunArtifact) -> str:
             "- `events.jsonl`: complete event stream across the run.",
             "- `memory/notes.json`: final note snapshot after the run.",
             "- `memory/reminders.json`: final reminder snapshot after the run.",
+            "- `memory/scratchpad.json`: final scratchpad state after the run.",
+            "- `memory/scratchpad_history.json`: scratchpad revision history across the run.",
             "- `days/day-####/briefing.md`: rendered morning briefing for a specific day.",
             "- `days/day-####/briefing.json`: structured briefing payload.",
             "- `days/day-####/summary.md`: day-level narrative with turn decisions, assistant output, and tool outputs.",
@@ -430,10 +455,18 @@ def _render_run_summary(
             f"- Turns executed: {totals.get('turn_count', 0)}",
             f"- Tool calls: {totals.get('tool_call_count', 0)}",
             f"- Notes written: {totals.get('notes_written', 0)}",
+            f"- Scratchpad updates: {totals.get('scratchpad_updates', 0)}",
             f"- Reminders set/completed: {totals.get('reminders_set', 0)}/{totals.get('reminders_completed', 0)}",
             f"- Simulation advances: {totals.get('simulation_advances', 0)}",
             f"- Yesterday-order count across briefings: {totals.get('yesterday_order_count', 0)}",
             f"- Yesterday-briefing revenue across run: {_format_money(totals.get('yesterday_revenue'), None)}",
+            "",
+            "## Memory",
+            "",
+            f"- Notes saved: {_mapping(summary_payload.get('memory'), 'summary.memory').get('note_count', 0)}",
+            f"- Pending reminders: {_mapping(summary_payload.get('memory'), 'summary.memory').get('pending_reminder_count', 0)}",
+            f"- Scratchpad revisions: {_mapping(summary_payload.get('memory'), 'summary.memory').get('scratchpad_revision_count', 0)}",
+            f"- Scratchpad has content: {_mapping(summary_payload.get('memory'), 'summary.memory').get('scratchpad_has_content', False)}",
             "",
             "## Shop State",
             "",
@@ -597,6 +630,18 @@ def _render_briefing(briefing: MorningBriefing) -> str:
         )
     else:
         lines.append("- No saved notes currently available.")
+
+    lines.extend(["", "## Scratchpad", ""])
+    if briefing.scratchpad_has_content:
+        if briefing.scratchpad_updated_day is None:
+            lines.append("- Saved scratchpad content is available via `read_scratchpad`.")
+        else:
+            lines.append(
+                "- Saved scratchpad content is available via `read_scratchpad` "
+                f"(last updated on day {briefing.scratchpad_updated_day})."
+            )
+    else:
+        lines.append("- No scratchpad content currently saved.")
 
     lines.extend(["", "## Priorities Prompt", "", briefing.priorities_prompt])
     return "\n".join(lines).rstrip() + "\n"

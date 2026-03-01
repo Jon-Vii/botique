@@ -50,6 +50,18 @@ class ReminderRecord:
         return jsonify(self)  # type: ignore[return-value]
 
 
+@dataclass(frozen=True, slots=True)
+class ScratchpadRecord:
+    shop_id: ShopId
+    content: str
+    revision: int
+    updated_day: int | None = None
+    updated_at: datetime = field(default_factory=_utcnow)
+
+    def to_payload(self) -> dict[str, object]:
+        return jsonify(self)  # type: ignore[return-value]
+
+
 class NotesBackend(Protocol):
     def write_note(
         self,
@@ -106,7 +118,29 @@ class ReminderBackend(Protocol):
     ) -> list[ReminderRecord]: ...
 
 
-class AgentMemoryStore(NotesBackend, ReminderBackend, Protocol):
+class ScratchpadBackend(Protocol):
+    def read_scratchpad(
+        self,
+        *,
+        shop_id: ShopId,
+    ) -> ScratchpadRecord | None: ...
+
+    def update_scratchpad(
+        self,
+        *,
+        shop_id: ShopId,
+        content: str,
+        day: int | None = None,
+    ) -> ScratchpadRecord: ...
+
+    def list_scratchpad_revisions(
+        self,
+        *,
+        shop_id: ShopId,
+    ) -> list[ScratchpadRecord]: ...
+
+
+class AgentMemoryStore(NotesBackend, ReminderBackend, ScratchpadBackend, Protocol):
     """Simple inspectable memory surface for System 3."""
 
 
@@ -114,6 +148,8 @@ class InMemoryAgentMemory(AgentMemoryStore):
     def __init__(self) -> None:
         self._notes: dict[ShopId, list[NoteRecord]] = {}
         self._reminders: dict[ShopId, list[ReminderRecord]] = {}
+        self._scratchpads: dict[ShopId, ScratchpadRecord] = {}
+        self._scratchpad_revisions: dict[ShopId, list[ScratchpadRecord]] = {}
 
     def write_note(
         self,
@@ -218,3 +254,36 @@ class InMemoryAgentMemory(AgentMemoryStore):
         if status is None:
             return reminders
         return [reminder for reminder in reminders if reminder.status == status]
+
+    def read_scratchpad(
+        self,
+        *,
+        shop_id: ShopId,
+    ) -> ScratchpadRecord | None:
+        return self._scratchpads.get(shop_id)
+
+    def update_scratchpad(
+        self,
+        *,
+        shop_id: ShopId,
+        content: str,
+        day: int | None = None,
+    ) -> ScratchpadRecord:
+        previous = self._scratchpads.get(shop_id)
+        revision = 1 if previous is None else previous.revision + 1
+        scratchpad = ScratchpadRecord(
+            shop_id=shop_id,
+            content=content,
+            revision=revision,
+            updated_day=day,
+        )
+        self._scratchpads[shop_id] = scratchpad
+        self._scratchpad_revisions.setdefault(shop_id, []).append(scratchpad)
+        return scratchpad
+
+    def list_scratchpad_revisions(
+        self,
+        *,
+        shop_id: ShopId,
+    ) -> list[ScratchpadRecord]:
+        return list(self._scratchpad_revisions.get(shop_id, ()))

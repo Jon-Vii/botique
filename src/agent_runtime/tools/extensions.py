@@ -23,6 +23,13 @@ def _require_str(arguments: Mapping[str, Any], key: str) -> str:
     return value
 
 
+def _require_text(arguments: Mapping[str, Any], key: str) -> str:
+    value = arguments.get(key)
+    if not isinstance(value, str):
+        raise ValueError(f"{key} must be a string.")
+    return value
+
+
 def _require_day(arguments: Mapping[str, Any], key: str) -> int:
     value = arguments.get(key)
     if not isinstance(value, int):
@@ -149,6 +156,80 @@ def register_memory_tools(
                 )
             ),
             "notes": [note.to_payload() for note in notes],
+        },
+    )
+
+    registry.register(
+        ToolManifestEntry(
+            name="read_scratchpad",
+            description="Read the current persistent scratchpad for the shop. This is a mutable workspace you can use however you find helpful across days.",
+            surface=ToolSurface.EXTENSION,
+            work_cost=1,
+            required_body_fields=("shop_id",),
+            body_encoding="json",
+            notes=(
+                "The scratchpad is freeform working memory, not a required template.",
+            ),
+            parameters_schema=_memory_parameters_schema(
+                properties={
+                    "shop_id": SHOP_ID_SCHEMA,
+                },
+                required=["shop_id"],
+                shop_id=shop_id,
+            ),
+        ),
+        lambda arguments, *, store=memory: {
+            "scratchpad": (
+                None
+                if (
+                    scratchpad := store.read_scratchpad(
+                        shop_id=_bound_shop_id(arguments, shop_id)
+                    )
+                )
+                is None
+                else scratchpad.to_payload()
+            ),
+            "revision_count": len(
+                store.list_scratchpad_revisions(
+                    shop_id=_bound_shop_id(arguments, shop_id)
+                )
+            ),
+        },
+    )
+
+    registry.register(
+        ToolManifestEntry(
+            name="update_scratchpad",
+            description="Replace the current persistent scratchpad contents for the shop. Use this as a freeform workspace for plans, hypotheses, experiments, or anything else useful across days.",
+            surface=ToolSurface.EXTENSION,
+            work_cost=1,
+            required_body_fields=("shop_id", "content"),
+            body_encoding="json",
+            notes=(
+                "This replaces the scratchpad contents. Use an empty string if you want to clear it.",
+            ),
+            parameters_schema=_memory_parameters_schema(
+                properties={
+                    "shop_id": SHOP_ID_SCHEMA,
+                    "content": {
+                        "type": "string",
+                        "description": "New full scratchpad contents. This may be empty if you want to clear it.",
+                    },
+                    "day": {
+                        "type": "integer",
+                        "description": "Current simulation day.",
+                    },
+                },
+                required=["shop_id", "content"],
+                shop_id=shop_id,
+            ),
+        ),
+        lambda arguments, *, store=memory: {
+            "scratchpad": store.update_scratchpad(
+                shop_id=_bound_shop_id(arguments, shop_id),
+                content=_require_text(arguments, "content"),
+                day=arguments.get("day"),
+            ).to_payload()
         },
     )
 

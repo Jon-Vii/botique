@@ -15,6 +15,7 @@ Status: `Current decision` on the workday framing and runtime-owned day settleme
 - keep one tool call per turn
 - use a visible daily turn-slot limit instead of hidden action shaping
 - keep notes and reminders available as ordinary support tools
+- keep scratchpad memory explicit, optional, and inspectable
 - prefer compact inspectable session state over orchestration-heavy payloads
 - avoid provider-specific hacks or hidden reasoning dependencies
 
@@ -30,7 +31,7 @@ Per simulated day:
 4. agent takes up to `N` turns
 5. each turn allows at most one tool call
 6. runtime settles the day automatically
-7. logs and notes persist into the next day
+7. logs, notes, and scratchpad state persist into the next day
 
 Status: `Current decision`
 
@@ -90,6 +91,7 @@ Memory rule:
 
 - reminders due today should be surfaced automatically
 - notes should remain agent-pulled support context rather than being injected into every briefing
+- scratchpad content should stay pull-based too; the briefing may mention that scratchpad content exists, but it should not dump the full workspace into every morning prompt
 
 The live briefing path still pulls seller-facing shop, listing, order, review, and payment data through `seller_core`, and world/day state through the separate control API.
 
@@ -112,6 +114,7 @@ Current implementation in `src/agent_runtime/providers/policy.py` uses a plain-l
 - a short work-session summary
 - explicit visibility of note/reminder tools
 - exact same-day action arguments and tool results carried forward within the workday context
+- scratchpad tools available as ordinary support actions, without forcing a particular planning template
 
 ## Turn Rules
 

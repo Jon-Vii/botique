@@ -29,7 +29,7 @@ These pieces already exist in the repo and are safe to build on.
 - Python single-shop agent runtime with live morning briefing generation
 - one-tool-per-turn agent loop with bounded inspection, a forced act-or-`no_action` decision, and automatic day settlement
 - phase-aware prompt/tool exposure that summarizes prior tool results in-model while keeping full raw payloads in artifacts
-- simple Botique memory tools for notes and reminders
+- simple Botique memory tools for notes, reminders, and a mutable scratchpad
 - Mistral provider wiring for tool-calling runs
 - multi-day runtime path that can build briefings from live Botique state, advance the simulation between days, and persist artifact-rich reference-run bundles for inspection
 

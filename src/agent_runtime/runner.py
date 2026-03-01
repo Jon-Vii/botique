@@ -16,7 +16,14 @@ from .briefing import (
 )
 from .events import EventKind, EventLog, InMemoryEventLog, RuntimeEvent
 from .loop import DailyLoopConfig, DayRunResult, SingleShopDailyLoop
-from .memory import AgentMemoryStore, InMemoryAgentMemory, NoteRecord, ReminderRecord, ShopId
+from .memory import (
+    AgentMemoryStore,
+    InMemoryAgentMemory,
+    NoteRecord,
+    ReminderRecord,
+    ScratchpadRecord,
+    ShopId,
+)
 from .providers import (
     MistralProviderConfig,
     MistralToolCallingProvider,
@@ -66,6 +73,8 @@ class MultiDayRunResult:
     events: tuple[RuntimeEvent, ...]
     notes: tuple[NoteRecord, ...]
     reminders: tuple[ReminderRecord, ...]
+    scratchpad: ScratchpadRecord | None = None
+    scratchpad_history: tuple[ScratchpadRecord, ...] = ()
 
 
 class OwnerAgentRunner:
@@ -232,6 +241,8 @@ class OwnerAgentRunner:
             events=tuple(self.event_log.list_events(run_id=active_run_id, shop_id=shop_id)),
             notes=tuple(self.memory.list_notes(shop_id=shop_id)),
             reminders=tuple(self.memory.list_reminders(shop_id=shop_id)),
+            scratchpad=self.memory.read_scratchpad(shop_id=shop_id),
+            scratchpad_history=tuple(self.memory.list_scratchpad_revisions(shop_id=shop_id)),
         )
 
     def _live_briefings(self) -> LiveMorningBriefingBuilder:

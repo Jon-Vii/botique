@@ -329,6 +329,11 @@ class MorningBriefingTests(unittest.TestCase):
             body="Woodwork might be worth a look if planners soften.",
             day=2,
         )
+        memory.update_scratchpad(
+            shop_id=7,
+            content="Watch woodwork demand if planners soften.",
+            day=2,
+        )
         memory.set_reminder(
             shop_id=7,
             content="Check whether the floral planner needs repricing.",
@@ -347,6 +352,8 @@ class MorningBriefingTests(unittest.TestCase):
             yesterday_orders=OrderSummary(order_count=2, revenue=24.0, average_order_value=12.0),
             production_focus=("Backlog is at 2 units.",),
             saved_note_count=1,
+            scratchpad_has_content=True,
+            scratchpad_updated_day=2,
             objective_progress=ObjectiveProgress(
                 primary_objective="Grow ending balance",
                 metric_name="ending_balance",
@@ -370,6 +377,10 @@ class MorningBriefingTests(unittest.TestCase):
         self.assertIn("Date: 2026-03-03T00:00:00Z", rendered)
         self.assertIn("Production watch:", rendered)
         self.assertIn("Saved notes: 1 available via read_notes if useful today.", rendered)
+        self.assertIn(
+            "Scratchpad: saved content available via read_scratchpad if useful today (last updated on day 2).",
+            rendered,
+        )
         self.assertIn("Reminders due:", rendered)
         self.assertIn("Check whether the floral planner needs repricing.", rendered)
 
@@ -429,6 +440,11 @@ class MorningBriefingTests(unittest.TestCase):
             shop_id=1001,
             title="Pricing angle",
             body="Keep the planner close to the trend tags.",
+            day=3,
+        )
+        memory.update_scratchpad(
+            shop_id=1001,
+            content="Current strategy: activate the draft and watch capacity.",
             day=3,
         )
         memory.set_reminder(
@@ -577,6 +593,8 @@ class MorningBriefingTests(unittest.TestCase):
         self.assertEqual(len(result.briefing.due_reminders), 1)
         self.assertEqual(result.briefing.market_movements[0].headline, "Trend watch: Wall Art")
         self.assertEqual(result.briefing.saved_note_count, 1)
+        self.assertTrue(result.briefing.scratchpad_has_content)
+        self.assertEqual(result.briefing.scratchpad_updated_day, 3)
         self.assertIn("Low-stock active listings", result.briefing.production_focus[0])
         self.assertEqual(result.briefing.notes, ())
         self.assertEqual(result.shop_state.active_listing_count, 1)
@@ -595,6 +613,8 @@ class ToolRegistryTests(unittest.TestCase):
         self.assertIn("search_marketplace", tool_names)
         self.assertIn("queue_production", tool_names)
         self.assertIn("write_note", tool_names)
+        self.assertIn("read_scratchpad", tool_names)
+        self.assertIn("update_scratchpad", tool_names)
         self.assertIn("set_reminder", tool_names)
         self.assertIn("complete_reminder", tool_names)
         self.assertNotIn("get_shop_info", tool_names)
@@ -621,6 +641,13 @@ class ToolRegistryTests(unittest.TestCase):
                 "day": 3,
             },
         )
+        scratchpad_result = registry.invoke(
+            "update_scratchpad",
+            {
+                "content": "Current plan: activate the draft and watch backlog.",
+                "day": 3,
+            },
+        )
         reminder_result = registry.invoke(
             "set_reminder",
             {
@@ -630,6 +657,7 @@ class ToolRegistryTests(unittest.TestCase):
             },
         )
         notes_result = registry.invoke("read_notes", {})
+        scratchpad_read_result = registry.invoke("read_scratchpad", {})
 
         self.assertEqual(
             client.calls,
@@ -654,6 +682,11 @@ class ToolRegistryTests(unittest.TestCase):
         self.assertEqual(production_result.output["arguments"]["units"], 2)
         self.assertEqual(note_result.output["note"]["title"], "Today's angle")
         self.assertEqual(note_result.output["note"]["shop_id"], 7)
+        self.assertEqual(scratchpad_result.output["scratchpad"]["revision"], 1)
+        self.assertEqual(
+            scratchpad_read_result.output["scratchpad"]["content"],
+            "Current plan: activate the draft and watch backlog.",
+        )
         self.assertEqual(reminder_result.output["reminder"]["due_day"], 4)
         self.assertEqual(notes_result.output["count"], 1)
 
@@ -687,9 +720,16 @@ class ToolRegistryTests(unittest.TestCase):
             manifests["write_note"].parameters_schema["required"],
             ["title", "body"],
         )
+        self.assertEqual(
+            manifests["update_scratchpad"].parameters_schema["required"],
+            ["content"],
+        )
         self.assertEqual(manifests["update_listing"].work_cost, 1)
         self.assertEqual(manifests["write_note"].work_cost, 1)
         self.assertNotIn("shop_id", manifests["write_note"].parameters_schema["properties"])
+        self.assertNotIn(
+            "shop_id", manifests["update_scratchpad"].parameters_schema["properties"]
+        )
         self.assertEqual(manifests["get_shop_dashboard"].parameters_schema["required"], [])
         self.assertEqual(
             manifests["queue_production"].surface,
@@ -918,6 +958,7 @@ class ProviderPolicyTests(unittest.TestCase):
         self.assertIn("# Studio North workday", user_prompt)
         self.assertIn("Work slots: 5 left / 5 total", user_prompt)
         self.assertIn("write_note", user_prompt)
+        self.assertIn("read_scratchpad", user_prompt)
 
     def test_tool_calling_policy_maps_end_day_tool(self) -> None:
         registry, briefing = self._make_context()
@@ -1242,9 +1283,15 @@ class OwnerAgentRunnerTests(unittest.TestCase):
                 ),
             ]
         )
+        memory = InMemoryAgentMemory()
+        memory.update_scratchpad(
+            shop_id=1001,
+            content="Current thesis: wall art may be stalling.",
+            day=2,
+        )
         runner = build_default_owner_agent_runner(
             turns_per_day=4,
-            memory=InMemoryAgentMemory(),
+            memory=memory,
             event_log=InMemoryEventLog(),
             policy_config=ProviderPolicyConfig(),
             mistral_api_key="unused",
@@ -1253,7 +1300,7 @@ class OwnerAgentRunnerTests(unittest.TestCase):
             provider=provider,
             seller_client=seller_client,
             control_client=control_client,
-            memory=InMemoryAgentMemory(),
+            memory=memory,
             event_log=InMemoryEventLog(),
         )
 
@@ -1283,6 +1330,12 @@ class OwnerAgentRunnerTests(unittest.TestCase):
         self.assertEqual(result.notes[0].title, "Day three note")
         self.assertEqual(result.notes[1].title, "Trend watch")
         self.assertEqual(result.notes[2].title, "Day 4 note")
+        self.assertIsNotNone(result.scratchpad)
+        self.assertEqual(
+            result.scratchpad.content,
+            "Current thesis: wall art may be stalling.",
+        )
+        self.assertEqual(len(result.scratchpad_history), 1)
         self.assertIn(
             "simulation_advanced",
             [event.kind.value for event in result.events],

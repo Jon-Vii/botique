@@ -116,6 +116,8 @@ Botique support tools still remain:
 
 - `write_note`
 - `read_notes`
+- `read_scratchpad`
+- `update_scratchpad`
 - `set_reminder`
 - `complete_reminder`
 
@@ -160,6 +162,27 @@ Boundary rules:
 - finished stock or backlog
 - queued production
 - recent review signals
+
+## Memory Tools
+
+Botique now has three explicit memory primitives:
+
+- notes: append-only journal/history
+- reminders: scheduled resurfacing
+- scratchpad: mutable working memory
+
+The scratchpad is intentionally freeform:
+
+- it is one persistent workspace per shop/run
+- the agent can use it for plans, hypotheses, experiments, open questions, or anything else useful
+- `update_scratchpad` replaces the current contents, so the agent can rewrite or clear it without needing prescriptive add/remove operations
+- scratchpad history should remain inspectable in run artifacts for operator analysis
+
+Boundary rules:
+
+- do not auto-copy raw external content or tool payloads into the scratchpad
+- do not auto-inject the full scratchpad into every morning briefing
+- keep scratchpad use optional so the benchmark still measures whether the model discovers and maintains useful working memory on its own
 
 ## Tools Not Exposed By Default
 

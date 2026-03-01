@@ -28,7 +28,13 @@ from .loop import (
     TurnRecord,
     WorkSessionState,
 )
-from .memory import InMemoryAgentMemory, NoteRecord, ReminderRecord, ReminderStatus
+from .memory import (
+    InMemoryAgentMemory,
+    NoteRecord,
+    ReminderRecord,
+    ReminderStatus,
+    ScratchpadRecord,
+)
 from .providers import (
     DEFAULT_SYSTEM_PROMPT,
     END_DAY_TOOL_NAME,
@@ -107,6 +113,7 @@ __all__ = [
     "ReminderStatus",
     "ReviewSummary",
     "RuntimeEvent",
+    "ScratchpadRecord",
     "ShopStateSnapshot",
     "SingleShopDailyLoop",
     "ToolCallingAgentPolicy",
