@@ -1,6 +1,6 @@
 # Botique
 
-**Autonomous AI agents running competing e-commerce shops in a simulated marketplace.**
+**Mistral agents running competing craft shops in a simulated marketplace.**
 
 ![Botique Observatory](screenshot-observatory.png)
 
@@ -10,13 +10,13 @@
 
 ## What It Does
 
-Botique drops autonomous Mistral-powered agents into a simulated Etsy-like marketplace and lets them run creative-goods shops. Each agent receives a morning briefing, makes business decisions through tool calls (pricing, production, listing creation, inventory management), and the world resolves outcomes through a formula-driven demand engine — no LLM in the loop for sales. The result is a legible benchmark for autonomous organization capability: can the agent plan, adapt, manage resources, and grow a business over 100 simulated days?
+Mistral agents run craft shops in a simulated Etsy-like marketplace. Each agent receives a morning briefing, makes business decisions through tool calls (pricing, production, listing creation, inventory management), and the world resolves outcomes through a formula-driven demand engine. No LLM in the sales loop. The result is a benchmark for autonomous organization, measuring whether a model can plan, adapt, manage resources, and grow a business over 100 simulated days.
 
-## Demo
+## Video
 
-https://github.com/user-attachments/assets/demo
+[![Botique Video](https://img.youtube.com/vi/UEvuDzO39i8/hqdefault.jpg)](https://youtu.be/UEvuDzO39i8)
 
-> *See the [demo video](video/out/BotiqueDemo.mp4) for a full walkthrough of the platform, agent decision-making, and tournament mode.*
+> *Platform overview, agent decision-making, simulation engine, tournament mode, and the agent's inner perspective.*
 
 ## Architecture
 
@@ -46,33 +46,33 @@ Botique is four independent systems plus a bridge layer:
 └─────────────────────────────────────────────────────────┘
 ```
 
-The **simulation engine** owns all outcomes — agents act through tools, but the world decides what happens. This separation keeps evaluation honest: agent quality shows up in decisions, not in rigged results.
+The **simulation engine** owns all outcomes. Agents act through tools, but the world decides what happens. This separation keeps evaluation honest. Agent quality shows up in decisions, not in rigged results.
 
 ## How Agents Work
 
 Each simulated day follows a structured workday loop:
 
-1. **Overnight resolution** — the simulation processes orders, reviews, production, payments
-2. **Morning briefing** — the agent receives a natural-language summary: cash position, yesterday's orders, listing performance, new reviews, market signals, and its own memory (scratchpad + journal + reminders)
-3. **Work slots** — the agent gets N action slots per day, each allowing one tool call (create listing, update price, schedule production, write notes, search marketplace, etc.)
-4. **End of day** — the agent revises its persistent scratchpad, capturing plans and insights for tomorrow
+1. **Overnight resolution.** The simulation processes orders, reviews, production, payments.
+2. **Morning briefing.** The agent receives a natural-language summary of cash position, yesterday's orders, listing performance, new reviews, market signals, and its own scratchpad.
+3. **Work slots.** The agent gets N action slots per day, each allowing one tool call (create listing, update price, schedule production, write notes, search marketplace, etc.).
+4. **End of day.** The agent revises its persistent scratchpad, capturing plans and insights for tomorrow.
 
-Memory is explicit and inspectable: a freeform scratchpad, a running journal, and day-triggered reminders. No hidden vector databases or opaque retrieval — everything the agent remembers is visible in the artifact trace.
+Memory is explicit and inspectable. A freeform scratchpad, no vector DB, no opaque retrieval. Everything the agent remembers is visible in the artifact trace.
 
 ## The Simulation
 
-The demand model is **entirely formula-driven** — no LLM decides who buys what.
+The demand model is formula-driven. No LLM decides who buys what.
 
 **Staged demand pipeline:**
-- **Taxonomy traffic** — fixed daily buyer sessions per category, influenced by market trends. Traffic is a finite resource shops compete for.
-- **Discoverability** — views allocated across listings based on quality, reputation, freshness, trend fit, and price competitiveness
-- **Conversion** — a subset of views become favorites and orders, driven by listing quality, shop reputation, pricing, and trend alignment
-- **Fulfillment** — stock decrements or backlog grows, triggering production queue effects
-- **Delayed outcomes** — payments post after a delay, reviews arrive days later
+- **Taxonomy traffic.** Fixed daily buyer sessions per category, influenced by market trends. Traffic is a finite resource shops compete for.
+- **Discoverability.** Views allocated across listings based on quality, reputation, freshness, trend fit, and price competitiveness.
+- **Conversion.** A subset of views become favorites and orders, driven by listing quality, shop reputation, pricing, and trend alignment.
+- **Fulfillment.** Stock decrements or backlog grows, triggering production queue effects.
+- **Delayed outcomes.** Payments post after a delay, reviews arrive days later.
 
 **8 customer cohorts** with distinct price sensitivity, quality preference, trend awareness, and browsing depth create meaningful strategic tradeoffs without requiring fully autonomous customer agents.
 
-**World-owned friction**: delayed payments, reviews arriving days after purchase, production lead times, stock-outs, customers browsing without buying. The benchmark is about operating inside a world, not calling the right tool in the right order.
+**World-owned friction.** Delayed payments, reviews arriving days after purchase, production lead times, stock-outs, customers browsing without buying. The benchmark measures how well agents operate inside a world with real constraints.
 
 ## Screenshots
 
@@ -89,7 +89,7 @@ The demand model is **entirely formula-driven** — no LLM decides who buys what
 - **Backend**: Fastify + TypeScript, Bun runtime
 - **Database**: PostgreSQL + Drizzle ORM
 - **Frontend**: React + Vite + TailwindCSS + TanStack Query
-- **Agent Loop**: Custom orchestrator (not a managed agent platform)
+- **Agent Loop**: Custom orchestrator, not a managed agent platform
 - **Simulation**: Formula-driven demand engine with 8 customer cohorts
 - **Artifacts**: Full per-run trace bundles (briefings, tool calls, scratchpad evolution, daily summaries)
 
@@ -140,22 +140,22 @@ cd frontend && npm run dev  # Frontend on :5173
 
 | Decision | Why |
 |----------|-----|
-| **Own the agent loop** | Full control over briefings, memory, tool exposure, and artifact capture — managed platforms hide too much |
+| **Own the agent loop** | Full control over briefings, memory, tool exposure, and artifact capture. Managed platforms hide too much |
 | **Formula-driven demand** | LLM-as-judge for sales would conflate model quality with evaluation quality. Formulas are transparent and tunable |
-| **Explicit memory** | Scratchpad + journal + reminders over vector DBs. Everything the agent remembers is inspectable in traces |
-| **Creative goods with production** | 3D-printed planters, mugs, organizers — real production constraints (capacity, materials, lead times) make resource management matter |
+| **Explicit memory** | Freeform scratchpad over vector DBs. Everything the agent remembers is inspectable in traces |
+| **Creative goods with production** | 3D-printed planters, mugs, organizers. Real production constraints (capacity, materials, lead times) make resource management matter |
 | **Two scenarios** | "Operate" (inherit a running business) vs "Bootstrap" (start from zero) test different capability profiles |
-| **Tournament mode** | Arena-style rotation with shared world resets — same market conditions, different agents, comparable outcomes |
+| **Tournament mode** | Arena-style rotation with shared world resets. Same market conditions, different agents, comparable outcomes |
 
 ## What This Evaluates
 
-Botique measures **autonomous organization capability**, not just tool use:
+Botique measures **autonomous organization capability**:
 
-- **Operational**: Can the agent reprioritize, publish, price, produce, and respond to feedback?
-- **Strategic**: Can it form a direction, test ideas, and shift based on evidence?
-- **Memory**: Can it preserve useful context and plans across days?
-- **Adaptive**: Can it expand into adjacent opportunities or pivot when its current lane weakens?
-- **Resource governance**: Can it manage cash, capacity, inventory, backlog, and risk?
+- **Operational.** Reprioritizing, publishing, pricing, producing, and responding to feedback.
+- **Strategic.** Forming a direction, testing ideas, and shifting based on evidence.
+- **Memory.** Preserving useful context and plans across days.
+- **Adaptive.** Expanding into adjacent opportunities or pivoting when the current lane weakens.
+- **Resource governance.** Managing cash, capacity, inventory, backlog, and risk.
 
 ---
 
