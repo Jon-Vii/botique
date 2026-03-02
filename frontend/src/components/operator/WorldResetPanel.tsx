@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowCounterClockwise, Warning, Play, Lightning, Robot } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, Warning, Play, Lightning } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
 import { LoadingDots } from "../LoadingDots";
 import {
@@ -7,22 +7,11 @@ import {
   useAdvanceDay,
   useSimulationDay,
   useSimulateRun,
-  useLaunchRun,
 } from "../../hooks/useApi";
-
-const MODEL_OPTIONS = [
-  { label: "No model (demand only)", value: "" },
-  { label: "Mistral Medium", value: "mistral-medium-latest" },
-  { label: "Mistral Small", value: "mistral-small-latest" },
-  { label: "Mistral Large", value: "mistral-large-latest" },
-  { label: "Codestral", value: "codestral-latest" },
-  { label: "Mistral Nemo", value: "open-mistral-nemo" },
-] as const;
 
 export function WorldResetPanel({
   onSuccess,
   onError,
-  apiKey,
 }: {
   onSuccess: (msg: string) => void;
   onError: (msg: string) => void;
@@ -30,61 +19,26 @@ export function WorldResetPanel({
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [ffDays, setFfDays] = useState(10);
-  const [ffShopId, setFfShopId] = useState(1001);
   const [ffScenario, setFfScenario] = useState<"operate" | "bootstrap">("operate");
-  const [ffModel, setFfModel] = useState("");
-  const [ffTurns, setFfTurns] = useState(5);
   const [launchedRunId, setLaunchedRunId] = useState<string | null>(null);
   const resetWorld = useResetWorld();
   const advanceDay = useAdvanceDay();
   const simulateRun = useSimulateRun();
-  const launchRun = useLaunchRun();
   const { data: simDay } = useSimulationDay();
-
-  const isRunning = simulateRun.isPending || launchRun.isPending;
-  const hasModel = ffModel !== "";
 
   const handleFastForward = () => {
     setLaunchedRunId(null);
-
-    if (hasModel) {
-      if (!apiKey) {
-        onError("Mistral API key required — set it above");
-        return;
-      }
-      launchRun.mutate(
-        {
-          shop_id: ffShopId,
-          days: ffDays,
-          turns_per_day: ffTurns,
-          run_id: `ff-${Date.now()}`,
-          model: ffModel,
-          provider: "mistral",
-          scenario_id: ffScenario,
-          api_key: apiKey,
+    simulateRun.mutate(
+      { shop_id: 1001, days: ffDays, scenario_id: ffScenario },
+      {
+        onSuccess: (data) => {
+          onSuccess(`Simulation complete — ${ffDays} days → ${data.run_id}`);
+          setLaunchedRunId(data.run_id);
         },
-        {
-          onSuccess: (data) => {
-            onSuccess(`Agent run launched — ${data.run_id}`);
-            setLaunchedRunId(data.run_id);
-          },
-          onError: (err) =>
-            onError(err instanceof Error ? err.message : "Launch failed"),
-        },
-      );
-    } else {
-      simulateRun.mutate(
-        { shop_id: ffShopId, days: ffDays, scenario_id: ffScenario },
-        {
-          onSuccess: (data) => {
-            onSuccess(`Simulation complete — ${ffDays} days → ${data.run_id}`);
-            setLaunchedRunId(data.run_id);
-          },
-          onError: (err) =>
-            onError(err instanceof Error ? err.message : "Simulation failed"),
-        },
-      );
-    }
+        onError: (err) =>
+          onError(err instanceof Error ? err.message : "Simulation failed"),
+      },
+    );
   };
 
   return (
@@ -178,11 +132,9 @@ export function WorldResetPanel({
           </span>
         </div>
         <p className="text-xs text-muted mb-3">
-          {hasModel
-            ? "Run agent + demand model for N days. Creates a full run with artifacts."
-            : "Run demand model only for N days (no agent). Creates a baseline run."}
+          Run demand simulation only (no agent) for N days. Creates a baseline run.
         </p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1">
             <span className="text-[10px] text-secondary uppercase tracking-wider">Days</span>
             <input
@@ -191,16 +143,6 @@ export function WorldResetPanel({
               max={365}
               value={ffDays}
               onChange={(e) => setFfDays(Math.max(1, Number(e.target.value)))}
-              className="bg-base border border-rule px-2 py-1.5 text-sm text-ink font-mono"
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-[10px] text-secondary uppercase tracking-wider">Shop ID</span>
-            <input
-              type="number"
-              min={1}
-              value={ffShopId}
-              onChange={(e) => setFfShopId(Number(e.target.value))}
               className="bg-base border border-rule px-2 py-1.5 text-sm text-ink font-mono"
             />
           </label>
@@ -215,49 +157,17 @@ export function WorldResetPanel({
               <option value="bootstrap">bootstrap</option>
             </select>
           </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-[10px] text-secondary uppercase tracking-wider">Model</span>
-            <select
-              value={ffModel}
-              onChange={(e) => setFfModel(e.target.value)}
-              className="bg-base border border-rule px-2 py-1.5 text-sm text-ink font-mono"
-            >
-              {MODEL_OPTIONS.map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {hasModel && (
-            <label className="flex flex-col gap-1">
-              <span className="text-[10px] text-secondary uppercase tracking-wider">Turns/Day</span>
-              <input
-                type="number"
-                min={1}
-                max={20}
-                value={ffTurns}
-                onChange={(e) => setFfTurns(Math.max(1, Math.min(20, Number(e.target.value))))}
-                className="bg-base border border-rule px-2 py-1.5 text-sm text-ink font-mono"
-              />
-            </label>
-          )}
         </div>
 
         <div className="mt-4 flex items-center gap-3">
           <button
             type="button"
             onClick={handleFastForward}
-            disabled={isRunning}
+            disabled={simulateRun.isPending}
             className="flex cursor-pointer items-center gap-2 bg-orange px-4 py-2 text-sm font-semibold text-white transition-[box-shadow,transform,opacity] hover:scale-[1.02] hover:shadow-[0_0_20px_rgba(255,112,0,0.3)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isRunning ? (
+            {simulateRun.isPending ? (
               <LoadingDots size={4} color="bg-white" />
-            ) : hasModel ? (
-              <>
-                <Robot size={14} weight="fill" />
-                Launch Agent Run
-              </>
             ) : (
               <>
                 <Lightning size={14} weight="fill" />

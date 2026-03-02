@@ -154,7 +154,7 @@ export const runLaunchRequestSchema = z.object({
   provider: z.string().min(1),
   scenario: z.enum(["operate", "bootstrap"]).optional(),
   scenario_id: z.enum(["operate", "bootstrap"]).optional(),
-  api_key: z.string().min(1).optional(),
+  api_key: z.string().optional().transform(v => v?.trim() || undefined),
 });
 
 export const runLaunchResponseSchema = z.object({
@@ -446,7 +446,7 @@ export const tournamentLaunchRequestSchema = z.object({
   turns_per_day: z.number().int().positive(),
   scenario_id: z.enum(["operate", "bootstrap"]).optional(),
   run_id: z.string().min(1).optional(),
-  api_key: z.string().min(1).optional(),
+  api_key: z.string().optional().transform(v => v?.trim() || undefined),
 });
 
 export const tournamentLaunchResponseSchema = z.object({

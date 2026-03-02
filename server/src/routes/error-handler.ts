@@ -17,11 +17,11 @@ export function registerRouteErrorHandler(app: FastifyInstance) {
     }
 
     if (error instanceof ZodError) {
-      return reply.code(500).send({
+      return reply.code(400).send({
         ok: false,
         error: {
-          type: "ResponseValidationError",
-          message: "Server produced an invalid response.",
+          type: "ValidationError",
+          message: "Invalid request body.",
           details: error.flatten()
         }
       });
