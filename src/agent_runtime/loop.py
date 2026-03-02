@@ -21,6 +21,7 @@ def _utcnow() -> datetime:
 
 class DayEndReason(StrEnum):
     TURNS_EXHAUSTED = "turns_exhausted"
+    ERROR = "error"
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,7 +231,57 @@ class SingleShopDailyLoop:
                 available_tools=available_tools,
                 prior_turns=tuple(turns),
             )
-            decision = policy.next_turn(context)
+            try:
+                decision = policy.next_turn(context)
+            except Exception as llm_exc:
+                # Retry with backoff for transient errors (e.g. 429 rate limit)
+                import time as _time
+                _transient = _is_transient_error(llm_exc)
+                self.event_log.append(
+                    kind=EventKind.TOOL_FAILED,
+                    run_id=active_run_id,
+                    shop_id=briefing.shop_id,
+                    day=briefing.day,
+                    turn_index=turn_index,
+                    payload={
+                        "tool_name": "policy.next_turn",
+                        "error_type": llm_exc.__class__.__name__,
+                        "message": str(llm_exc),
+                        "retrying": _transient,
+                    },
+                )
+                if _transient:
+                    _time.sleep(5)
+                    try:
+                        decision = policy.next_turn(context)
+                    except Exception as retry_exc:
+                        self.event_log.append(
+                            kind=EventKind.TOOL_FAILED,
+                            run_id=active_run_id,
+                            shop_id=briefing.shop_id,
+                            day=briefing.day,
+                            turn_index=turn_index,
+                            payload={
+                                "tool_name": "policy.next_turn",
+                                "error_type": retry_exc.__class__.__name__,
+                                "message": str(retry_exc),
+                                "retrying": False,
+                            },
+                        )
+                        return self._finish_day(
+                            briefing=briefing,
+                            run_id=active_run_id,
+                            turns=turns,
+                            end_reason=DayEndReason.ERROR,
+                        )
+                else:
+                    return self._finish_day(
+                        briefing=briefing,
+                        run_id=active_run_id,
+                        turns=turns,
+                        end_reason=DayEndReason.ERROR,
+                    )
+
             self.event_log.append(
                 kind=EventKind.MODEL_RESPONSE,
                 run_id=active_run_id,
@@ -356,3 +407,10 @@ class SingleShopDailyLoop:
             turns_used=turns_used,
             turns_remaining=turns_remaining,
         )
+
+
+def _is_transient_error(exc: Exception) -> bool:
+    """Return True for errors that are likely transient (timeouts, rate limits, 5xx)."""
+    msg = str(exc).lower()
+    transient_signals = ("timeout", "429", "rate limit", "502", "503", "504", "connection")
+    return any(signal in msg for signal in transient_signals)

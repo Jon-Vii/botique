@@ -104,6 +104,18 @@ export class RunControlService {
       const runId = progress.run_id;
       if (typeof runId !== "string" || completedRunIds.has(runId)) continue;
 
+      // Determine effective status: if progress says "running" but is stale
+      // (>15 min old) and no active process exists, mark as failed.
+      let effectiveStatus = progress.status ?? "running";
+      if (effectiveStatus === "running") {
+        const updatedAt = typeof progress.updated_at === "string" ? new Date(progress.updated_at).getTime() : 0;
+        const staleCutoff = Date.now() - 15 * 60 * 1000;
+        const hasActiveProcess = this.activeRuns.get(runId)?.status === "running";
+        if (updatedAt > 0 && updatedAt < staleCutoff && !hasActiveProcess) {
+          effectiveStatus = "failed";
+        }
+      }
+
       runs.push(runListEntrySchema.parse({
         run_id: runId,
         shop_id: typeof progress.shop_id === "number" ? progress.shop_id : 1,
@@ -112,7 +124,7 @@ export class RunControlService {
         has_summary: false,
         has_manifest: false,
         created_at: progress.updated_at ?? new Date().toISOString(),
-        status: progress.status ?? "running",
+        status: effectiveStatus,
         completed_day_count: progress.completed_day_count ?? 0,
       }));
     }
@@ -220,7 +232,13 @@ export class RunControlService {
     return { status: info.status, ...(info.error ? { error: info.error } : {}) };
   }
 
+  private static MAX_CONCURRENT_RUNS = 3;
+
   async launchRun(request: RunLaunchRequest): Promise<RunLaunchResponse> {
+    const runningCount = [...this.activeRuns.values()].filter(r => r.status === "running").length;
+    if (runningCount >= RunControlService.MAX_CONCURRENT_RUNS) {
+      throw new BadRequestError(`Too many concurrent runs (${runningCount}/${RunControlService.MAX_CONCURRENT_RUNS}). Wait for an existing run to complete.`);
+    }
     const payload = runLaunchRequestSchema.parse(request);
     const runId = payload.run_id?.trim() || `run_${Date.now()}`;
     const outputDir = join(this.artifactsRoot, runId);
@@ -286,7 +304,10 @@ export class RunControlService {
             });
           }
         } catch {
-          this.activeRuns.set(runId, { status: "completed" });
+          this.activeRuns.set(runId, {
+            status: "failed",
+            error: "Failed to parse run output as JSON",
+          });
         }
       } else {
         // Try to parse structured error from stdout (the CLI outputs JSON on failure)

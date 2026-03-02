@@ -149,7 +149,7 @@ export const runLaunchRequestSchema = z.object({
   shop_id: z.number().int().positive(),
   days: z.number().int().positive(),
   turns_per_day: z.number().int().positive(),
-  run_id: z.string().min(1).optional(),
+  run_id: z.string().min(1).regex(/^[a-zA-Z0-9_\-]+$/, "run_id must be alphanumeric, hyphens, or underscores").optional(),
   model: z.string().min(1),
   provider: z.string().min(1),
   scenario: z.enum(["operate", "bootstrap"]).optional(),
@@ -445,7 +445,7 @@ export const tournamentLaunchRequestSchema = z.object({
   rounds: z.number().int().positive(),
   turns_per_day: z.number().int().positive(),
   scenario_id: z.enum(["operate", "bootstrap"]).optional(),
-  run_id: z.string().min(1).optional(),
+  run_id: z.string().min(1).regex(/^[a-zA-Z0-9_\-]+$/, "run_id must be alphanumeric, hyphens, or underscores").optional(),
   api_key: z.string().optional().transform(v => v?.trim() || undefined),
 });
 

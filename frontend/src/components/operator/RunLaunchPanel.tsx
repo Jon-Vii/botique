@@ -14,8 +14,8 @@ const MODEL_OPTIONS = [
   { label: "Mistral Small", value: "mistral-small-latest" },
   { label: "Magistral Medium", value: "magistral-medium-latest" },
   { label: "Magistral Small", value: "magistral-small-latest" },
-  { label: "Ministral 14B", value: "ministral-3-14b-25-12" },
-  { label: "Ministral 8B", value: "ministral-3-8b-25-12" },
+  { label: "Ministral 14B", value: "ministral-14b-latest" },
+  { label: "Ministral 8B", value: "ministral-8b-latest" },
   { label: "Devstral 2", value: "devstral-2-25-12" },
   { label: "Codestral", value: "codestral-latest" },
 ] as const;

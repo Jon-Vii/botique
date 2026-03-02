@@ -286,10 +286,11 @@ def main(argv: list[str] | None = None) -> int:
 
         response_payload: dict[str, Any] = {"ok": True, "result": jsonify(result)}
         if supports_run_artifacts(result):
+            _SENSITIVE_KEYS = {"pretty", "mistral_api_key", "api_key", "bearer_token"}
             invocation_dict = {
                 key: value
                 for key, value in vars(namespace).items()
-                if key not in {"pretty"}
+                if key not in _SENSITIVE_KEYS
             }
             # Resolve actual provider config so model/provider are always
             # recorded in the manifest even when supplied via env vars.
@@ -325,6 +326,35 @@ def main(argv: list[str] | None = None) -> int:
         _print_json(response_payload, pretty=namespace.pretty)
         return 0
     except Exception as exc:
+        # Persist failure to progress.json so the UI can detect the crash
+        # even if the Node server restarts and loses in-memory state.
+        output_dir = getattr(namespace, "output_dir", None)
+        if output_dir:
+            try:
+                from pathlib import Path as _FailPath
+                from datetime import datetime as _dt, timezone as _tz
+                fail_dir = _FailPath(output_dir)
+                fail_dir.mkdir(parents=True, exist_ok=True)
+                progress_path = fail_dir / "progress.json"
+                # Preserve existing fields if progress.json already exists
+                existing: dict[str, Any] = {}
+                if progress_path.exists():
+                    existing = json.loads(progress_path.read_text(encoding="utf-8"))
+                existing.update({
+                    "status": "failed",
+                    "error": {
+                        "type": exc.__class__.__name__,
+                        "message": str(exc),
+                    },
+                    "updated_at": _dt.now(_tz.utc).isoformat(),
+                })
+                progress_path.write_text(
+                    json.dumps(existing, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+            except Exception:
+                pass  # Best-effort — don't mask the original error
+
         _print_json(
             {
                 "ok": False,
