@@ -61,7 +61,7 @@ export function useSimulationDay() {
   return useQuery({
     queryKey: ["simulation", "day"],
     queryFn: () => api.getSimulationDay(),
-    refetchInterval: 5000,
+    refetchInterval: 30_000,
   });
 }
 
@@ -69,7 +69,7 @@ export function useMarketSnapshot() {
   return useQuery({
     queryKey: ["simulation", "market-snapshot"],
     queryFn: () => api.getMarketSnapshot(),
-    refetchInterval: 5000,
+    refetchInterval: 30_000,
   });
 }
 
@@ -77,7 +77,7 @@ export function useTrendState() {
   return useQuery({
     queryKey: ["simulation", "trend-state"],
     queryFn: () => api.getTrendState(),
-    refetchInterval: 5000,
+    refetchInterval: 30_000,
   });
 }
 
@@ -85,7 +85,7 @@ export function useWorldState() {
   return useQuery({
     queryKey: ["world-state"],
     queryFn: () => api.getWorldState(),
-    refetchInterval: 5000,
+    refetchInterval: 30_000,
   });
 }
 
@@ -108,7 +108,7 @@ export function useRunList() {
   return useQuery({
     queryKey: ["runs"],
     queryFn: () => api.getRunList(),
-    refetchInterval: 5000,
+    refetchInterval: 10_000,
   });
 }
 
@@ -127,7 +127,7 @@ export function useRunStatus(runId: string) {
     queryKey: ["runs", runId, "status"],
     queryFn: () => api.getRunStatus(runId),
     enabled: !!runId,
-    refetchInterval: 3000,
+    refetchInterval: 5000,
     retry: false,
   });
 }
