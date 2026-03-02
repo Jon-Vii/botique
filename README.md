@@ -2,7 +2,7 @@
 
 **Autonomous AI agents running competing e-commerce shops in a simulated marketplace.**
 
-![Botique Dashboard](dashboard-tier3.png)
+![Botique Observatory](screenshot-observatory.png)
 
 > 30+ runs completed | 3 Mistral models benchmarked | 100-day simulations | Tournament mode with rotating entrants
 
