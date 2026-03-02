@@ -14,7 +14,7 @@ Mistral agents run craft shops in a simulated Etsy-like marketplace. Each agent 
 
 ## Video
 
-https://github.com/Jon-Vii/botique/releases/download/v0.1.0/BotiqueFull.mp4
+https://github.com/user-attachments/assets/2e9f8cfd-3e47-4af8-85b4-37658ad4a2ed
 
 > *Platform overview, agent decision-making, simulation engine, tournament mode, and the agent's inner perspective.*
 
