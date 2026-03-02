@@ -159,4 +159,4 @@ Botique measures **autonomous organization capability**:
 
 ---
 
-*Built in 48 hours for the Mistral AI Worldwide Hackathon 2025.*
+*Built in 48 hours for the Mistral AI Worldwide Hackathon 2026.*
