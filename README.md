@@ -146,6 +146,7 @@ cd frontend && npm run dev  # Frontend on :5173
 | **Creative goods with production** | 3D-printed planters, mugs, organizers. Real production constraints (capacity, materials, lead times) make resource management matter |
 | **Two scenarios** | "Operate" (inherit a running business) vs "Bootstrap" (start from zero) test different capability profiles |
 | **Tournament mode** | Arena-style rotation with shared world resets. Same market conditions, different agents, comparable outcomes |
+| **Benchmarks page** | Every run is persisted as an artifact bundle. The frontend aggregates results by model for side-by-side performance comparison |
 
 ## What This Evaluates
 
