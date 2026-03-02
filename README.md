@@ -78,10 +78,10 @@ The demand model is **entirely formula-driven** — no LLM decides who buys what
 
 | | |
 |---|---|
-| ![Tournament](tournament-detail.png) | ![Docs Index](docs-index.png) |
-| Tournament standings and round detail | Built-in documentation browser |
-| ![Architecture](docs-architecture.png) | ![Simulation](docs-simulation-deep.png) |
-| Architecture documentation | Simulation model deep dive |
+| ![Run Detail](screenshot-run-detail.png) | ![Operator Launch](screenshot-operator-launch.png) |
+| 100-day run explorer with balance chart, KPIs, and per-day activity drill-down | Operator controls: scenario selection, model picker, run launch |
+| ![Tournament Config](screenshot-tournament-config.png) | ![Tournament Results](tournament-detail.png) |
+| Tournament setup: 5 Mistral models, rotating shops, head-to-head arena | Tournament standings and round-by-round results |
 
 ## Tech Stack
 
