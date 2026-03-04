@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { z } from "zod";
 
 import { BadRequestError, NotFoundError } from "../errors";
+import { DEFAULT_SCENARIO_ID } from "../simulation/scenario-types";
 import {
   tournamentLaunchRequestSchema,
   tournamentLaunchResponseSchema,
@@ -83,7 +84,7 @@ export class TournamentControlService {
         }));
         items.push(tournamentListItemSchema.parse({
           run_id: id,
-          scenario: { scenario_id: info.scenario_id ?? "operate", controlled_shop_ids: [] },
+          scenario: { scenario_id: info.scenario_id ?? DEFAULT_SCENARIO_ID, controlled_shop_ids: [] },
           entrant_count: info.entrant_count,
           round_count: info.round_count,
           days_per_round: info.days_per_round,

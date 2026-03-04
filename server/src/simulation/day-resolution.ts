@@ -18,7 +18,7 @@ import {
   recalculateShopBacklog,
   syncListingInventoryState
 } from "./production";
-import { addUtcDays, buildMarketSnapshot, buildTrendState, nextSimulationDay, normalizeWorldState } from "./state";
+import { MS_PER_DAY, addUtcDays, buildMarketSnapshot, buildTrendState, clone, nextSimulationDay, normalizeWorldState } from "./state";
 import { isMarketplaceActiveListing } from "../listing-availability";
 import { NPC_PRODUCT_POOL, type NpcProductTemplate } from "./npc-product-pool";
 import type {
@@ -56,10 +56,8 @@ const QUALITY_EXPONENT = 1.0;
 const REPUTATION_EXPONENT = 0.8;
 const FRESHNESS_EXPONENT = 0.5;
 const TREND_FIT_EXPONENT = 0.7;
-
-function clone<T>(value: T): T {
-  return structuredClone(value);
-}
+const TRAFFIC_NOISE_FLOOR = 0.85;
+const TRAFFIC_NOISE_RANGE = 0.30;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -82,7 +80,7 @@ function stochasticRound(value: number, seed: string): number {
 }
 
 function differenceInDays(start: string, end: string): number {
-  return Math.max(0, Math.round((Date.parse(end) - Date.parse(start)) / 86_400_000));
+  return Math.max(0, Math.round((Date.parse(end) - Date.parse(start)) / MS_PER_DAY));
 }
 
 function nextNumericId(values: number[]): number {
@@ -112,15 +110,6 @@ function createResolutionMap(shops: StoredShop[]): Map<number, ShopDayResolution
   );
 }
 
-function getShopReviewAverage(world: StoredWorldState, shopId: number): number {
-  const reviews = world.marketplace.reviews.filter((review) => review.shop_id === shopId);
-  if (reviews.length === 0) {
-    return 4;
-  }
-
-  return reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length;
-}
-
 function getDemandMultiplier(listing: Listing, trendState: TrendState): number {
   let multiplier = trendState.baseline_multiplier;
   const listingTags = new Set(listing.tags.map((tag) => tag.toLowerCase()));
@@ -145,10 +134,7 @@ function taxonomyDailyTraffic(
   taxonomyId: number,
   currentDate: string,
   trendState: TrendState,
-  _activeListingCount: number
 ): number {
-  // Fixed traffic per taxonomy — no listing-count scaling.
-  // This makes traffic a finite resource that agents compete for via share-of-voice.
   let trendMultiplier = trendState.baseline_multiplier;
   for (const trend of trendState.active_trends) {
     if (trend.taxonomy_id === taxonomyId) {
@@ -156,7 +142,7 @@ function taxonomyDailyTraffic(
     }
   }
 
-  const noise = 0.85 + 0.30 * stableUnitInterval(`traffic:${currentDate}:${taxonomyId}`);
+  const noise = TRAFFIC_NOISE_FLOOR + TRAFFIC_NOISE_RANGE * stableUnitInterval(`traffic:${currentDate}:${taxonomyId}`);
 
   return Math.max(1, Math.round(BASE_TAXONOMY_TRAFFIC * trendMultiplier * noise));
 }
@@ -522,16 +508,27 @@ function resolveMarketSales(
     listingsByTaxonomy.set(listing.taxonomy_id, group);
   }
 
+  // Pre-build lookup maps to avoid O(N) scans per listing
+  const shopById = new Map(world.marketplace.shops.map((shop) => [shop.shop_id, shop]));
+  const shopReviewAvgs = new Map<number, number>();
+  for (const shop of world.marketplace.shops) {
+    const reviews = world.marketplace.reviews.filter((r) => r.shop_id === shop.shop_id);
+    shopReviewAvgs.set(
+      shop.shop_id,
+      reviews.length === 0 ? 4 : reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length,
+    );
+  }
+
   for (const [taxonomyId, taxonomyListings] of listingsByTaxonomy) {
     // Stage 1: Generate buyer session traffic for this taxonomy
-    const traffic = taxonomyDailyTraffic(taxonomyId, currentDate, trendState, taxonomyListings.length);
+    const traffic = taxonomyDailyTraffic(taxonomyId, currentDate, trendState);
     const taxonomyAvgPrice =
       preSalesSnapshot.taxonomy.find((item) => item.taxonomy_id === taxonomyId)?.average_price ?? 0;
 
     // Stage 2: Compute discoverability and allocate views by share-of-voice
     const listingScores = taxonomyListings.map((listing) => {
-      const shop = world.marketplace.shops.find((item) => item.shop_id === listing.shop_id)!;
-      const reviewAvg = getShopReviewAverage(world, shop.shop_id);
+      const shop = shopById.get(listing.shop_id)!;
+      const reviewAvg = shopReviewAvgs.get(shop.shop_id) ?? 4;
       const score = computeDiscoverability(listing, trendState, taxonomyAvgPrice, reviewAvg, currentDate);
       return { listing, shop, reviewAvg, score };
     });

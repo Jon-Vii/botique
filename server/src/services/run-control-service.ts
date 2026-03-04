@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { BadRequestError, NotFoundError } from "../errors";
 import type { SimulationModule } from "../simulation/world-simulation";
+import { DEFAULT_SCENARIO_ID, type ScenarioId } from "../simulation/scenario-types";
 import type { StoredWorldState } from "../simulation/state-types";
 import {
   dayBriefingSchema,
@@ -73,43 +74,37 @@ export class RunControlService {
     const runs: RunListEntry[] = [];
     const completedRunIds = new Set<string>();
 
-    for (const entry of entries) {
-      if (!entry.isDirectory()) {
-        continue;
-      }
-      const artifact = await this.readRunArtifact(join(this.artifactsRoot, entry.name));
-      if (artifact === null) {
-        continue;
-      }
+    const staleCutoff = Date.now() - RunControlService.STALE_RUN_TIMEOUT_MS;
 
-      const normalized = normalizeRunListEntryPayload(
-        artifact.summary,
-        artifact.manifest,
-        artifact.createdAt,
-      );
-      if (normalized) {
-        runs.push(runListEntrySchema.parse(normalized));
-        completedRunIds.add(normalized.run_id);
-      }
-    }
-
-    // Detect in-progress runs (have progress.json but no summary.json)
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const dir = join(this.artifactsRoot, entry.name);
-      const hasSummary = await this.pathExists(join(dir, "summary.json"));
-      if (hasSummary) continue;
+
+      // Try completed run first (has summary.json)
+      const artifact = await this.readRunArtifact(dir);
+      if (artifact !== null) {
+        const normalized = normalizeRunListEntryPayload(
+          artifact.summary,
+          artifact.manifest,
+          artifact.createdAt,
+        );
+        if (normalized) {
+          runs.push(runListEntrySchema.parse(normalized));
+          completedRunIds.add(normalized.run_id);
+        }
+        continue;
+      }
+
+      // Fall back to in-progress run (has progress.json but no summary.json)
       const progress = await this.readJsonSafe(join(dir, "progress.json"));
       if (!progress || typeof progress !== "object") continue;
       const runId = progress.run_id;
       if (typeof runId !== "string" || completedRunIds.has(runId)) continue;
 
-      // Determine effective status: if progress says "running" but is stale
-      // (>15 min old) and no active process exists, mark as failed.
+      // If progress says "running" but is stale and no active process exists, mark as failed.
       let effectiveStatus = progress.status ?? "running";
       if (effectiveStatus === "running") {
         const updatedAt = typeof progress.updated_at === "string" ? new Date(progress.updated_at).getTime() : 0;
-        const staleCutoff = Date.now() - 15 * 60 * 1000;
         const hasActiveProcess = this.activeRuns.get(runId)?.status === "running";
         if (updatedAt > 0 && updatedAt < staleCutoff && !hasActiveProcess) {
           effectiveStatus = "failed";
@@ -232,7 +227,8 @@ export class RunControlService {
     return { status: info.status, ...(info.error ? { error: info.error } : {}) };
   }
 
-  private static MAX_CONCURRENT_RUNS = 3;
+  private static readonly STALE_RUN_TIMEOUT_MS = 15 * 60 * 1000;
+  private static readonly MAX_CONCURRENT_RUNS = 3;
 
   async launchRun(request: RunLaunchRequest): Promise<RunLaunchResponse> {
     const runningCount = [...this.activeRuns.values()].filter(r => r.status === "running").length;
@@ -329,7 +325,7 @@ export class RunControlService {
 
   async simulateRun(
     simulation: SimulationModule,
-    options: { shop_id: number; days: number; scenario_id?: "operate" | "bootstrap" },
+    options: { shop_id: number; days: number; scenario_id?: ScenarioId },
   ): Promise<{ run_id: string }> {
     const runId = `sim_${Date.now().toString(36)}`;
     const shopId = options.shop_id;
@@ -367,9 +363,10 @@ export class RunControlService {
     }
 
     const endState = days.length > 0 ? days[days.length - 1].state_after : startState;
-    const scenario = options.scenario_id
-      ? { scenario_id: options.scenario_id, controlled_shop_ids: [shopId] }
-      : { scenario_id: "operate" as const, controlled_shop_ids: [shopId] };
+    const scenario = {
+      scenario_id: options.scenario_id ?? DEFAULT_SCENARIO_ID,
+      controlled_shop_ids: [shopId],
+    };
 
     const summary = {
       run_id: runId,
@@ -413,7 +410,7 @@ export class RunControlService {
         run_id: runId,
         provider: "simulation",
         model: "demand-model",
-        scenario_id: options.scenario_id ?? "operate",
+        scenario_id: options.scenario_id ?? DEFAULT_SCENARIO_ID,
       },
     };
 
@@ -447,12 +444,11 @@ export class RunControlService {
   }
 
   private async findRunArtifactDir(runId: string): Promise<string> {
+    // Fast path: try the directory named after the run ID directly
     const directDir = join(this.artifactsRoot, runId);
-    if (await this.pathExists(join(directDir, "summary.json"))) {
-      const artifact = await this.readRunArtifact(directDir);
-      if (artifact?.summary.run_id === runId) {
-        return directDir;
-      }
+    const directArtifact = await this.readRunArtifact(directDir);
+    if (directArtifact?.summary.run_id === runId) {
+      return directDir;
     }
 
     const entries = await readdir(this.artifactsRoot, { withFileTypes: true });
@@ -759,7 +755,7 @@ function inferMemoryTitle(content: string, fallback: string): string {
 }
 
 function extractRunScenario(summary: any):
-  | { scenario_id: "operate" | "bootstrap"; controlled_shop_ids: number[] }
+  | { scenario_id: ScenarioId; controlled_shop_ids: number[] }
   | undefined {
   const rawScenario = summary?.scenario;
   const scenarioId = rawScenario?.scenario_id ?? rawScenario;

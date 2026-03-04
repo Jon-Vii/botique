@@ -5,20 +5,11 @@ import { LoadingDots } from "../LoadingDots";
 import { Badge } from "../Badge";
 import { ScenarioPicker } from "./ScenarioPicker";
 import { useLaunchRun, useWorldState } from "../../hooks/useApi";
+import { DEFAULT_PROVIDER, MISTRAL_MODELS } from "../../lib/models";
 import { DEFAULT_SCENARIO_ID, getScenarioMeta } from "../../lib/scenarios";
 import type { ScenarioId } from "../../types/api";
 
-const MODEL_OPTIONS = [
-  { label: "Mistral Large", value: "mistral-large-latest" },
-  { label: "Mistral Medium", value: "mistral-medium-latest" },
-  { label: "Mistral Small", value: "mistral-small-latest" },
-  { label: "Magistral Medium", value: "magistral-medium-latest" },
-  { label: "Magistral Small", value: "magistral-small-latest" },
-  { label: "Ministral 14B", value: "ministral-14b-latest" },
-  { label: "Ministral 8B", value: "ministral-8b-latest" },
-  { label: "Devstral 2", value: "devstral-2-25-12" },
-  { label: "Codestral", value: "codestral-latest" },
-] as const;
+const MODEL_OPTIONS = MISTRAL_MODELS.map((m) => ({ label: m.label, value: m.model }));
 
 export function RunLaunchPanel({
   onSuccess,
@@ -62,7 +53,7 @@ export function RunLaunchPanel({
         turns_per_day: turnsPerDay,
         run_id: rid,
         model,
-        provider: "mistral",
+        provider: DEFAULT_PROVIDER,
         scenario_id: scenarioId,
         api_key: apiKey,
       },

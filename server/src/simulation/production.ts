@@ -5,13 +5,10 @@ import type {
   ProductionQueueItem,
   StoredShop
 } from "../schemas/domain";
+import { clone } from "./state";
 
 export const MADE_TO_ORDER_AVAILABLE_QUANTITY = 999;
 export const DEFAULT_PRODUCTION_CAPACITY_PER_DAY = 6;
-
-function clone<T>(value: T): T {
-  return structuredClone(value);
-}
 
 function setStockedInventoryQuantity(inventory: ListingInventory, quantityOnHand: number): ListingInventory {
   const nextInventory = clone(inventory);

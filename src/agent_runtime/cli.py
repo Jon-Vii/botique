@@ -3,16 +3,20 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from .artifacts import persist_run_artifacts, supports_run_artifacts, write_run_progress
 from .briefing import morning_briefing_from_payload
-from .runner import build_default_owner_agent_runner
+from .runner import MultiDayRunResult, build_default_owner_agent_runner
 from .tournament import (
     build_default_tournament_runner,
     load_tournament_entrants_from_payload,
 )
 from .serialization import jsonify
+
+_SENSITIVE_KEYS = frozenset({"pretty", "mistral_api_key", "api_key", "bearer_token"})
 
 
 def _load_json_value(json_string: str | None, json_file: str | None) -> Any:
@@ -88,6 +92,41 @@ def _resolve_provider_config(namespace: argparse.Namespace) -> Any:
         return None
 
 
+def _build_runner(namespace: argparse.Namespace) -> Any:
+    """Build an OwnerAgentRunner from parsed CLI arguments."""
+    return build_default_owner_agent_runner(
+        turns_per_day=namespace.turns_per_day,
+        work_budget=getattr(namespace, "work_budget", None),
+        max_turns=getattr(namespace, "max_turns", None),
+        base_url=namespace.base_url,
+        control_base_url=getattr(namespace, "control_base_url", None),
+        api_key=namespace.api_key,
+        bearer_token=namespace.bearer_token,
+        timeout_seconds=namespace.timeout,
+        mistral_api_key=namespace.mistral_api_key,
+        mistral_model=namespace.mistral_model,
+        mistral_temperature=namespace.mistral_temperature,
+        mistral_top_p=namespace.mistral_top_p,
+    )
+
+
+def _add_common_args(p: argparse.ArgumentParser) -> None:
+    """Add arguments shared across all subcommands."""
+    p.add_argument("--run-id")
+    p.add_argument("--base-url")
+    p.add_argument("--control-base-url")
+    p.add_argument("--api-key")
+    p.add_argument("--bearer-token")
+    p.add_argument("--timeout", type=float)
+    p.add_argument("--mistral-api-key")
+    p.add_argument("--mistral-model")
+    p.add_argument("--mistral-temperature", type=float)
+    p.add_argument("--mistral-top-p", type=float)
+    p.add_argument("--turns-per-day", type=int, default=5)
+    p.add_argument("--output-dir")
+    p.add_argument("--pretty", action="store_true")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="botique-agent-runtime")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -105,24 +144,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--shop-id",
         help="Live Botique shop id. Use this instead of --briefing/--briefing-file to build the morning briefing from the current server state.",
     )
-    run_day.add_argument("--run-id")
-    run_day.add_argument("--base-url")
-    run_day.add_argument("--control-base-url")
-    run_day.add_argument("--api-key")
-    run_day.add_argument("--bearer-token")
-    run_day.add_argument("--timeout", type=float)
-    run_day.add_argument("--mistral-api-key")
-    run_day.add_argument("--mistral-model")
     run_day.add_argument("--provider")
-    run_day.add_argument("--mistral-temperature", type=float)
-    run_day.add_argument("--mistral-top-p", type=float)
-    run_day.add_argument("--turns-per-day", type=int, default=5)
     run_day.add_argument("--work-budget", type=int, help=argparse.SUPPRESS)
     run_day.add_argument("--max-turns", type=int, help=argparse.SUPPRESS)
     run_day.add_argument("--reset-world", action="store_true")
     run_day.add_argument("--scenario", choices=SCENARIO_CHOICES)
-    run_day.add_argument("--output-dir")
-    run_day.add_argument("--pretty", action="store_true")
+    _add_common_args(run_day)
 
     run_days = subparsers.add_parser(
         "run-days",
@@ -130,24 +157,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_days.add_argument("--shop-id", required=True)
     run_days.add_argument("--days", type=int, required=True)
-    run_days.add_argument("--run-id")
-    run_days.add_argument("--base-url")
-    run_days.add_argument("--control-base-url")
-    run_days.add_argument("--api-key")
-    run_days.add_argument("--bearer-token")
-    run_days.add_argument("--timeout", type=float)
-    run_days.add_argument("--mistral-api-key")
-    run_days.add_argument("--mistral-model")
     run_days.add_argument("--provider")
-    run_days.add_argument("--mistral-temperature", type=float)
-    run_days.add_argument("--mistral-top-p", type=float)
-    run_days.add_argument("--turns-per-day", type=int, default=5)
     run_days.add_argument("--work-budget", type=int, help=argparse.SUPPRESS)
     run_days.add_argument("--max-turns", type=int, help=argparse.SUPPRESS)
     run_days.add_argument("--reset-world", action="store_true")
     run_days.add_argument("--scenario", choices=SCENARIO_CHOICES)
-    run_days.add_argument("--output-dir")
-    run_days.add_argument("--pretty", action="store_true")
+    _add_common_args(run_days)
 
     run_tournament = subparsers.add_parser(
         "run-tournament",
@@ -157,20 +172,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_tournament.add_argument("--shop-ids", required=True)
     run_tournament.add_argument("--days", type=int, required=True)
     run_tournament.add_argument("--rounds", type=int, default=1)
-    run_tournament.add_argument("--run-id")
-    run_tournament.add_argument("--base-url")
-    run_tournament.add_argument("--control-base-url")
-    run_tournament.add_argument("--api-key")
-    run_tournament.add_argument("--bearer-token")
-    run_tournament.add_argument("--timeout", type=float)
-    run_tournament.add_argument("--mistral-api-key")
-    run_tournament.add_argument("--mistral-model")
-    run_tournament.add_argument("--mistral-temperature", type=float)
-    run_tournament.add_argument("--mistral-top-p", type=float)
-    run_tournament.add_argument("--turns-per-day", type=int, default=5)
     run_tournament.add_argument("--scenario", choices=SCENARIO_CHOICES, default="operate")
-    run_tournament.add_argument("--output-dir")
-    run_tournament.add_argument("--pretty", action="store_true")
+    _add_common_args(run_tournament)
     return parser
 
 
@@ -183,20 +186,7 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError(f"Unsupported command {namespace.command!r}.")
 
         if namespace.command == "run-day":
-            runner = build_default_owner_agent_runner(
-                turns_per_day=namespace.turns_per_day,
-                work_budget=namespace.work_budget,
-                max_turns=namespace.max_turns,
-                base_url=namespace.base_url,
-                control_base_url=getattr(namespace, "control_base_url", None),
-                api_key=namespace.api_key,
-                bearer_token=namespace.bearer_token,
-                timeout_seconds=namespace.timeout,
-                mistral_api_key=namespace.mistral_api_key,
-                mistral_model=namespace.mistral_model,
-                mistral_temperature=namespace.mistral_temperature,
-                mistral_top_p=namespace.mistral_top_p,
-            )
+            runner = _build_runner(namespace)
             if namespace.shop_id and (namespace.briefing or namespace.briefing_file):
                 raise ValueError(
                     "Pass either --shop-id or a briefing payload, not both."
@@ -219,25 +209,11 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 result = runner.run_day(briefing)
         elif namespace.command == "run-days":
-            runner = build_default_owner_agent_runner(
-                turns_per_day=namespace.turns_per_day,
-                work_budget=namespace.work_budget,
-                max_turns=namespace.max_turns,
-                base_url=namespace.base_url,
-                control_base_url=getattr(namespace, "control_base_url", None),
-                api_key=namespace.api_key,
-                bearer_token=namespace.bearer_token,
-                timeout_seconds=namespace.timeout,
-                mistral_api_key=namespace.mistral_api_key,
-                mistral_model=namespace.mistral_model,
-                mistral_temperature=namespace.mistral_temperature,
-                mistral_top_p=namespace.mistral_top_p,
-            )
+            runner = _build_runner(namespace)
             output_dir = namespace.output_dir
             progress_cb = None
             if output_dir:
-                from pathlib import Path as _Path
-                _Path(output_dir).mkdir(parents=True, exist_ok=True)
+                Path(output_dir).mkdir(parents=True, exist_ok=True)
 
                 def progress_cb(run_id, shop_id, total, day_results):
                     write_run_progress(
@@ -286,7 +262,6 @@ def main(argv: list[str] | None = None) -> int:
 
         response_payload: dict[str, Any] = {"ok": True, "result": jsonify(result)}
         if supports_run_artifacts(result):
-            _SENSITIVE_KEYS = {"pretty", "mistral_api_key", "api_key", "bearer_token"}
             invocation_dict = {
                 key: value
                 for key, value in vars(namespace).items()
@@ -312,8 +287,7 @@ def main(argv: list[str] | None = None) -> int:
             response_payload["artifacts"] = artifact_bundle.to_payload()
             # Update progress sidecar to completed status
             if namespace.output_dir and hasattr(result, "days"):
-                from .runner import MultiDayRunResult as _MDR
-                if isinstance(result, _MDR):
+                if isinstance(result, MultiDayRunResult):
                     write_run_progress(
                         output_dir=namespace.output_dir,
                         run_id=result.run_id,
@@ -331,22 +305,21 @@ def main(argv: list[str] | None = None) -> int:
         output_dir = getattr(namespace, "output_dir", None)
         if output_dir:
             try:
-                from pathlib import Path as _FailPath
-                from datetime import datetime as _dt, timezone as _tz
-                fail_dir = _FailPath(output_dir)
+                fail_dir = Path(output_dir)
                 fail_dir.mkdir(parents=True, exist_ok=True)
                 progress_path = fail_dir / "progress.json"
                 # Preserve existing fields if progress.json already exists
-                existing: dict[str, Any] = {}
-                if progress_path.exists():
+                try:
                     existing = json.loads(progress_path.read_text(encoding="utf-8"))
+                except (FileNotFoundError, json.JSONDecodeError):
+                    existing = {}
                 existing.update({
                     "status": "failed",
                     "error": {
                         "type": exc.__class__.__name__,
                         "message": str(exc),
                     },
-                    "updated_at": _dt.now(_tz.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
                 })
                 progress_path.write_text(
                     json.dumps(existing, indent=2, sort_keys=True) + "\n",

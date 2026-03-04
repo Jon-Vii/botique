@@ -17,10 +17,13 @@ from .base import (
 )
 
 
+DEFAULT_MISTRAL_MODEL = "mistral-medium-latest"
+
+
 @dataclass(frozen=True, slots=True)
 class MistralProviderConfig:
     api_key: str
-    model: str = "mistral-medium-latest"
+    model: str = DEFAULT_MISTRAL_MODEL
     temperature: float = 0.1
     top_p: float = 0.9
 
@@ -38,7 +41,7 @@ class MistralProviderConfig:
             raise ValueError("MISTRAL_API_KEY is required for the Mistral provider.")
         return cls(
             api_key=resolved_api_key,
-            model=model or os.getenv("BOTIQUE_MISTRAL_MODEL") or "mistral-medium-latest",
+            model=model or os.getenv("BOTIQUE_MISTRAL_MODEL") or DEFAULT_MISTRAL_MODEL,
             temperature=float(
                 temperature
                 if temperature is not None

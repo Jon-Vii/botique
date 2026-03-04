@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import StrEnum
@@ -234,53 +235,18 @@ class SingleShopDailyLoop:
             try:
                 decision = policy.next_turn(context)
             except Exception as llm_exc:
-                # Retry with backoff for transient errors (e.g. 429 rate limit)
-                import time as _time
-                _transient = _is_transient_error(llm_exc)
-                self.event_log.append(
-                    kind=EventKind.TOOL_FAILED,
-                    run_id=active_run_id,
-                    shop_id=briefing.shop_id,
-                    day=briefing.day,
-                    turn_index=turn_index,
-                    payload={
-                        "tool_name": "policy.next_turn",
-                        "error_type": llm_exc.__class__.__name__,
-                        "message": str(llm_exc),
-                        "retrying": _transient,
-                    },
-                )
-                if _transient:
-                    _time.sleep(5)
+                # Retry once with backoff for transient errors (e.g. 429 rate limit)
+                is_transient = _is_transient_error(llm_exc)
+                self._log_policy_error(llm_exc, active_run_id, briefing, turn_index, retrying=is_transient)
+                if is_transient:
+                    time.sleep(5)
                     try:
                         decision = policy.next_turn(context)
                     except Exception as retry_exc:
-                        self.event_log.append(
-                            kind=EventKind.TOOL_FAILED,
-                            run_id=active_run_id,
-                            shop_id=briefing.shop_id,
-                            day=briefing.day,
-                            turn_index=turn_index,
-                            payload={
-                                "tool_name": "policy.next_turn",
-                                "error_type": retry_exc.__class__.__name__,
-                                "message": str(retry_exc),
-                                "retrying": False,
-                            },
-                        )
-                        return self._finish_day(
-                            briefing=briefing,
-                            run_id=active_run_id,
-                            turns=turns,
-                            end_reason=DayEndReason.ERROR,
-                        )
+                        self._log_policy_error(retry_exc, active_run_id, briefing, turn_index, retrying=False)
+                        return self._finish_day(briefing=briefing, run_id=active_run_id, turns=turns, end_reason=DayEndReason.ERROR)
                 else:
-                    return self._finish_day(
-                        briefing=briefing,
-                        run_id=active_run_id,
-                        turns=turns,
-                        end_reason=DayEndReason.ERROR,
-                    )
+                    return self._finish_day(briefing=briefing, run_id=active_run_id, turns=turns, end_reason=DayEndReason.ERROR)
 
             self.event_log.append(
                 kind=EventKind.MODEL_RESPONSE,
@@ -350,7 +316,7 @@ class SingleShopDailyLoop:
                 payload={
                     "tool_name": tool_result.tool_name,
                     "surface": tool_result.tool.surface.value,
-                    "turns_remaining_after": self.config.turns_per_day - (sum(t.turn_cost for t in turns) + (tool_result.tool.work_cost if tool_result else 1)),
+                    "turns_remaining_after": self.config.turns_per_day - (turns_used + (tool_result.tool.work_cost if tool_result else 1)),
                     "result": jsonify(tool_result.output),
                 },
             )
@@ -368,6 +334,29 @@ class SingleShopDailyLoop:
                 )
             )
             turn_index += 1
+
+    def _log_policy_error(
+        self,
+        exc: Exception,
+        run_id: str,
+        briefing: MorningBriefing,
+        turn_index: int,
+        *,
+        retrying: bool,
+    ) -> None:
+        self.event_log.append(
+            kind=EventKind.TOOL_FAILED,
+            run_id=run_id,
+            shop_id=briefing.shop_id,
+            day=briefing.day,
+            turn_index=turn_index,
+            payload={
+                "tool_name": "policy.next_turn",
+                "error_type": exc.__class__.__name__,
+                "message": str(exc),
+                "retrying": retrying,
+            },
+        )
 
     def _finish_day(
         self,

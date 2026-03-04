@@ -1,15 +1,11 @@
 import { createDefaultMarketplaceState } from "../default-marketplace-state";
-import { createWorldState } from "./state";
+import { clone, createWorldState } from "./state";
 import {
   normalizeSimulationScenario,
   type ScenarioResetOptions,
   type SimulationScenario
 } from "./scenario-types";
 import type { StoredMarketplaceState, StoredWorldState } from "./state-types";
-
-function clone<T>(value: T): T {
-  return structuredClone(value);
-}
 
 function assertControlledShopsExist(
   marketplaceState: StoredMarketplaceState,

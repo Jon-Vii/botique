@@ -17,16 +17,12 @@ import type {
 } from "./types";
 import { createDefaultMarketplaceState } from "../default-marketplace-state";
 import { isMarketplaceActiveListing } from "../listing-availability";
-import { normalizeWorldState } from "../simulation/state";
+import { clone, normalizeWorldState } from "../simulation/state";
 import { hasScenarioResetOptions } from "../simulation/scenario-types";
 import { buildScenarioWorldState } from "../simulation/scenarios";
 import { normalizeListingProduction, recalculateShopBacklog, syncListingInventoryState } from "../simulation/production";
 import type { ResetWorldOptions } from "../simulation/world-simulation";
 import type { SimulationState, StoredMarketplaceState, StoredWorldState } from "../simulation/state-types";
-
-function clone<T>(value: T): T {
-  return structuredClone(value);
-}
 
 function average(values: number[]): number {
   if (values.length === 0) {

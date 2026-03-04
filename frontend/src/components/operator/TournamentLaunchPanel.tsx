@@ -4,20 +4,16 @@ import { Link } from "react-router-dom";
 import { LoadingDots } from "../LoadingDots";
 import { ScenarioPicker } from "./ScenarioPicker";
 import { useLaunchTournament, useWorldState } from "../../hooks/useApi";
+import { DEFAULT_PROVIDER, MISTRAL_MODELS } from "../../lib/models";
 import { DEFAULT_SCENARIO_ID, getScenarioMeta } from "../../lib/scenarios";
 import type { ScenarioId } from "../../types/api";
 
-const PRESET_ENTRANTS = [
-  { entrant_id: "mistral-large", display_name: "Mistral Large", provider: "mistral", model: "mistral-large-latest" },
-  { entrant_id: "mistral-medium", display_name: "Mistral Medium", provider: "mistral", model: "mistral-medium-latest" },
-  { entrant_id: "mistral-small", display_name: "Mistral Small", provider: "mistral", model: "mistral-small-latest" },
-  { entrant_id: "magistral-medium", display_name: "Magistral Medium", provider: "mistral", model: "magistral-medium-latest" },
-  { entrant_id: "magistral-small", display_name: "Magistral Small", provider: "mistral", model: "magistral-small-latest" },
-  { entrant_id: "ministral-14b", display_name: "Ministral 14B", provider: "mistral", model: "ministral-14b-latest" },
-  { entrant_id: "ministral-8b", display_name: "Ministral 8B", provider: "mistral", model: "ministral-8b-latest" },
-  { entrant_id: "devstral-2", display_name: "Devstral 2", provider: "mistral", model: "devstral-2-25-12" },
-  { entrant_id: "codestral", display_name: "Codestral", provider: "mistral", model: "codestral-latest" },
-];
+const PRESET_ENTRANTS = MISTRAL_MODELS.map((m) => ({
+  entrant_id: m.id,
+  display_name: m.label,
+  provider: DEFAULT_PROVIDER,
+  model: m.model,
+}));
 
 type Entrant = {
   entrant_id: string;

@@ -1,10 +1,13 @@
 import type { Listing } from "../schemas/domain";
+import { MS_PER_DAY } from "./state";
 import type { MarketplaceSearchContext } from "./state-types";
+const PRICE_FIT_LOW_THRESHOLD = 15;
+const PRICE_FIT_HIGH_THRESHOLD = 25;
 
 function differenceInUtcDays(left: string, right: string): number {
   const leftTime = Date.parse(left);
   const rightTime = Date.parse(right);
-  return Math.max(0, Math.floor((leftTime - rightTime) / 86_400_000));
+  return Math.max(0, Math.floor((leftTime - rightTime) / MS_PER_DAY));
 }
 
 function normalizeText(value: string): string {
@@ -90,13 +93,13 @@ export function scoreMarketplaceListing(input: {
 
   const keywordRelevance = computeKeywordRelevance(listing, keywords, keywordSupplementalTexts);
   const quality = computeListingQuality(listing);
-  const priceFit = listing.price <= 15 ? 2 : listing.price <= 25 ? 1 : 0;
+  const priceFit = listing.price <= PRICE_FIT_LOW_THRESHOLD ? 2 : listing.price <= PRICE_FIT_HIGH_THRESHOLD ? 1 : 0;
   const listingAgeDays = differenceInUtcDays(searchContext.current_day.date, listing.created_at);
   const recencyBonus = Math.max(0, 7 - listingAgeDays);
   const trendBonus = computeTrendBonus(listing, searchContext);
   const freshnessBonus = Math.max(
     0,
-    2 - Math.floor((newestListingTimestamp - Date.parse(listing.created_at)) / 86_400_000)
+    2 - Math.floor((newestListingTimestamp - Date.parse(listing.created_at)) / MS_PER_DAY)
   );
 
   return Number(

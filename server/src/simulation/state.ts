@@ -18,7 +18,9 @@ import type {
   TrendState
 } from "./state-types";
 
-function clone<T>(value: T): T {
+export const MS_PER_DAY = 86_400_000;
+
+export function clone<T>(value: T): T {
   return structuredClone(value);
 }
 

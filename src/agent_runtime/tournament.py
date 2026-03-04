@@ -16,6 +16,7 @@ from .providers import (
     MistralToolCallingProvider,
     ProviderPolicyConfig,
 )
+from .providers.mistral import DEFAULT_MISTRAL_MODEL
 from .runner import LiveDayRunResult, MultiDayRunResult, OwnerAgentRunner, OwnerAgentRunnerConfig
 
 
@@ -544,7 +545,7 @@ def load_tournament_entrants_from_payload(
         model = str(
             value.get("model")
             or default_model
-            or "mistral-medium-latest"
+            or DEFAULT_MISTRAL_MODEL
         ).strip()
         entrants.append(
             TournamentEntrantConfig(
