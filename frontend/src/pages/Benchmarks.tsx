@@ -14,8 +14,9 @@ import {
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { BackendNotice } from "../components/BackendNotice";
-import { BalanceTimeline, MODEL_COLORS } from "../components/BalanceTimeline";
-import type { ModelCurve } from "../components/BalanceTimeline";
+import { BalanceTimeline } from "../components/BalanceTimeline";
+import { MODEL_COLORS } from "../components/balance-timeline-models";
+import type { ModelCurve } from "../components/balance-timeline-models";
 import { Badge } from "../components/Badge";
 import { EmptyState } from "../components/EmptyState";
 import { Skeleton } from "../components/Skeleton";

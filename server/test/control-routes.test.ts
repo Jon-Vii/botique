@@ -369,17 +369,17 @@ describe("Botique server control endpoints", () => {
 
     assert.equal(snapshotResponse.statusCode, 200);
     const snapshot = snapshotResponse.json();
-    assert.equal(snapshot.active_listing_count, 4);
-    assert.equal(snapshot.active_shop_count, 4);
+    assert.equal(snapshot.active_listing_count, 9);
+    assert.equal(snapshot.active_shop_count, 5);
     assert.ok(snapshot.average_active_price > 0);
-    assert.equal(snapshot.total_quantity_on_hand, 8);
-    assert.equal(snapshot.total_backlog_units, 2);
-    assert.ok(snapshot.taxonomy.length >= 4);
+    assert.equal(snapshot.total_quantity_on_hand, 47);
+    assert.equal(snapshot.total_backlog_units, 1);
+    assert.equal(snapshot.taxonomy.length, 1);
 
     assert.equal(trendResponse.statusCode, 200);
     const trendState = trendResponse.json();
-    assert.equal(trendState.active_trends[0]?.taxonomy_id, 9103);
-    assert.equal(trendState.active_trends[1]?.taxonomy_id, 9104);
+    assert.equal(trendState.active_trends[0]?.taxonomy_id, 9101);
+    assert.equal(trendState.active_trends[1], undefined);
 
     assert.equal(worldStateResponse.statusCode, 200);
     const worldState = worldStateResponse.json();
@@ -424,7 +424,7 @@ describe("Botique server control endpoints", () => {
     assert.equal(dayResponse.json().day, 4);
 
     assert.equal(trendResponse.statusCode, 200);
-    assert.equal(trendResponse.json().active_trends[0]?.taxonomy_id, 9104);
+    assert.equal(trendResponse.json().active_trends[0]?.taxonomy_id, 9101);
 
     assert.equal(worldStateResponse.statusCode, 200);
     assert.equal(worldStateResponse.json().simulation.current_day.day, 4);
@@ -466,8 +466,8 @@ describe("Botique server control endpoints", () => {
     assert.equal(resetPayload.simulation.current_day.day, 3);
     assert.equal(resetPayload.simulation.current_day.date, "2026-02-28T00:00:00.000Z");
     assert.equal(resetPayload.simulation.scenario.scenario_id, "operate");
-    assert.equal(resetPayload.simulation.market_snapshot.active_listing_count, 4);
-    assert.equal(resetPayload.marketplace.orders.length, 7);
+    assert.equal(resetPayload.simulation.market_snapshot.active_listing_count, 9);
+    assert.equal(resetPayload.marketplace.orders.length, 8);
 
     const dayResponse = await app.inject({ method: "GET", url: "/control/simulation/day" });
     assert.equal(dayResponse.statusCode, 200);
@@ -495,9 +495,9 @@ describe("Botique server control endpoints", () => {
       0
     );
     assert.equal(resetPayload.marketplace.shops[0].production_queue.length, 0);
-    assert.equal(resetPayload.marketplace.orders.filter((order: { shop_id: number }) => order.shop_id === 1001).length, 1);
-    assert.equal(resetPayload.marketplace.payments.filter((payment: { shop_id: number }) => payment.shop_id === 1001).length, 1);
-    assert.equal(resetPayload.simulation.market_snapshot.active_listing_count, 3);
+    assert.equal(resetPayload.marketplace.orders.filter((order: { shop_id: number }) => order.shop_id === 1001).length, 0);
+    assert.equal(resetPayload.marketplace.payments.filter((payment: { shop_id: number }) => payment.shop_id === 1001).length, 0);
+    assert.equal(resetPayload.simulation.market_snapshot.active_listing_count, 0);
   });
 
   test("replaces the world state through /control for repeatable runtime experiments", async () => {

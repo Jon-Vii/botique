@@ -142,7 +142,7 @@ export function RunDetail() {
             </Link>
             <h1 className="font-mono text-xl font-bold text-ink">{id}</h1>
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              <Badge variant="red">
+              <Badge variant="rose">
                 <span className="flex items-center gap-1">
                   <XCircle size={10} weight="fill" />
                   failed

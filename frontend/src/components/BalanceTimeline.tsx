@@ -1,25 +1,6 @@
 import { useState } from "react";
 import { formatCurrency } from "../lib/format";
-
-/* ── Colors per model (stable rotation) ── */
-
-export const MODEL_COLORS = [
-  { stroke: "#f97316", fill: "#f97316", label: "orange" },   // orange
-  { stroke: "#8b5cf6", fill: "#8b5cf6", label: "violet" },   // violet
-  { stroke: "#10b981", fill: "#10b981", label: "emerald" },   // emerald
-  { stroke: "#06b6d4", fill: "#06b6d4", label: "sky" },      // sky/cyan
-  { stroke: "#f43f5e", fill: "#f43f5e", label: "rose" },     // rose
-  { stroke: "#f59e0b", fill: "#f59e0b", label: "amber" },    // amber
-];
-
-export type ModelCurve = {
-  model: string;
-  color: (typeof MODEL_COLORS)[number];
-  /** Averaged balance at each day index (0-based) */
-  points: { day: number; balance: number }[];
-  /** Individual run curves for ghost lines */
-  runCurves: { runId: string; points: { day: number; balance: number }[] }[];
-};
+import type { ModelCurve } from "./balance-timeline-models";
 
 /* ── SVG Balance Timeline ── */
 

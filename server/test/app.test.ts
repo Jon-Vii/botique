@@ -41,16 +41,21 @@ describe("Botique server core endpoints", () => {
     assert.equal(shopResponse.json().production_capacity_per_day, 10);
 
     assert.equal(searchResponse.statusCode, 200);
-    assert.ok(searchResponse.json().count >= 4);
+    assert.ok(searchResponse.json().count >= 9);
 
     assert.equal(paymentsResponse.statusCode, 200);
     assert.equal(paymentsResponse.json().results[0].payment_id, 8001);
 
     assert.equal(taxonomyResponse.statusCode, 200);
-    assert.equal(taxonomyResponse.json().count, 5);
+    const taxonomyPayload = taxonomyResponse.json();
+    assert.equal(taxonomyPayload.count, 2);
+    assert.deepEqual(
+      taxonomyPayload.results.map((node: { taxonomy_id: number }) => node.taxonomy_id),
+      [9000, 9101]
+    );
   });
 
-  test("default marketplace search matches taxonomy labels from trend and category language", async (t) => {
+  test("default marketplace search matches listing titles and tags from seeded listings", async (t) => {
     const defaultApp = await buildApp({
       config: {
         databaseUrl: undefined
@@ -63,7 +68,7 @@ describe("Botique server core endpoints", () => {
 
     const response = await defaultApp.inject({
       method: "GET",
-      url: "/v3/application/listings/active?keywords=woodwork&limit=10&offset=0"
+      url: "/v3/application/listings/active?keywords=spice%20rack&limit=10&offset=0"
     });
 
     assert.equal(response.statusCode, 200);
@@ -185,7 +190,10 @@ describe("Botique server core endpoints", () => {
     assert.equal(paymentsResponse.json().results[0].payment_id, 8001);
 
     assert.equal(taxonomyResponse.statusCode, 200);
-    assert.equal(taxonomyResponse.json().count, 5);
+    const taxonomyPayload = taxonomyResponse.json();
+    assert.equal(taxonomyPayload.count, 2);
+    assert.equal(taxonomyPayload.results[0].taxonomy_id, 9000);
+    assert.equal(taxonomyPayload.results[1].taxonomy_id, 9101);
 
     assert.equal(inventoryResponse.statusCode, 200);
     assert.equal(inventoryResponse.json().listing_id, 2001);
@@ -284,8 +292,11 @@ describe("Botique server core endpoints", () => {
 
     assert.equal(response.statusCode, 200);
     const payload = response.json();
-    assert.equal(payload.count, 1);
-    assert.equal(payload.results[0].payment_id, 8003);
+    assert.equal(payload.count, 2);
+    assert.deepEqual(
+      payload.results.map((payment: { payment_id: number }) => payment.payment_id),
+      [8002, 8003]
+    );
   });
 
   test("replaces full listing inventory with the JSON inventory contract, including zero stock", async () => {

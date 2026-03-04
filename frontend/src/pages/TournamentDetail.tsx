@@ -17,8 +17,9 @@ import {
   Trophy,
 } from "@phosphor-icons/react";
 import { BackendNotice } from "../components/BackendNotice";
-import { BalanceTimeline, MODEL_COLORS } from "../components/BalanceTimeline";
-import type { ModelCurve } from "../components/BalanceTimeline";
+import { BalanceTimeline } from "../components/BalanceTimeline";
+import { MODEL_COLORS } from "../components/balance-timeline-models";
+import type { ModelCurve } from "../components/balance-timeline-models";
 import { Badge } from "../components/Badge";
 import {
   ControlledShopsBadge,
@@ -33,7 +34,6 @@ import { formatCurrency } from "../lib/format";
 import { getScenarioLabel } from "../lib/scenarios";
 import type {
   TournamentAggregateStanding,
-  TournamentBalancePoint,
   TournamentResult,
   TournamentRoundResult,
   TournamentStanding,
